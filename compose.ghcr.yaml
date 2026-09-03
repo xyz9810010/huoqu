@@ -1,0 +1,8 @@
+# 使用 GitHub Actions 自动构建的镜像（ghcr.io/xyz9810010/huoqu），不在本地构建
+# 需要 Docker Compose v2.20+（!reset 标签）
+# 用法（与 docker-compose.yml 同目录）：
+#   docker compose -f docker-compose.yml -f compose.ghcr.yaml up -d
+services:
+  huoqu:
+    image: ghcr.io/xyz9810010/huoqu:latest
+    build: !reset null

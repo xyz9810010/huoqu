@@ -56,6 +56,26 @@ docker compose ps
 
 `docker compose ps` 中服务应显示为 `healthy`。如需完整验证，可运行 `npm run smoke:container`；该命令使用独立临时数据库和端口，不会访问正式 `./data`。
 
+### 使用 GitHub 自动构建的镜像（ghcr.io，可选）
+
+每次推送代码到 `main`，仓库的 GitHub Actions 工作流会自动构建并推送多架构镜像（linux/amd64 + linux/arm64）到 [ghcr.io/xyz9810010/huoqu](https://github.com/xyz9810010/huoqu/pkgs/container/huoqu)，NAS 无需本地构建即可部署：
+
+```bash
+# 纯 docker（替换"纯 docker"一节中的本地构建命令）
+docker run -d --name huoqu -p 3000:3000 \
+  -e INITIAL_ADMIN_PASSWORD='<至少12位的初始密码>' \
+  -v $(pwd)/data:/app/data --restart unless-stopped \
+  ghcr.io/xyz9810010/huoqu:latest
+```
+
+```bash
+# docker-compose：复用 docker-compose.yml 的端口/卷/环境变量配置，仅把 build 替换为预构建镜像
+docker compose -f docker-compose.yml -f compose.ghcr.yaml up -d
+```
+
+镜像标签：`latest`/`main` 跟随主分支；`v1.2.3` 等格式的 git tag 会额外生成对应版本标签。
+
+
 ### 纯 docker
 ```bash
 docker build -t huoqu .

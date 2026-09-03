@@ -43,7 +43,7 @@ self.addEventListener('push', event => {
     }
     await self.registration.showNotification(title, {
       body,
-      tag: String(data.tag || notificationId || 'huoqu-notification'),
+      tag: String(data.tag || notificationId || 'cargo-notification'),
       renotify: true,
       vibrate: [180, 80, 180],
       data: {

@@ -519,7 +519,7 @@ tr.clickable{cursor:pointer}
 <script src="/html5-qrcode.min.js"></script>
 <script>
 // ===== 认证 =====
-function getToken(){ return localStorage.getItem('huoqu_token') || ''; }
+function getToken(){ return localStorage.getItem('cargo_token') || ''; }
 async function api(path, opts) {
   opts = opts || {};
   const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
@@ -560,7 +560,7 @@ async function doLogin(){
     const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || '登录失败');
-    localStorage.setItem('huoqu_token', d.token);
+    localStorage.setItem('cargo_token', d.token);
     me = d.user;
     showApp(); renderAll(); connectEvents(); toast('欢迎回来，' + (d.user.name || d.user.username));
   } catch (e) { toast(e.message, true); }
@@ -568,7 +568,7 @@ async function doLogin(){
 }
 async function doLogout(){
   try { await api('/api/logout', { method: 'POST' }); } catch (e) {}
-  localStorage.removeItem('huoqu_token'); me = null; showLogin(); state = { couriers: [], customers: [], records: [] };
+  localStorage.removeItem('cargo_token'); me = null; showLogin(); state = { couriers: [], customers: [], records: [] };
   if (eventSource) { try { eventSource.close(); } catch(e){} eventSource = null; }
   stopPolling();
 }

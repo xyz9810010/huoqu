@@ -8,7 +8,7 @@ export interface BrowserPushState {
   available: boolean
 }
 
-const STORAGE_KEY = 'huoqu:web-push-subscription-id'
+const STORAGE_KEY = 'cargo:web-push-subscription-id'
 
 function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - value.length % 4) % 4)

@@ -122,7 +122,7 @@ const statusCopy = computed(() => {
   }
   return ({
   granted: { title: '当前浏览器已开启', help: '系统通知可以在页面关闭后显示。' },
-  denied: { title: '浏览器已拒绝通知', help: '请在浏览器的网站权限设置中重新允许。' },
+  denied: { title: '浏览器已拒绝通知', help: '请两步重新允许：① 系统设置 → 应用 → 本浏览器（华为浏览器/Chrome/Safari 等）→ 通知 → 允许；② 浏览器「网站设置/权限 → 通知」把本站改为允许，然后刷新本页重试。' },
   default: { title: '尚未开启', help: '点击按钮后，浏览器会询问是否允许通知。' },
   insecure: { title: '当前地址不是 HTTPS', help: '系统通知要求 HTTPS；站内通知和实时刷新仍可使用。' },
   } as Record<string, { title: string; help: string }>)[pushState.value.status]

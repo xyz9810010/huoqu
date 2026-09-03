@@ -1,0 +1,30 @@
+node_modules/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.log
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+
+# 测试/调试临时文件
+_h*
+_imgtest.js
+server.err.log
+web/dist/
+web/tsconfig.tsbuildinfo
+web/src/**/*.js
+web/src/**/*.js.map
+backups/
+# 服务账号私钥与证书（本机私有）
+*.p12
+*.pem
+*.key
+*.crt
+*.jks
+*.keystore
+*.cer
+*.p7b

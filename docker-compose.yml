@@ -1,0 +1,35 @@
+# Huoqu · 货代取件运营平台 - docker-compose 一键部署
+# 使用方法：在项目目录执行  docker compose up -d
+# 访问：http://<你的NAS的IP>:3000
+services:
+  huoqu:
+    build: .
+    image: huoqu
+    container_name: ${CARGO_CONTAINER_NAME:-huoqu}
+    init: true
+    ports:
+      - "${CARGO_HTTP_PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      TZ: Asia/Shanghai
+      DATA_DIR: /app/data
+      BACKUP_ROOT: /app/backups
+      PUSH_CONFIG_MASTER_KEY: ${PUSH_CONFIG_MASTER_KEY:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      MACHINE_API_KEY: ${MACHINE_API_KEY:-}
+    volumes:
+      # 数据库持久化到宿主机的 ./data 目录（重装容器数据不丢）
+      - ${CARGO_DATA_DIR:-./data}:/app/data
+      - ${CARGO_BACKUP_DIR:-./backups}:/app/backups
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

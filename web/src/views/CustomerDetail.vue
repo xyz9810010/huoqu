@@ -1,0 +1,192 @@
+<template>
+  <div>
+    <el-page-header @back="router.back()" :content="customer.name || '客户详情'" style="margin-bottom:16px" />
+
+    <el-card shadow="never" class="block">
+      <template #header>
+        <div class="card-head">
+          <span>客户资料</span>
+          <div>
+            <el-button size="small" @click="goDispatch">派单</el-button>
+            <el-button size="small" type="primary" @click="openEdit">编辑</el-button>
+            <el-button size="small" :type="customer.status === 'active' ? 'danger' : 'success'" @click="toggleStatus">
+              {{ customer.status === 'active' ? '停用' : '启用' }}
+            </el-button>
+          </div>
+        </div>
+      </template>
+      <el-descriptions :column="3" border>
+        <el-descriptions-item label="编号">{{ customer.customerNo }}</el-descriptions-item>
+        <el-descriptions-item label="客户名称">{{ customer.name }}</el-descriptions-item>
+        <el-descriptions-item label="主客服">{{ customer.mainCsName }}</el-descriptions-item>
+        <el-descriptions-item label="联系人">{{ customer.contactName }}</el-descriptions-item>
+        <el-descriptions-item label="联系电话">{{ customer.contactPhone }}</el-descriptions-item>
+        <el-descriptions-item label="原系统ID">{{ customer.legacyCustomerId }}</el-descriptions-item>
+        <el-descriptions-item label="重要提醒" :span="3">{{ customer.importantNote }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="3">{{ customer.remark }}</el-descriptions-item>
+      </el-descriptions>
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-head">
+          <span>取件地址</span>
+          <el-button size="small" type="success" @click="openAddAddr">新增地址</el-button>
+        </div>
+      </template>
+      <el-table :data="customer.addresses || []">
+        <el-table-column prop="name" label="取件点名称" width="140" />
+        <el-table-column prop="address" label="完整地址" min-width="220" />
+        <el-table-column prop="contactName" label="联系人" width="100" />
+        <el-table-column prop="contactPhone" label="电话" width="130" />
+        <el-table-column prop="areaId" label="区域" width="100">
+          <template #default="{ row }">{{ areaName(row.areaId) }}</template>
+        </el-table-column>
+        <el-table-column label="常用" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.isCommon" size="small" type="warning">常用</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.isActive ? 'success' : 'info'" size="small">{{ row.isActive ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="180">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEditAddr(row)">编辑</el-button>
+            <el-button size="small" @click="toggleAddr(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-dialog v-model="editVisible" title="编辑客户" width="560px">
+      <el-form :model="editForm" label-width="110px">
+        <el-form-item label="客户名称" required><el-input v-model="editForm.name" /></el-form-item>
+        <el-form-item label="联系人"><el-input v-model="editForm.contactName" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="editForm.contactPhone" /></el-form-item>
+        <el-form-item label="原系统ID"><el-input v-model="editForm.legacyCustomerId" /></el-form-item>
+        <el-form-item label="重要提醒"><el-input v-model="editForm.importantNote" type="textarea" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="editForm.remark" type="textarea" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="addrVisible" :title="addrForm.id ? '编辑地址' : '新增地址'" width="560px">
+      <el-form :model="addrForm" label-width="110px">
+        <el-form-item label="取件点名称" required><el-input v-model="addrForm.name" /></el-form-item>
+        <el-form-item label="完整地址" required><el-input v-model="addrForm.address" type="textarea" /></el-form-item>
+        <el-form-item label="联系人"><el-input v-model="addrForm.contactName" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="addrForm.contactPhone" /></el-form-item>
+        <el-form-item label="所属区域">
+          <el-select v-model="addrForm.areaId" clearable placeholder="选择区域">
+            <el-option v-for="a in areas" :key="a.id" :label="a.name" :value="a.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="常用地址"><el-switch v-model="addrForm.isCommon" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="addrForm.remark" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addrVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitAddr">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import http from '../api'
+
+const route = useRoute()
+const router = useRouter()
+const id = route.params.id as string
+const customer = reactive<any>({})
+const areas = ref<any[]>([])
+const editVisible = ref(false)
+const addrVisible = ref(false)
+const editForm = reactive<any>({})
+const addrForm = reactive<any>({})
+
+async function load() {
+  Object.assign(customer, await http.get(`/customers/${id}`))
+}
+
+function areaName(aid: number) {
+  return areas.value.find((a) => a.id === aid)?.name || ''
+}
+
+function openEdit() {
+  Object.assign(editForm, {
+    name: customer.name, contactName: customer.contactName, contactPhone: customer.contactPhone,
+    legacyCustomerId: customer.legacyCustomerId, importantNote: customer.importantNote, remark: customer.remark,
+  })
+  editVisible.value = true
+}
+
+async function submitEdit() {
+  await http.put(`/customers/${id}`, editForm)
+  ElMessage.success('已保存')
+  editVisible.value = false
+  load()
+}
+
+async function toggleStatus() {
+  const s = customer.status === 'active' ? 'disabled' : 'active'
+  await http.patch(`/customers/${id}/status`, null, { params: { status: s } })
+  ElMessage.success('已更新')
+  load()
+}
+
+function openAddAddr() {
+  Object.assign(addrForm, { id: null, name: '', address: '', contactName: '', contactPhone: '', areaId: null, isCommon: false, remark: '' })
+  addrVisible.value = true
+}
+
+function openEditAddr(row: any) {
+  Object.assign(addrForm, row)
+  addrVisible.value = true
+}
+
+async function submitAddr() {
+  if (addrForm.id) {
+    await http.put(`/addresses/${addrForm.id}`, addrForm)
+  } else {
+    await http.post(`/customers/${id}/addresses`, addrForm)
+  }
+  ElMessage.success('已保存')
+  addrVisible.value = false
+  load()
+}
+
+async function toggleAddr(row: any) {
+  await http.patch(`/addresses/${row.id}/status`, null, { params: { isActive: !row.isActive } })
+  load()
+}
+
+function goDispatch() {
+  router.push({ path: '/dispatch', query: { customerId: id } })
+}
+
+onMounted(async () => {
+  areas.value = (await http.get('/areas')) as any[]
+  load()
+})
+</script>
+
+<style scoped>
+.block {
+  margin-bottom: 16px;
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+</style>

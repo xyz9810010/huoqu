@@ -1,0 +1,197 @@
+/* ===== 设计主题：浅色极简（Feishu / Notion / Linear 风格） ===== */
+
+:root {
+  /* 主色：克制的品牌蓝 */
+  --el-color-primary: #3370ff;
+  --el-color-primary-light-3: color-mix(in srgb, #3370ff 70%, white);
+  --el-color-primary-light-5: color-mix(in srgb, #3370ff 50%, white);
+  --el-color-primary-light-7: color-mix(in srgb, #3370ff 30%, white);
+  --el-color-primary-light-8: color-mix(in srgb, #3370ff 20%, white);
+  --el-color-primary-light-9: #eef3ff;
+  --el-color-primary-dark-2: color-mix(in srgb, #3370ff 80%, black);
+
+  --el-color-success: #34c724;
+  --el-color-warning: #ff8800;
+  --el-color-danger: #f54a45;
+  --el-color-info: #8a919f;
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+
+  /* 中性色：柔和不刺眼 */
+  --qj-bg: #f0f2f5;
+  --qj-side: #f7f8fa;
+  --qj-surface: #ffffff;
+  --qj-border: #e7e9ee;
+  --qj-border-strong: #d9dce1;
+  --qj-text: #2a2f36;
+  --qj-text-2: #5a6068;
+  --qj-muted: #9198a1;
+
+  /* 指标卡图标底色（浅色调 + 深色图标） */
+  --tint-blue: #eef3ff;
+  --tint-green: #ecfaf0;
+  --tint-sky: #eef9fd;
+  --tint-amber: #fff7ec;
+  --tint-violet: #f3f0ff;
+  --tint-red: #feefef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  background: var(--qj-bg);
+  color: var(--qj-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 卡片：白底浮在灰底上，柔和微阴影 */
+.el-card {
+  border: 1px solid var(--qj-border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 2px rgba(31, 35, 41, 0.04) !important;
+  background: var(--qj-surface) !important;
+}
+
+.el-card__header {
+  border-bottom: 1px solid var(--qj-border) !important;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--qj-text);
+  padding: 14px 20px !important;
+}
+.el-card__body {
+  padding: 20px !important;
+}
+
+/* 表格 */
+.el-table {
+  --el-table-header-bg-color: #fafbfc;
+  --el-table-header-text-color: #51565d;
+  --el-table-border-color: #f0f1f3;
+  --el-table-row-hover-bg-color: #f7f8fa;
+}
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* 按钮 */
+.el-button {
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+/* 分页 */
+.el-pagination {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+/* 页面容器 */
+.page {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* 指标卡：白底细边框 + 左侧淡色图标 */
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--qj-surface);
+  border: 1px solid var(--qj-border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  transition: border-color 0.15s ease;
+}
+.stat-card:hover {
+  border-color: var(--qj-border-strong);
+}
+.stat-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.stat-label {
+  font-size: 13px;
+  color: var(--qj-muted);
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--qj-text);
+  font-variant-numeric: tabular-nums;
+}
+.stat-sub {
+  font-size: 12px;
+  color: var(--qj-muted);
+}
+
+/* 区块标题图标 */
+.block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.block-title .el-icon {
+  color: var(--el-color-primary);
+}
+
+/* 空状态 */
+.el-empty {
+  padding: 40px 0;
+}
+
+@media (max-width: 768px) {
+  .page-head {
+    align-items: flex-start;
+  }
+  .el-card__header {
+    padding: 12px 14px !important;
+  }
+  .el-card__body {
+    padding: 14px !important;
+  }
+  .el-pagination {
+    overflow-x: auto;
+  }
+}

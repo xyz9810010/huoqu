@@ -1,0 +1,8 @@
+services:
+  huoqu-test:
+    build:
+      context: .
+      target: test
+    environment:
+      NODE_ENV: test
+      DISABLE_PUSH: "1"

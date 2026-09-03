@@ -1,0 +1,12 @@
+**/node_modules
+data
+*.log
+.git
+.gitignore
+_h*
+_imgtest.js
+README.md
+web/dist
+web/tsconfig.tsbuildinfo
+backups
+docs

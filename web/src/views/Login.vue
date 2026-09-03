@@ -128,4 +128,23 @@ async function submit() {
   color: var(--qj-muted);
   font-size: 13px;
 }
+
+@media (max-width: 560px) {
+  .login-card {
+    width: calc(100vw - 32px);
+    min-width: 0;
+    padding: 36px 24px 28px;
+  }
+  .login-wrap {
+    justify-content: center;
+    padding: 0 0 70px;
+  }
+  .footer {
+    position: static;
+    margin-top: 20px;
+    padding: 0 16px;
+    text-align: center;
+    line-height: 1.7;
+  }
+}
 </style>

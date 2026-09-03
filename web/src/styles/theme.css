@@ -185,13 +185,54 @@ body {
   .page-head {
     align-items: flex-start;
   }
+  .page-title {
+    font-size: 18px;
+  }
   .el-card__header {
     padding: 12px 14px !important;
   }
   .el-card__body {
     padding: 14px !important;
   }
+  /* 弹窗与消息框适配手机宽度（视图里多为 360–560px 固定宽度） */
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    margin-top: 6vh !important;
+  }
+  .el-dialog__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .el-message-box {
+    width: calc(100vw - 48px) !important;
+  }
+  /* 表单控件在窄屏尽量撑满，避免被固定宽度挤出屏幕 */
+  .el-form-item__content > .el-input,
+  .el-form-item__content > .el-select,
+  .el-form-item__content > .el-date-editor,
+  .el-form-item__content > .el-cascader {
+    width: 100% !important;
+    max-width: 100%;
+  }
   .el-pagination {
+    justify-content: center;
+    flex-wrap: wrap;
     overflow-x: auto;
+  }
+  /* 指标卡在窄屏下减小内边距，避免两列布局过挤 */
+  .stat-card {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    border-radius: 9px;
+  }
+  .stat-value {
+    font-size: 22px;
   }
 }

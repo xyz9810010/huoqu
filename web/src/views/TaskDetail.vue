@@ -3,7 +3,7 @@
     <el-page-header @back="router.back()" :content="task.taskNo || '任务详情'" style="margin-bottom:16px" />
 
     <el-card shadow="never" class="block">
-      <el-descriptions :column="3" border>
+      <el-descriptions :column="cols" border>
         <el-descriptions-item label="任务类型">
           <el-tag v-if="task.taskType === 'rush'" type="danger">🔴 赶 {{ fmt(task.rushShipTime) }} 出货</el-tag>
           <el-tag v-else-if="task.taskType === 'scheduled'" type="warning">指定时间 {{ fmt(task.scheduledTime) }}</el-tag>
@@ -16,12 +16,12 @@
         <el-descriptions-item label="客户">{{ task.customerName }}</el-descriptions-item>
         <el-descriptions-item label="取件点">{{ task.addressPointName }}</el-descriptions-item>
         <el-descriptions-item label="联系电话">{{ task.phone }}</el-descriptions-item>
-        <el-descriptions-item label="地址" :span="3">{{ task.address }}</el-descriptions-item>
+        <el-descriptions-item label="地址" :span="cols">{{ task.address }}</el-descriptions-item>
         <el-descriptions-item label="主客服">{{ task.mainCsName }}</el-descriptions-item>
         <el-descriptions-item label="派单时间">{{ fmt(task.dispatchAt) }}</el-descriptions-item>
         <el-descriptions-item label="完成时间">{{ fmt(task.completedAt) }}</el-descriptions-item>
-        <el-descriptions-item label="加急原因" :span="3">{{ task.rushReason }}</el-descriptions-item>
-        <el-descriptions-item label="取件备注" :span="3">{{ task.pickupNote }}</el-descriptions-item>
+        <el-descriptions-item label="加急原因" :span="cols">{{ task.rushReason }}</el-descriptions-item>
+        <el-descriptions-item label="取件备注" :span="cols">{{ task.pickupNote }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -29,45 +29,58 @@
       <template #header>
         <div class="head">
           <span>取件货物（{{ task.items?.length || 0 }} 票 / {{ totalPieces }} 件）</span>
-          <div v-if="isWorker && canOperate">
+          <div v-if="isWorker && canOperate && task.status !== 'completed' && task.status !== 'cancelled'" class="head-actions">
             <el-button size="small" type="primary" @click="itemVisible = true">扫码/录单</el-button>
             <el-button size="small" @click="uploadVisible = true">拍照留底</el-button>
-            <el-button size="small" type="success" @click="complete">完成取件</el-button>
+            <el-button v-if="task.status === 'in_progress'" size="small" type="success" @click="complete">完成取件</el-button>
           </div>
         </div>
       </template>
-      <el-table :data="task.items || []" size="small">
-        <el-table-column prop="waybillNo" label="票号" width="150">
-          <template #default="{ row }">{{ row.waybillNo || '（无票号）' }}</template>
-        </el-table-column>
-        <el-table-column prop="pieces" label="件数" width="80" />
-        <el-table-column prop="entryMethod" label="录入方式" width="100">
-          <template #default="{ row }">{{ entryMethodLabel(row.entryMethod) }}</template>
-        </el-table-column>
-        <el-table-column prop="workerName" label="取件员" width="100" />
-        <el-table-column prop="finalWeight" label="最终重量(kg)" width="120" />
-        <el-table-column label="匹配状态" width="110">
-          <template #default="{ row }">
-            <el-tag size="small" :type="matchStatusType(row.matchStatus)">
-              {{ matchStatusLabel(row.matchStatus) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="items-table">
+        <el-table :data="task.items || []" size="small">
+          <el-table-column prop="waybillNo" label="票号" width="150">
+            <template #default="{ row }">{{ row.waybillNo || '（无票号）' }}</template>
+          </el-table-column>
+          <el-table-column prop="pieces" label="件数" width="80" />
+          <el-table-column prop="entryMethod" label="录入方式" width="100">
+            <template #default="{ row }">{{ entryMethodLabel(row.entryMethod) }}</template>
+          </el-table-column>
+          <el-table-column prop="workerName" label="取件员" width="100" />
+          <el-table-column prop="finalWeight" label="最终重量(kg)" width="120" />
+          <el-table-column label="匹配状态" width="110">
+            <template #default="{ row }">
+              <el-tag size="small" :type="matchStatusType(row.matchStatus)">
+                {{ matchStatusLabel(row.matchStatus) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <div v-if="(task.items || []).length" class="mobile-items">
+        <div v-for="row in task.items" :key="row.id" class="m-item">
+          <div class="m-top">
+            <span class="m-no">{{ row.waybillNo || '（无票号）' }}</span>
+            <el-tag size="small" :type="matchStatusType(row.matchStatus)">{{ matchStatusLabel(row.matchStatus) }}</el-tag>
+          </div>
+          <div class="m-meta">
+            件数 {{ row.pieces || 0 }} · 录入方式 {{ entryMethodLabel(row.entryMethod) }} · 取件员 {{ row.workerName || '—' }} · 重量 {{ row.finalWeight ?? 0 }}kg
+          </div>
+        </div>
+      </div>
     </el-card>
 
     <el-row :gutter="16">
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card shadow="never" class="block">
           <template #header>现场照片（{{ task.photos?.length || 0 }}）</template>
           <div class="photos">
             <el-image v-for="p in task.photos" :key="p.id" :src="p.filePath" :preview-src-list="task.photos.map((x: any) => x.filePath)"
-                      fit="cover" style="width:96px;height:96px;margin:4px" />
+                      fit="cover" class="photo-img" />
             <el-empty v-if="!task.photos?.length" description="暂无照片" :image-size="60" />
           </div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card shadow="never" class="block">
           <template #header>取件员 / 异常</template>
           <div class="workers">
@@ -90,16 +103,22 @@
     <el-card shadow="never" class="block">
       <template #header>操作</template>
       <div v-if="isCs">
-        <el-button @click="reassignVisible = true">改派</el-button>
-        <el-button @click="updateVisible = true">修改时间/类型</el-button>
-        <el-button @click="cancel">取消任务</el-button>
-        <el-button type="primary" @click="again">再次取件</el-button>
+        <div class="ops">
+          <el-button v-if="task.status === 'pending' || task.status === 'in_progress'" @click="reassignVisible = true">改派</el-button>
+          <el-button v-if="task.status === 'pending' || task.status === 'in_progress'" @click="updateVisible = true">修改时间/类型</el-button>
+          <el-button v-if="task.status === 'pending' || task.status === 'in_progress'" type="danger" plain @click="cancel">取消任务</el-button>
+          <el-button type="primary" @click="again">再次取件</el-button>
+        </div>
       </div>
-      <div v-else-if="isWorker && canOperate">
-        <el-button @click="start">开始取件</el-button>
-        <el-button @click="transferVisible = true">转派</el-button>
-        <el-button @click="assistVisible = true">邀请协助</el-button>
-        <el-button type="danger" @click="exceptionVisible = true">上报异常</el-button>
+      <div v-else-if="isWorker && canOperate && (task.status === 'pending' || task.status === 'in_progress')">
+        <div class="ops worker-ops">
+          <el-button v-if="task.status === 'pending'" type="primary" size="large" class="primary-action"
+                     :loading="starting" @click="start">开始取件</el-button>
+          <el-tag v-else type="primary" size="large" class="progress-hint">取件进行中 —— 请先完成上方扫码录单、拍照，再点“完成取件”</el-tag>
+          <el-button @click="transferVisible = true">转派</el-button>
+          <el-button @click="assistVisible = true">邀请协助</el-button>
+          <el-button type="danger" plain @click="exceptionVisible = true">上报异常</el-button>
+        </div>
       </div>
     </el-card>
 
@@ -197,7 +216,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api'
@@ -207,9 +226,11 @@ import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../s
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const id = route.params.id as string
+const taskId = computed(() => route.params.id as string)
 const task = reactive<any>({})
 const workers = ref<any[]>([])
+const cols = ref(3)
+const starting = ref(false)
 const itemVisible = ref(false)
 const uploadVisible = ref(false)
 const reassignVisible = ref(false)
@@ -234,8 +255,13 @@ const canOperate = computed(() => {
   return task.defaultWorkerId === myCourierId || (task.workers || []).some((w: any) => w.userId === myCourierId)
 })
 
+let loadSeq = 0
 async function load() {
-  Object.assign(task, await http.get(`/tasks/${id}`))
+  const seq = ++loadSeq
+  const data: any = await http.get(`/tasks/${taskId.value}`)
+  if (seq !== loadSeq) return
+  Object.keys(task).forEach(key => delete task[key])
+  Object.assign(task, data)
 }
 
 function fmt(t: string) {
@@ -263,7 +289,7 @@ function matchStatusType(status: string) {
 async function addItem() {
   adding.value = true
   try {
-    await http.post(`/tasks/${id}/items`, itemForm)
+    await http.post(`/tasks/${taskId.value}/items`, itemForm)
     itemForm.waybillNo = ''
     load()
   } finally {
@@ -274,27 +300,33 @@ async function addItem() {
 async function uploadPhoto(opt: any) {
   const fd = new FormData()
   fd.append('file', opt.file)
-  await http.post(`/tasks/${id}/photos`, fd)
+  await http.post(`/tasks/${taskId.value}/photos`, fd)
   ElMessage.success('照片已上传')
   load()
 }
 
 async function start() {
-  await http.post(`/tasks/${id}/start`)
+  if (task.status !== 'pending') return
+  starting.value = true
+  try {
+    await http.post(`/tasks/${taskId.value}/start`)
+  } finally {
+    starting.value = false
+  }
   ElMessage.success('已开始取件')
   load()
 }
 
 async function complete() {
   await ElMessageBox.confirm(`本次共 ${task.items?.length || 0} 票 / ${totalPieces.value} 件，照片 ${task.photos?.length || 0} 张，确认完成取件？`, '完成取件')
-  await http.post(`/tasks/${id}/complete`)
+  await http.post(`/tasks/${taskId.value}/complete`)
   ElMessage.success('取件完成')
   router.push(isWorker.value ? '/worker/tasks' : '/tasks')
 }
 
 async function doReassign() {
   if (!assignWorkerId.value) return ElMessage.warning('请选择取件员')
-  await http.post(`/tasks/${id}/reassign`, { workerId: assignWorkerId.value })
+  await http.post(`/tasks/${taskId.value}/reassign`, { workerId: assignWorkerId.value })
   ElMessage.success('已改派')
   reassignVisible.value = false
   load()
@@ -302,7 +334,7 @@ async function doReassign() {
 
 async function doTransfer() {
   if (!assignWorkerId.value) return ElMessage.warning('请选择取件员')
-  await http.post(`/tasks/${id}/transfer`, { workerId: assignWorkerId.value })
+  await http.post(`/tasks/${taskId.value}/transfer`, { workerId: assignWorkerId.value })
   ElMessage.success('已转派')
   transferVisible.value = false
   load()
@@ -310,7 +342,7 @@ async function doTransfer() {
 
 async function doAssist() {
   if (!assignWorkerId.value) return ElMessage.warning('请选择取件员')
-  await http.post(`/tasks/${id}/assist`, { workerId: assignWorkerId.value })
+  await http.post(`/tasks/${taskId.value}/assist`, { workerId: assignWorkerId.value })
   ElMessage.success('已邀请协助')
   assistVisible.value = false
   load()
@@ -318,7 +350,7 @@ async function doAssist() {
 
 async function reportException() {
   if (!exceptionForm.type) return ElMessage.warning('请选择异常类型')
-  await http.post(`/tasks/${id}/exceptions`, exceptionForm)
+  await http.post(`/tasks/${taskId.value}/exceptions`, exceptionForm)
   ElMessage.success('异常已上报')
   exceptionVisible.value = false
   exceptionForm.type = ''
@@ -338,13 +370,13 @@ async function resolveException(e: any) {
 
 async function cancel() {
   await ElMessageBox.confirm('确认取消该任务？', '取消任务', { type: 'warning' })
-  await http.post(`/tasks/${id}/cancel`)
+  await http.post(`/tasks/${taskId.value}/cancel`)
   ElMessage.success('已取消')
   load()
 }
 
 async function again() {
-  const res: any = await http.post(`/tasks/${id}/again`)
+  const res: any = await http.post(`/tasks/${taskId.value}/again`)
   ElMessage.success('已再次派单')
   router.push(`/tasks/${res.id}`)
 }
@@ -357,21 +389,42 @@ async function doUpdate() {
     scheduledTime: updateForm.taskType === 'scheduled' ? updateForm.scheduledTime : null,
     scheduledKind: updateForm.taskType === 'scheduled' ? 'before' : null,
   }
-  await http.put(`/tasks/${id}`, payload)
+  await http.put(`/tasks/${taskId.value}`, payload)
   ElMessage.success('已更新')
   updateVisible.value = false
   load()
 }
+
+const mq = window.matchMedia('(max-width: 768px)')
+function updateCols() {
+  cols.value = mq.matches ? 1 : 3
+}
+mq.addEventListener('change', updateCols)
+updateCols()
+
+watch(taskId, () => {
+  itemVisible.value = false
+  uploadVisible.value = false
+  reassignVisible.value = false
+  transferVisible.value = false
+  assistVisible.value = false
+  exceptionVisible.value = false
+  updateVisible.value = false
+  load()
+})
 
 onMounted(async () => {
   workers.value = (await http.get('/employees/workers')) as any[]
   load()
 })
 const liveRefresh = createRealtimeRefreshSubscription({
-  predicate: event => taskIdFromRealtimeEvent(event) === id,
+  predicate: event => taskIdFromRealtimeEvent(event) === taskId.value,
   refresh: load,
 })
-onUnmounted(() => liveRefresh.dispose())
+onUnmounted(() => {
+  mq.removeEventListener('change', updateCols)
+  liveRefresh.dispose()
+})
 </script>
 
 <style scoped>
@@ -382,9 +435,102 @@ onUnmounted(() => liveRefresh.dispose())
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+.photo-img {
+  width: 100% !important;
+  height: 96px;
+  border-radius: 8px;
+  background: #f2f3f5;
+}
+.ops {
   display: flex;
   flex-wrap: wrap;
+  gap: 8px;
+}
+.ops .el-button {
+  margin-left: 0;
+}
+.primary-action {
+  min-width: 180px;
+}
+.items-table .el-table {
+  min-width: 640px;
+}
+.items-table {
+  overflow-x: auto;
+}
+.mobile-items {
+  display: none;
+}
+.m-item {
+  border: 1px solid var(--qj-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.m-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.m-no {
+  font-weight: 600;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.m-meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--qj-text-2);
+  line-height: 1.6;
+}
+@media (max-width: 768px) {
+  .items-table {
+    display: none;
+  }
+  .mobile-items {
+    display: block;
+  }
+  .head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  .head-actions .el-button {
+    margin-left: 0;
+    flex: 1 1 calc(50% - 4px);
+  }
+  .ops .el-button {
+    flex: 1 1 calc(50% - 8px);
+  }
+  .ops .primary-action {
+    flex: 1 1 100%;
+    height: 46px;
+    font-size: 17px;
+  }
+  .progress-hint {
+    flex: 1 1 100%;
+    text-align: center;
+    white-space: normal;
+    height: auto;
+    line-height: 1.6;
+    padding: 10px 12px;
+  }
+  .photo-img {
+    height: 84px;
+  }
 }
 </style>

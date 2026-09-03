@@ -101,13 +101,32 @@ const preferenceRows = reactive<PreferenceRow[]>([
   { type: 'pickupTask.exception', label: '异常处理', description: '出现异常或处理完成时提醒', enabled: true, saving: false },
 ])
 
-const statusCopy = computed(() => ({
+const unsupportedCopy = {
+  'ios-pwa': {
+    title: 'iOS 需从主屏幕打开',
+    help: 'iPhone/iPad 的系统通知要求 iOS 16.4+：请在 Safari 打开本站后点「分享」→「添加到主屏幕」，之后始终从主屏幕图标进入本站再开启。',
+  },
+  'embedded-browser': {
+    title: '微信/QQ 内置浏览器不支持',
+    help: '请点右上角菜单选择「在浏览器打开」（iOS Safari 或 Android Chrome），系统通知需在系统浏览器中开启。',
+  },
+  'generic': {
+    title: '当前浏览器不支持',
+    help: '请使用最新版 Chrome、Edge、Firefox 或 Safari，并以 HTTPS 安全地址访问本系统。',
+  },
+}
+
+const statusCopy = computed(() => {
+  if (pushState.value.status === 'unsupported') {
+    return unsupportedCopy[pushState.value.reason || 'generic']
+  }
+  return ({
   granted: { title: '当前浏览器已开启', help: '系统通知可以在页面关闭后显示。' },
   denied: { title: '浏览器已拒绝通知', help: '请在浏览器的网站权限设置中重新允许。' },
   default: { title: '尚未开启', help: '点击按钮后，浏览器会询问是否允许通知。' },
   insecure: { title: '当前地址不是 HTTPS', help: '系统通知要求 HTTPS；站内通知和实时刷新仍可使用。' },
-  unsupported: { title: '当前浏览器不支持', help: '请使用支持 Web Push 的现代浏览器。' },
-}[pushState.value.status]))
+  } as Record<string, { title: string; help: string }>)[pushState.value.status]
+})
 
 async function load() {
   loading.value = true

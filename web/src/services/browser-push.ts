@@ -6,6 +6,7 @@ export type BrowserPushStatus = 'unsupported' | 'insecure' | 'default' | 'denied
 export interface BrowserPushState {
   status: BrowserPushStatus
   available: boolean
+  reason?: 'ios-pwa' | 'embedded-browser' | 'generic'
 }
 
 const STORAGE_KEY = 'cargo:web-push-subscription-id'
@@ -22,9 +23,18 @@ function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
 export function getBrowserPushState(): BrowserPushState {
   if (!window.isSecureContext) return { status: 'insecure', available: false }
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-    return { status: 'unsupported', available: false }
+    return { status: 'unsupported', available: false, reason: unsupportedReason() }
   }
   return { status: Notification.permission, available: true }
+}
+
+function unsupportedReason(): 'ios-pwa' | 'embedded-browser' | 'generic' {
+  const ua = navigator.userAgent
+  if (/MicroMessenger|QQ\//.test(ua)) return 'embedded-browser'
+  const ios = /iPhone|iPad|iPod/.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  if (ios) return 'ios-pwa'
+  return 'generic'
 }
 
 function deviceLabel(): string {

@@ -224,6 +224,9 @@ onUnmounted(() => liveRefresh.dispose())
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--qj-border);
 }
 .actions .el-button {
   margin-left: 0;
@@ -238,12 +241,19 @@ onUnmounted(() => liveRefresh.dispose())
   .time {
     font-size: 12px;
   }
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
   .actions .el-button {
-    flex: 1 1 calc(33.33% - 6px);
+    width: 100%;
+    min-height: 44px;
+    font-size: 14px;
   }
   .actions .main {
-    flex: 1 1 100%;
-    height: 44px;
+    grid-column: 1 / -1;
+    height: 48px;
     font-size: 16px;
     margin-left: 0;
     order: -1;

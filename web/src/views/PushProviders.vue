@@ -165,5 +165,15 @@ onMounted(load)
 .health-row { min-height: 30px; flex-wrap: wrap; gap: 6px 14px; padding: 9px 11px; margin: 4px 0 16px; border: 1px solid var(--qj-border); border-radius: 7px; background: #fafbfc; color: var(--qj-muted); font-size: 11px; }
 .health-error { color: var(--el-color-danger); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .provider-actions { gap: 8px; flex-wrap: wrap; }
-@media (max-width: 640px) { .provider-actions .el-button { flex: 1; margin-left: 0; } }
+@media (max-width: 640px) {
+  .provider-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .provider-actions .el-button {
+    width: 100%;
+    min-height: 44px;
+    margin-left: 0;
+  }
+}
 </style>

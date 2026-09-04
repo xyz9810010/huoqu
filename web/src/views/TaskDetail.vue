@@ -832,6 +832,17 @@ onUnmounted(() => liveRefresh.dispose())
     grid-template-columns: 1fr;
     gap: 6px;
   }
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .quick-actions :deep(.el-button),
+  .grid2 .el-button {
+    width: 100%;
+    min-height: 44px;
+    margin-left: 0;
+  }
   .who {
     font-size: 17px;
   }

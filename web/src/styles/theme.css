@@ -300,6 +300,7 @@ body {
   .mobile-item__actions .el-button {
     flex: 1 1 0;
     min-width: 88px;
+    min-height: 44px;
     margin-left: 0;
   }
   .mobile-list--inset {

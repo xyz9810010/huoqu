@@ -5,7 +5,7 @@
       <template #header>待匹配中心</template>
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
                 title="无票号记录补票号后自动获取最终重量；有票号但暂无重量会自动匹配原系统同步结果。" />
-      <el-table :data="list">
+      <el-table class="desktop-table" :data="list">
         <el-table-column prop="taskId" label="任务ID" width="90" />
         <el-table-column prop="waybillNo" label="票号" width="160">
           <template #default="{ row }">{{ row.waybillNo || '（无票号）' }}</template>
@@ -28,6 +28,26 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="mobile-list mobile-list--inset">
+        <article v-for="row in list" :key="row.id" class="mobile-item">
+          <div class="mobile-item__head">
+            <div>
+              <div class="mobile-item__title">{{ row.waybillNo || '无票号记录' }}</div>
+              <div class="mobile-item__sub">任务 {{ row.taskNo || row.taskId }}</div>
+            </div>
+            <el-tag size="small" :type="row.matchStatus === 'pending' ? 'warning' : 'info'">
+              {{ row.matchStatus === 'pending' ? '待重量' : '待补票号' }}
+            </el-tag>
+          </div>
+          <div class="mobile-field"><span class="mobile-field__label">件数</span><span class="mobile-field__value">{{ row.pieces || 0 }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">录入方式</span><span class="mobile-field__value">{{ entryMethodLabel(row.entryMethod) }}</span></div>
+          <div class="mobile-item__actions">
+            <el-button type="primary" @click="openMatch(row)">补票号</el-button>
+            <el-button @click="router.push('/tasks/' + row.taskId)">查看任务</el-button>
+          </div>
+        </article>
+        <el-empty v-if="!list.length" description="暂无待匹配记录" />
+      </div>
     </el-card>
 
     <el-dialog v-model="matchVisible" title="补票号" width="360px">

@@ -12,7 +12,7 @@
       <el-button type="success" @click="openCreate">新增客户</el-button>
     </div>
 
-    <el-table :data="list" @row-click="(r: any) => router.push('/customers/' + r.id)" style="cursor:pointer">
+    <el-table class="desktop-table" :data="list" @row-click="(r: any) => router.push('/customers/' + r.id)" style="cursor:pointer">
       <el-table-column prop="customerNo" label="编号" width="100" />
       <el-table-column prop="name" label="客户名称" min-width="180" />
       <el-table-column prop="mainCsName" label="主客服" width="100" />
@@ -34,6 +34,30 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="mobile-list">
+      <article v-for="row in list" :key="row.id" class="mobile-item mobile-item--clickable"
+               @click="router.push('/customers/' + row.id)">
+        <div class="mobile-item__head">
+          <div>
+            <div class="mobile-item__title">{{ row.name }}</div>
+            <div class="mobile-item__sub">{{ row.customerNo || '暂无客户编号' }}</div>
+          </div>
+          <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+            {{ row.status === 'active' ? '正常' : '停用' }}
+          </el-tag>
+        </div>
+        <div class="mobile-field"><span class="mobile-field__label">主客服</span><span class="mobile-field__value">{{ row.mainCsName || '未分配' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">联系人</span><span class="mobile-field__value">{{ row.contactName || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">联系电话</span><span class="mobile-field__value">{{ row.contactPhone || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">取件地址</span><span class="mobile-field__value">{{ row.addressCount || 0 }} 个</span></div>
+        <div class="mobile-item__actions" @click.stop>
+          <el-button type="primary" plain @click="goDispatch(row)">派单</el-button>
+          <el-button @click="router.push('/customers/' + row.id)">查看详情</el-button>
+        </div>
+      </article>
+      <el-empty v-if="!list.length" description="暂无客户" />
+    </div>
 
     <el-pagination background layout="total, prev, pager, next" :total="total" :page-size="size"
                    :current-page="page + 1" @current-change="(p: number) => { page = p - 1; load() }" />
@@ -121,5 +145,19 @@ onMounted(load)
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
+}
+@media (max-width: 768px) {
+  .toolbar :deep(.el-input) {
+    width: 100% !important;
+  }
+  .toolbar :deep(.el-select) {
+    flex: 1;
+    width: auto !important;
+    min-width: 120px;
+  }
+  .toolbar .el-button {
+    flex: 1;
+    margin-left: 0;
+  }
 }
 </style>

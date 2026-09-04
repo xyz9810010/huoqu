@@ -52,7 +52,7 @@
       <template #header>
         <div class="devices-head"><span>已登记设备</span><el-button text :loading="loading" @click="load">刷新</el-button></div>
       </template>
-      <el-table v-if="devices.length" :data="devices" style="width:100%">
+      <el-table v-if="devices.length" class="desktop-table" :data="devices" style="width:100%">
         <el-table-column label="设备">
           <template #default="scope">
             <div class="device-name"><el-icon><Monitor /></el-icon><div>
@@ -71,7 +71,25 @@
         </el-table-column>
         <el-table-column prop="createdAt" label="登记时间" min-width="180" />
       </el-table>
-      <el-empty v-else description="暂无已登记的推送设备" :image-size="72" />
+      <div class="mobile-list mobile-list--inset">
+        <article v-for="device in devices" :key="device.id" class="mobile-item">
+          <div class="mobile-item__head">
+            <div class="device-name">
+              <el-icon><Monitor /></el-icon>
+              <div>
+                <strong>{{ device.deviceLabel || '未命名设备' }}</strong>
+                <span>{{ device.platform || device.providerCode }}</span>
+              </div>
+            </div>
+            <el-tag :type="device.status === 'active' ? 'success' : 'info'" effect="plain" size="small">
+              {{ device.status === 'active' ? '正常' : '已失效' }}
+            </el-tag>
+          </div>
+          <div class="mobile-field"><span class="mobile-field__label">通道</span><span class="mobile-field__value">{{ device.channel === 'web_push' ? '浏览器通知' : device.providerCode }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">登记时间</span><span class="mobile-field__value">{{ formatDeviceTime(device.createdAt) }}</span></div>
+        </article>
+      </div>
+      <el-empty v-if="!devices.length" description="暂无已登记的推送设备" :image-size="72" />
     </el-card>
   </div>
 </template>
@@ -100,6 +118,10 @@ const preferenceRows = reactive<PreferenceRow[]>([
   { type: 'pickupTask.overdue', label: '超时与紧急任务', description: '临近赶货时间或任务超时时提醒', enabled: true, saving: false },
   { type: 'pickupTask.exception', label: '异常处理', description: '出现异常或处理完成时提醒', enabled: true, saving: false },
 ])
+
+function formatDeviceTime(value: string) {
+  return String(value || '').replace('T', ' ').slice(0, 16) || '—'
+}
 
 const unsupportedCopy = {
   'ios-pwa': {

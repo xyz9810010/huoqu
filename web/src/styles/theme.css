@@ -126,6 +126,12 @@ body {
   margin-bottom: 16px;
 }
 
+/* Desktop tables keep their dense operational view; mobile uses scan-friendly rows. */
+.mobile-list,
+.mobile-detail-list {
+  display: none;
+}
+
 /* 指标卡：白底细边框 + 左侧淡色图标 */
 .stat-card {
   display: flex;
@@ -220,6 +226,93 @@ body {
     justify-content: center;
     flex-wrap: wrap;
     overflow-x: auto;
+  }
+  .desktop-table,
+  .desktop-descriptions {
+    display: none !important;
+  }
+  .mobile-list,
+  .mobile-detail-list {
+    display: grid;
+    gap: 10px;
+  }
+  .mobile-item {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--qj-border);
+    border-radius: 8px;
+    background: var(--qj-surface);
+  }
+  .mobile-item--clickable {
+    cursor: pointer;
+  }
+  .mobile-item__head,
+  .mobile-item__actions,
+  .mobile-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mobile-item__head {
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .mobile-item__title {
+    min-width: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--qj-text);
+    overflow-wrap: anywhere;
+  }
+  .mobile-item__sub {
+    margin-top: 3px;
+    color: var(--qj-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .mobile-field {
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 6px 0;
+    color: var(--qj-text-2);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .mobile-field__label {
+    width: 88px;
+    flex: none;
+    color: var(--qj-muted);
+  }
+  .mobile-field__value {
+    min-width: 0;
+    text-align: right;
+    color: var(--qj-text);
+    overflow-wrap: anywhere;
+  }
+  .mobile-item__actions {
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--qj-border);
+  }
+  .mobile-item__actions .el-button {
+    flex: 1 1 0;
+    min-width: 88px;
+    margin-left: 0;
+  }
+  .mobile-list--inset {
+    gap: 0;
+  }
+  .mobile-list--inset .mobile-item {
+    padding: 12px 0;
+    border: 0;
+    border-bottom: 1px solid var(--qj-border);
+    border-radius: 0;
+  }
+  .mobile-list--inset .mobile-item:last-child {
+    border-bottom: 0;
   }
   /* 指标卡在窄屏下减小内边距，避免两列布局过挤 */
   .stat-card {

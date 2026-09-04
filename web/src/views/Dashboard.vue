@@ -64,7 +64,7 @@
             <template #header>
               <div class="block-title"><el-icon><Van /></el-icon>取件员排行</div>
             </template>
-            <el-table :data="workers">
+            <el-table class="desktop-table" :data="workers">
               <el-table-column type="index" label="#" width="52" />
               <el-table-column prop="name" label="取件员" min-width="110">
                 <template #default="{ row }">
@@ -87,6 +87,16 @@
                 </template>
               </el-table-column>
             </el-table>
+            <div class="mobile-list mobile-list--inset dashboard-mobile-list">
+              <div v-for="(row, index) in workers" :key="row.id || row.name" class="mobile-item">
+                <div class="mobile-item__head">
+                  <div class="worker-cell"><span class="rank">{{ index + 1 }}</span><span class="mobile-item__title">{{ row.name }}</span></div>
+                  <strong class="weight">{{ row.weight || 0 }} kg</strong>
+                </div>
+                <div class="metric-line"><span>取件 {{ row.pickupCount || 0 }} 次</span><span>客户 {{ row.customerCount || 0 }}</span><span>件数 {{ row.pieces || 0 }}</span><span>待取 {{ row.pending || 0 }}</span></div>
+              </div>
+              <el-empty v-if="!workers.length" description="暂无取件员数据" />
+            </div>
           </el-card>
         </el-col>
 
@@ -95,7 +105,7 @@
             <template #header>
               <div class="block-title"><el-icon><User /></el-icon>客服数据</div>
             </template>
-            <el-table :data="cs">
+            <el-table class="desktop-table" :data="cs">
               <el-table-column prop="name" label="客服" min-width="90" />
               <el-table-column prop="customerCount" label="负责客户" width="90" />
               <el-table-column prop="shipCustomerCount" label="发货客户" width="90" />
@@ -104,19 +114,32 @@
                 <template #default="{ row }"><b class="num">{{ row.weight }}</b> kg</template>
               </el-table-column>
             </el-table>
+            <div class="mobile-list mobile-list--inset dashboard-mobile-list">
+              <div v-for="row in cs" :key="row.id || row.name" class="mobile-item">
+                <div class="mobile-item__head"><span class="mobile-item__title">{{ row.name }}</span><strong class="weight">{{ row.weight || 0 }} kg</strong></div>
+                <div class="metric-line"><span>负责客户 {{ row.customerCount || 0 }}</span><span>发货客户 {{ row.shipCustomerCount || 0 }}</span><span>任务 {{ row.taskCount || 0 }}</span></div>
+              </div>
+              <el-empty v-if="!cs.length" description="暂无客服数据" />
+            </div>
           </el-card>
 
           <el-card shadow="never" class="block">
             <template #header>
               <div class="block-title"><el-icon><OfficeBuilding /></el-icon>客户重量排行</div>
             </template>
-            <el-table :data="customers.slice(0, 8)">
+            <el-table class="desktop-table" :data="customers.slice(0, 8)">
               <el-table-column type="index" label="#" width="52" />
               <el-table-column prop="name" label="客户" min-width="130" show-overflow-tooltip />
               <el-table-column label="重量" width="110">
                 <template #default="{ row }"><b class="num">{{ row.weight }}</b> kg</template>
               </el-table-column>
             </el-table>
+            <div class="mobile-list mobile-list--inset dashboard-mobile-list">
+              <div v-for="(row, index) in customers.slice(0, 8)" :key="row.id || row.name" class="mobile-item ranking-row">
+                <span class="rank">{{ index + 1 }}</span><span class="mobile-item__title">{{ row.name }}</span><strong class="weight">{{ row.weight || 0 }} kg</strong>
+              </div>
+              <el-empty v-if="!customers.length" description="暂无客户数据" />
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -125,7 +148,7 @@
         <template #header>
           <div class="block-title"><el-icon><TrendCharts /></el-icon>每日出货重量趋势（近 30 天）</div>
         </template>
-        <el-table :data="trends.weight" max-height="300">
+        <el-table class="desktop-table" :data="trends.weight" max-height="300">
           <el-table-column prop="date" label="日期" width="150" />
           <el-table-column label="最终重量 (kg)" min-width="200">
             <template #default="{ row }">
@@ -136,6 +159,12 @@
             </template>
           </el-table-column>
         </el-table>
+        <div class="mobile-list mobile-list--inset dashboard-mobile-list trend-mobile-list">
+          <div v-for="row in trends.weight" :key="row.date" class="mobile-item ranking-row">
+            <span class="mobile-item__title">{{ row.date }}</span><strong class="weight">{{ row.weight || 0 }} kg</strong>
+          </div>
+          <el-empty v-if="!trends.weight.length" description="暂无趋势数据" />
+        </div>
       </el-card>
     </template>
 
@@ -410,6 +439,43 @@ onUnmounted(() => {
 }
 .num {
   font-variant-numeric: tabular-nums;
+}
+.rank {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--tint-blue);
+  color: var(--el-color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.weight {
+  flex: none;
+  color: var(--qj-text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.metric-line,
+.ranking-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.metric-line {
+  flex-wrap: wrap;
+  color: var(--qj-text-2);
+  font-size: 12px;
+}
+.ranking-row .mobile-item__title {
+  flex: 1;
+}
+.trend-mobile-list {
+  max-height: 320px;
+  overflow-y: auto;
 }
 .trend-row {
   display: flex;

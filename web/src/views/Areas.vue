@@ -4,7 +4,7 @@
     <div class="toolbar">
       <el-button type="success" @click="openCreate">新增区域</el-button>
     </div>
-    <el-table :data="list">
+    <el-table class="desktop-table" :data="list">
       <el-table-column prop="name" label="区域名称" width="140" />
       <el-table-column prop="code" label="编码" width="100" />
       <el-table-column prop="defaultWorkerName" label="默认主取件员" width="130" />
@@ -21,6 +21,25 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="mobile-list">
+      <article v-for="row in list" :key="row.id" class="mobile-item">
+        <div class="mobile-item__head">
+          <div>
+            <div class="mobile-item__title">{{ row.name }}</div>
+            <div class="mobile-item__sub">{{ row.code || '未设置编码' }}</div>
+          </div>
+        </div>
+        <div class="mobile-field"><span class="mobile-field__label">默认取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未设置' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">主取件员</span><span class="mobile-field__value">{{ workerNames(row.defaultWorkers) }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">备用取件员</span><span class="mobile-field__value">{{ workerNames(row.backupWorkers) }}</span></div>
+        <div class="mobile-item__actions">
+          <el-button @click="openEdit(row)">编辑</el-button>
+          <el-button type="primary" @click="openAssign(row)">设置取件员</el-button>
+        </div>
+      </article>
+      <el-empty v-if="!list.length" description="暂无区域" />
+    </div>
 
     <el-dialog v-model="visible" :title="form.id ? '编辑区域' : '新增区域'" width="420px">
       <el-form :model="form" label-width="100px">
@@ -69,6 +88,10 @@ const assignForm = reactive<any>({ areaId: null, defaultWorkerIds: [], backupWor
 
 async function load() {
   list.value = await http.get('/areas')
+}
+
+function workerNames(items: any[] | undefined) {
+  return (items || []).map((worker: any) => worker.name).join('、') || '未设置'
 }
 
 function openCreate() {

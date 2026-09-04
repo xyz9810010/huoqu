@@ -2,7 +2,7 @@
   <div>
     <h2 class="page-title" style="margin-bottom:16px">我的数据</h2>
     <el-row :gutter="16">
-      <el-col :span="8">
+      <el-col :span="8" :xs="24" class="data-col">
         <el-card shadow="never">
           <template #header>今日数据</template>
           <div class="kv" v-for="kv in todayItems" :key="kv.label">
@@ -10,7 +10,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :span="8" :xs="24" class="data-col">
         <el-card shadow="never">
           <template #header>本月数据</template>
           <div class="kv" v-for="kv in monthItems" :key="kv.label">
@@ -18,7 +18,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :span="8" :xs="24" class="data-col">
         <el-card shadow="never">
           <template #header>其他</template>
           <div class="kv"><span>协助次数</span><b>{{ data.assistCount || 0 }}</b></div>
@@ -72,5 +72,13 @@ onUnmounted(() => liveRefresh.dispose())
 }
 .kv b {
   font-size: 18px;
+}
+@media (max-width: 768px) {
+  .data-col {
+    margin-bottom: 12px;
+  }
+  .data-col:last-child {
+    margin-bottom: 0;
+  }
 }
 </style>

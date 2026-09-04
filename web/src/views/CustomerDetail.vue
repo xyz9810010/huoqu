@@ -15,7 +15,7 @@
           </div>
         </div>
       </template>
-      <el-descriptions :column="3" border>
+      <el-descriptions class="desktop-descriptions" :column="3" border>
         <el-descriptions-item label="编号">{{ customer.customerNo }}</el-descriptions-item>
         <el-descriptions-item label="客户名称">{{ customer.name }}</el-descriptions-item>
         <el-descriptions-item label="主客服">{{ customer.mainCsName }}</el-descriptions-item>
@@ -25,6 +25,16 @@
         <el-descriptions-item label="重要提醒" :span="3">{{ customer.importantNote }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ customer.remark }}</el-descriptions-item>
       </el-descriptions>
+      <div class="mobile-detail-list">
+        <div class="mobile-field"><span class="mobile-field__label">编号</span><span class="mobile-field__value">{{ customer.customerNo || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">客户名称</span><span class="mobile-field__value">{{ customer.name || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">主客服</span><span class="mobile-field__value">{{ customer.mainCsName || '未分配' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">联系人</span><span class="mobile-field__value">{{ customer.contactName || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">联系电话</span><span class="mobile-field__value">{{ customer.contactPhone || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">原系统 ID</span><span class="mobile-field__value">{{ customer.legacyCustomerId || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">重要提醒</span><span class="mobile-field__value">{{ customer.importantNote || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">备注</span><span class="mobile-field__value">{{ customer.remark || '—' }}</span></div>
+      </div>
     </el-card>
 
     <el-card shadow="never">
@@ -34,7 +44,7 @@
           <el-button size="small" type="success" @click="openAddAddr">新增地址</el-button>
         </div>
       </template>
-      <el-table :data="customer.addresses || []">
+      <el-table class="desktop-table" :data="customer.addresses || []">
         <el-table-column prop="name" label="取件点名称" width="140" />
         <el-table-column prop="address" label="完整地址" min-width="220" />
         <el-table-column prop="contactName" label="联系人" width="100" />
@@ -59,6 +69,26 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="mobile-list mobile-list--inset">
+        <article v-for="row in customer.addresses || []" :key="row.id" class="mobile-item">
+          <div class="mobile-item__head">
+            <div>
+              <div class="mobile-item__title">{{ row.name }}</div>
+              <div class="mobile-item__sub">{{ row.address }}</div>
+            </div>
+            <el-tag :type="row.isActive ? 'success' : 'info'" size="small">{{ row.isActive ? '启用' : '停用' }}</el-tag>
+          </div>
+          <div class="mobile-field"><span class="mobile-field__label">联系人</span><span class="mobile-field__value">{{ row.contactName || '—' }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">电话</span><span class="mobile-field__value">{{ row.contactPhone || '—' }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">所属区域</span><span class="mobile-field__value">{{ areaName(row.areaId) || '未设置' }}</span></div>
+          <div v-if="row.isCommon" class="common-mark">常用地址</div>
+          <div class="mobile-item__actions">
+            <el-button @click="openEditAddr(row)">编辑</el-button>
+            <el-button @click="toggleAddr(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>
+          </div>
+        </article>
+        <el-empty v-if="!(customer.addresses || []).length" description="暂无取件地址" />
+      </div>
     </el-card>
 
     <el-dialog v-model="editVisible" title="编辑客户" width="560px">
@@ -188,5 +218,34 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.common-mark {
+  margin-top: 6px;
+  color: var(--el-color-warning);
+  font-size: 12px;
+}
+@media (max-width: 768px) {
+  .card-head {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .card-head > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .card-head .el-button {
+    margin-left: 0;
+  }
+  .mobile-detail-list {
+    gap: 0;
+  }
+  .mobile-detail-list .mobile-field {
+    border-bottom: 1px solid var(--qj-border);
+  }
+  .mobile-detail-list .mobile-field:last-child {
+    border-bottom: 0;
+  }
 }
 </style>

@@ -3,7 +3,7 @@
     <h2 class="page-title" style="margin-bottom:16px">新建取件</h2>
     <el-card shadow="never" style="max-width:760px">
       <template #header>新建取件</template>
-      <el-form label-width="110px">
+      <el-form class="dispatch-form" label-width="110px">
         <el-form-item label="客户" required>
           <el-select v-model="customerId" filterable remote :remote-method="searchCustomer" placeholder="搜索客户名称/电话"
                      style="width:100%" @change="onCustomerChange">
@@ -159,3 +159,34 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+@media (max-width: 560px) {
+  .dispatch-form :deep(.el-form-item) {
+    display: block;
+    margin-bottom: 18px;
+  }
+  .dispatch-form :deep(.el-form-item__label) {
+    width: auto !important;
+    height: auto;
+    margin-bottom: 7px;
+    line-height: 1.4;
+    justify-content: flex-start;
+  }
+  .dispatch-form :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+  }
+  .dispatch-form :deep(.el-radio-group) {
+    width: 100%;
+    display: flex;
+  }
+  .dispatch-form :deep(.el-radio-button) {
+    flex: 1;
+  }
+  .dispatch-form :deep(.el-radio-button__inner) {
+    width: 100%;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+</style>

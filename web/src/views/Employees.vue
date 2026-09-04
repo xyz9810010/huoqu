@@ -10,7 +10,7 @@
       </el-select>
       <el-button type="success" @click="openCreate">新增员工</el-button>
     </div>
-    <el-table :data="list">
+    <el-table class="desktop-table" :data="list">
       <el-table-column prop="employeeNo" label="工号" width="90" />
       <el-table-column prop="username" label="用户名" width="120" />
       <el-table-column prop="name" label="姓名" width="120" />
@@ -32,6 +32,27 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="mobile-list">
+      <article v-for="row in list" :key="row.id" class="mobile-item">
+        <div class="mobile-item__head">
+          <div>
+            <div class="mobile-item__title">{{ row.name || row.username }}</div>
+            <div class="mobile-item__sub">{{ row.employeeNo || '未设置工号' }} · {{ row.username }}</div>
+          </div>
+          <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+            {{ row.status === 'active' ? '正常' : '停用' }}
+          </el-tag>
+        </div>
+        <div class="mobile-field"><span class="mobile-field__label">角色</span><span class="mobile-field__value">{{ roleLabel(row.role) }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">电话</span><span class="mobile-field__value">{{ row.phone || '—' }}</span></div>
+        <div class="mobile-item__actions">
+          <el-button @click="openEdit(row)">编辑</el-button>
+          <el-button @click="toggleStatus(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button>
+        </div>
+      </article>
+      <el-empty v-if="!list.length" description="暂无员工" />
+    </div>
 
     <el-dialog v-model="visible" :title="form.id ? '编辑员工' : '新增员工'" width="460px">
       <el-form :model="form" label-width="100px">
@@ -112,5 +133,15 @@ onMounted(load)
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
+}
+@media (max-width: 768px) {
+  .toolbar :deep(.el-select) {
+    flex: 1;
+    width: auto !important;
+  }
+  .toolbar .el-button {
+    flex: 1;
+    margin-left: 0;
+  }
 }
 </style>

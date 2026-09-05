@@ -18,6 +18,24 @@ function mountApiRoutes(app, deps) {
 
   const { upload, imageUpload } = createUploader(uploadsDir);
 
+  // 过机/导入的最终重量统一落入 waybill_weights，供任务明细按票号自动匹配；
+  // 历史数据（仅存在于 records 表）在匹配时兜底回填。
+  const upsertWaybillWeight = db.prepare(`INSERT INTO waybill_weights
+    (waybill_no, customer_id, final_weight, ship_date, updated_at) VALUES (?,?,?,?,?)
+    ON CONFLICT(waybill_no) DO UPDATE SET customer_id=excluded.customer_id,
+    final_weight=excluded.final_weight, ship_date=excluded.ship_date, updated_at=excluded.updated_at`);
+  const findWaybillWeight = (waybillNo) => {
+    const row = db.prepare('SELECT * FROM waybill_weights WHERE waybill_no=?').get(waybillNo);
+    if (row) return { finalWeight: num(row.final_weight), matched: true };
+    const legacy = db.prepare(`SELECT customer_id, weight AS final_weight, date AS ship_date
+      FROM records WHERE tracking_no=? AND weight>0 ORDER BY date DESC LIMIT 1`).get(waybillNo);
+    if (legacy) {
+      upsertWaybillWeight.run(waybillNo, legacy.customer_id || '', num(legacy.final_weight), legacy.ship_date || '', nowStr());
+      return { finalWeight: num(legacy.final_weight), matched: true };
+    }
+    return { finalWeight: 0, matched: false };
+  };
+
 
 // ---------- 工具 ----------
 const pad = (n) => (n < 10 ? '0' + n : '' + n);
@@ -342,10 +360,11 @@ app.post('/api/sync/match/:id', requireAuth, requireStaff, (req, res) => {
   if (!item) return res.status(404).json({ error: '货物明细不存在' });
   const waybillNo = String((req.body && req.body.waybillNo) || '').trim();
   if (!waybillNo) return res.status(400).json({ error: '请输入票号' });
-  const weight = db.prepare('SELECT * FROM waybill_weights WHERE waybill_no=?').get(waybillNo);
+  const found = findWaybillWeight(waybillNo);
   db.prepare(`UPDATE pickup_items SET waybill_no=?,entry_method='manual',final_weight=?,weight_source=?,match_status=?,updated_at=? WHERE id=?`)
-    .run(waybillNo, weight ? num(weight.final_weight) : num(item.final_weight), weight ? 'waybill_sync' : '', weight ? 'matched' : 'pending', nowStr(), item.id);
-  res.json({ matched: Boolean(weight), finalWeight: weight ? num(weight.final_weight) : 0 });
+    .run(waybillNo, found.matched ? found.finalWeight : num(item.final_weight),
+      found.matched ? 'waybill_sync' : '', found.matched ? 'matched' : 'pending', nowStr(), item.id);
+  res.json({ matched: found.matched, finalWeight: found.finalWeight });
 });
 
 function dashboardRangeStart(range) {
@@ -866,6 +885,7 @@ app.post('/api/machine/weigh', (req, res) => {
     if (parts.length) dimensions = parts.join('×');
   }
   db.prepare('UPDATE records SET weight = ?, dimensions = ? WHERE id = ?').run(weight, dimensions, r.id);
+  if (r.tracking_no) upsertWaybillWeight.run(r.tracking_no, r.customer_id || '', weight, todayStr(), nowStr());
   const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
   broadcast({ type: 'record.updated', record: updated, action: 'weigh', actorId: '', actor: '过机设备' });
   res.json({ ok: true, record: updated });
@@ -1338,6 +1358,7 @@ app.post('/api/import.file', requireAuth, requireAdmin, upload.single('file'), (
         if (cc) custId = cc.id;
         else { const cid2 = randomUUID(); insCust.run(cid2, customer); custId = cid2; }
         insR.run(randomUUID(), dateNorm, cid, customer, custId, pieces, address, region, note, status, orderNo, goods, weight, volume, trackingNo, amountReceivable, amountPayable, settled, '', '');
+        if (trackingNo && weight > 0) upsertWaybillWeight.run(trackingNo, custId, weight, dateNorm, nowStr());
         ok++;
       });
     });

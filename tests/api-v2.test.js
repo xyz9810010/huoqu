@@ -34,6 +34,7 @@ test.before(async () => {
       PORT: String(port),
       DB_PATH: path.join(tempDir, 'app.db'),
       DISABLE_PUSH: '1',
+      MACHINE_API_KEY: 'e2e-machine-key',
       INITIAL_ADMIN_PASSWORD: 'test-admin-strong-password',
       PUSH_CONFIG_MASTER_KEY: Buffer.alloc(32, 9).toString('base64')
     },
@@ -465,4 +466,69 @@ test('v2 推送设备重复登记同一 token 幂等（设备列表不重复）'
   const devices = await request('GET', '/api/v2/push/devices');
   const matches = devices.body.data.items.filter(item => item.id === first.body.data.device.id);
   assert.equal(matches.length, 1);
+});
+
+test('v2 过机重量经 machine/weigh 落库后可自动匹配任务明细', async () => {
+  const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
+  assert.equal(admin.status, 200);
+  const record = await request('POST', '/api/records', {
+    date: '2026-09-05', customer: '过机客户', pieces: 1, address: '义乌过机地址',
+    trackingNo: 'WB-SYNC-1', weight: 0
+  });
+  assert.equal(record.status, 200, JSON.stringify(record.body).slice(0, 200));
+  const weigh = await fetch(baseUrl + '/api/machine/weigh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-machine-key': 'e2e-machine-key' },
+    body: JSON.stringify({ trackingNo: 'WB-SYNC-1', weight: 12.5 })
+  });
+  assert.equal(weigh.status, 200);
+  assert.equal((await weigh.json()).record.weight, 12.5);
+
+  const created = await request('POST', '/api/v2/tasks', {
+    customerName: '过机匹配客户', address: '义乌地址',
+    items: [{ waybillNo: 'WB-SYNC-1', pieces: 1, goodsName: '过机件' }]
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body).slice(0, 200));
+  const taskId = created.body.data.task.id;
+  const center = await request('GET', '/api/sync/match-center');
+  assert.equal(center.status, 200);
+  const pending = center.body.find(item => item.taskId === taskId);
+  assert.ok(pending, '任务明细应出现在待匹配中心');
+
+  const matched = await request('POST', `/api/sync/match/${pending.id}`, { waybillNo: 'WB-SYNC-1' });
+  assert.equal(matched.status, 200);
+  assert.equal(matched.body.matched, true);
+  assert.equal(matched.body.finalWeight, 12.5);
+  const detail = await request('GET', `/api/v2/tasks/${taskId}`);
+  const item = detail.body.data.task.items.find(row => row.waybillNo === 'WB-SYNC-1');
+  assert.equal(item.finalWeight, 12.5);
+  assert.equal(item.matchStatus, 'matched');
+});
+
+test('v2 历史 records 重量在同步表缺失时兜底匹配任务明细', async () => {
+  const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
+  assert.equal(admin.status, 200);
+  const record = await request('POST', '/api/records', {
+    date: '2026-09-05', customer: '历史重量客户', pieces: 1, address: '义乌历史地址',
+    trackingNo: 'WB-LEGACY-1', weight: 8.8
+  });
+  assert.equal(record.status, 200, JSON.stringify(record.body).slice(0, 200));
+
+  const created = await request('POST', '/api/v2/tasks', {
+    customerName: '历史匹配客户', address: '义乌地址',
+    items: [{ waybillNo: 'WB-LEGACY-1', pieces: 1, goodsName: '历史件' }]
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body).slice(0, 200));
+  const center = await request('GET', '/api/sync/match-center');
+  const pending = center.body.find(item => item.taskId === created.body.data.task.id);
+  assert.ok(pending);
+
+  const matched = await request('POST', `/api/sync/match/${pending.id}`, { waybillNo: 'WB-LEGACY-1' });
+  assert.equal(matched.status, 200);
+  assert.equal(matched.body.matched, true);
+  assert.equal(matched.body.finalWeight, 8.8);
+  const detail = await request('GET', `/api/v2/tasks/${created.body.data.task.id}`);
+  const item = detail.body.data.task.items.find(row => row.waybillNo === 'WB-LEGACY-1');
+  assert.equal(item.finalWeight, 8.8);
+  assert.equal(item.matchStatus, 'matched');
 });

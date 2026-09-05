@@ -382,10 +382,14 @@ app.post('/api/tasks/:id/again', requireAuth, requireStaff, (req, res) => {
   }
 });
 
-app.post('/api/tasks/:id/photos', requireAuth, imageUpload.any(), (req, res) => {
+app.post('/api/tasks/:id/photos', requireAuth, (req, res, next) => {
   const task = tasks.getTask(req.params.id);
   if (!task) return res.status(404).json({ error: '取件任务不存在' });
   if (!taskVisibleTo(req.user, task)) return res.status(403).json({ error: '无权操作该任务' });
+  req.huoquTask = task;
+  next();
+}, imageUpload.any(), (req, res) => {
+  const task = req.huoquTask;
   const createdAt = utcText(); // 任务域机器时刻统一 UTC
   const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
   for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);

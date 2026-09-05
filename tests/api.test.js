@@ -194,6 +194,33 @@ test('courier task listing is limited to the courier bound to the current accoun
   token = adminToken;
 });
 
+
+test('v1 photo upload to a task without permission rejects before multer writes anything', async () => {
+  // 与 v2 同款探测：非图片文件 + 无权限任务。
+  // 若 multer 先执行会被 fileFilter 拒绝返回 400；修复后预检先行，应返回 403，不落盘孤儿文件。
+  const courierA = await request('POST', '/api/couriers', { name: '越权测试A', region: '江东', commissionRate: 3 });
+  const courierB = await request('POST', '/api/couriers', { name: '越权测试B', region: '江东', commissionRate: 3 });
+  const task = await request('POST', '/api/tasks', {
+    customerName: '越权测试客户', address: '地址X', defaultWorkerId: courierA.data.id, items: []
+  });
+  const taskId = task.data.id;
+  const usernameB = `worker_b_${Date.now()}`;
+  await request('POST', '/api/users', {
+    username: usernameB, password: 'worker123', role: 'courier', courierId: courierB.data.id, name: '越权测试B'
+  });
+  const workerLogin = await request('POST', '/api/login', { username: usernameB, password: 'worker123' }, false);
+  const workerToken = workerLogin.data.token;
+  const form = new FormData();
+  form.append('file', new Blob([Buffer.from('%PDF-1.4 fake')], { type: 'application/pdf' }), 'fake.pdf');
+  const res = await fetch(baseUrl + `/api/tasks/${taskId}/photos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${workerToken}` },
+    body: form
+  });
+  assert.equal(res.status, 403);
+  token = adminToken;
+});
+
 test('dashboard and attention endpoints summarize the canonical task model', async () => {
   token = adminToken;
   const board = await request('GET', '/api/dashboard/board?range=month');

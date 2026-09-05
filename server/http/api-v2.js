@@ -365,9 +365,13 @@ function mountApiV2Routes(app, deps) {
     ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) }, 201);
   });
 
-  app.post('/api/v2/tasks/:id/photos', requireAuth, imageUpload.any(), (req, res) => {
+  app.post('/api/v2/tasks/:id/photos', requireAuth, (req, res, next) => {
     const task = requireTaskAccess(req, res);
-    if (!task) return;
+    if (!task) return; // 404/403 已响应：multer 不执行，避免落盘孤儿文件
+    req.huoquTask = task;
+    next();
+  }, imageUpload.any(), (req, res) => {
+    const task = req.huoquTask;
     const createdAt = utcText();
     const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
     for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);

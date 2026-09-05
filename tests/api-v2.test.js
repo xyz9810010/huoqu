@@ -421,6 +421,20 @@ test('v2 分页一致性 / 客户搜索 / 照片上传', async () => {
   }
 });
 
+
+test('v2 photo upload to a missing task rejects before multer writes anything', async () => {
+  // 用“非图片文件”探测中间件顺序：若 multer 先于任务预检执行，会先被 fileFilter 拒绝返回 400；
+  // 修复后应返回 404（预检先行），即不会为不存在的任务落盘孤儿文件。
+  const form = new FormData();
+  form.append('file', new Blob([Buffer.from('%PDF-1.4 fake')], { type: 'application/pdf' }), 'fake.pdf');
+  const res = await fetch(baseUrl + '/api/v2/tasks/no-such-task/photos', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form
+  });
+  assert.equal(res.status, 404);
+});
+
 test('v2 records 分页上限收敛 / 越界页与稳定倒序', async () => {
   const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
   assert.equal(admin.status, 200);

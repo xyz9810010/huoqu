@@ -345,7 +345,7 @@ v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/le
 以任务创建/最近改派时的取件员姓名为准（服务端快照优先、档案现查兜底），档案删除后仍能正确显示；
 转派/改派（`/transfer`、`/reassign`）后 `defaultWorkerName` 立即跟随新取件员。
 | GET | `/api/v2/areas?page=&pageSize=` | 登录用户 | 区域与默认取件员/备用取件员 |
-| GET | `/api/v2/dashboard/me` | 取件员 | 我的待取/进行中/已完成/件数 |
+| GET | `/api/v2/dashboard/me` | 取件员 | 我的待取/进行中/已完成/件数/协助次数 + 今日/本月完成口径 |
 | GET | `/api/v2/dashboard/board?range=today\|yesterday\|week\|month` | 客服+ | 汇总看板（件数/重量/客户数等） |
 | GET | `/api/v2/dashboard/attention` | 客服+ | 待关注项计数：加急临期/超时未取/未匹配运单/无运单/未处理异常 |
 | GET | `/api/v2/records?page=&pageSize=&courierId=&start=&end=&status=&keyword=&customerId=&unassigned=1` | 登录用户 | 历史取件记录；取件员自动只看自己，`unassigned=1` 可看待认领单；行含 `customerName/customerPhone`，时间已转 ISO8601 |
@@ -353,6 +353,10 @@ v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/le
 | GET | `/api/v2/commission?start=&end=` | 登录用户 | 提成（取件员只看自己，客服+看全员）`{data:{rows,total}}` |
 
 说明：`/records`、`/billing`、`/commission` 为运营台账（旧记录表）口径；任务/看板汇总与 `/api/v2/dashboard/*`、`/api/v2/tasks`（新任务模型）是两套独立统计，注意区分。
+
+`/api/v2/dashboard/me` 返回 `{data:{pending,inProgress,completed,pieces,assistCount,today,month}}`，
+其中 `today/month` 为 `{pickupCount,customerCount,pieces,matchedWeight}`（主取件完成口径，按北京日归天；
+`assistCount` 为协助完成的去重任务数），与 v1 `/api/dashboard/me` 同构。
 
 ### 9.6 站内通知与推送设备
 

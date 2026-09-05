@@ -328,8 +328,16 @@ test('v2 基础资料/看板/历史记录：统一包装并按角色隔离', asy
 
   const me = await request('GET', '/api/v2/dashboard/me');
   assert.equal(me.status, 200);
-  for (const key of ['pending', 'inProgress', 'completed', 'pieces']) {
+  // 与 v1 /api/dashboard/me 同构：总数 + 今日/本月完成口径 + 协助次数
+  for (const key of ['pending', 'inProgress', 'completed', 'pieces', 'assistCount']) {
     assert.equal(typeof me.body.data[key], 'number');
+  }
+  for (const windowKey of ['today', 'month']) {
+    const window = me.body.data[windowKey];
+    assert.ok(window, windowKey);
+    for (const key of ['pickupCount', 'customerCount', 'pieces', 'matchedWeight']) {
+      assert.equal(typeof window[key], 'number', `${windowKey}.${key}`);
+    }
   }
   const ownRecords = await request('GET', '/api/v2/records?page=1&pageSize=5');
   assert.equal(ownRecords.body.data.total, 1);

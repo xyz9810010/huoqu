@@ -181,6 +181,14 @@ test('协助人可按生命周期操作（甲开始、乙完成），完成后�
   assert.equal(typeof statsB.data.today.pickupCount, 'number');
   assert.equal(typeof statsB.data.month.matchedWeight, 'number');
   assert.equal(statsB.data.today.pickupCount, 0, '乙非主取件员，取件次数不因协助增加');
+
+  // v2 与 v1 同构：同一完成口径与协助次数
+  const statsV2 = await request('GET', '/api/v2/dashboard/me', undefined, workerBToken);
+  assert.equal(statsV2.status, 200, statsV2.text);
+  assert.equal(statsV2.data.data.assistCount, 1);
+  assert.equal(statsV2.data.data.today.pickupCount, 0, 'v2 取件次数同样不因协助增加');
+  assert.equal(statsV2.data.data.today.pieces, statsB.data.today.pieces);
+  assert.equal(statsV2.data.data.month.pickupCount, statsB.data.month.pickupCount);
 });
 
 test('转派目标校验与协助人转派限制', async () => {

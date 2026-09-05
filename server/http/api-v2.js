@@ -579,13 +579,39 @@ function mountApiV2Routes(app, deps) {
   });
 
   // ============ 看板 ============
+  // 与 v1 /api/dashboard/me 同构：总数 + 今日/本月完成口径（主取件完成、协助次数）。
+  // completed_at/updated_at 存 UTC，按 '+8 hours' 归北京日与日期窗口比较。
+  function workerStatsWindow(courierId, start, end) {
+    const counts = db.prepare(`SELECT COUNT(*) AS pickupCount,
+        COUNT(DISTINCT t.customer_id || '|' || t.customer_name_snap) AS customerCount
+      FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
+        AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`)
+      .get(courierId, start, end);
+    const sums = db.prepare(`SELECT COALESCE(SUM(i.pieces),0) AS pieces,
+        COALESCE(SUM(CASE WHEN i.match_status='matched' THEN i.final_weight ELSE 0 END),0) AS matchedWeight
+      FROM pickup_tasks t JOIN pickup_items i ON i.task_id=t.id
+      WHERE t.status='completed' AND t.default_worker_id=? AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`)
+      .get(courierId, start, end);
+    return {
+      pickupCount: counts.pickupCount, customerCount: counts.customerCount,
+      pieces: sums.pieces, matchedWeight: Math.round(sums.matchedWeight * 100) / 100
+    };
+  }
   app.get('/api/v2/dashboard/me', requireAuth, (req, res) => {
-    const list = tasks.listTasks({ workerId: req.user.courier_id || '__none__' });
+    const courierId = req.user.courier_id || '__none__';
+    const list = tasks.listTasks({ workerId: courierId });
+    const today = todayStr();
+    const monthStart = today.slice(0, 8) + '01';
+    const assistCount = courierId === '__none__' ? 0 : db.prepare(`SELECT COUNT(DISTINCT t.id) AS n FROM pickup_tasks t
+      JOIN task_assistants a ON a.task_id=t.id WHERE a.worker_id=? AND t.status='completed'`).get(courierId).n;
     ok(res, {
       pending: list.filter(t => t.status === 'pending').length,
       inProgress: list.filter(t => t.status === 'in_progress').length,
       completed: list.filter(t => t.status === 'completed').length,
-      pieces: list.flatMap(t => t.items).reduce((sum, item) => sum + Number(item.pieces || 0), 0)
+      pieces: list.flatMap(t => t.items).reduce((sum, item) => sum + Number(item.pieces || 0), 0),
+      assistCount,
+      today: workerStatsWindow(courierId, today, today),
+      month: workerStatsWindow(courierId, monthStart, today)
     });
   });
 

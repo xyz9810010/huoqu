@@ -656,12 +656,26 @@ app.get('/api/records', requireAuth, (req, res) => {
   if (customerId && customerId !== 'all') { conds.push('r.customer_id = :custId'); params.custId = customerId; }
   if (keyword) { conds.push('(r.customer LIKE :kw OR r.order_no LIKE :kw OR r.tracking_no LIKE :kw OR r.goods LIKE :kw)'); params.kw = '%' + keyword + '%'; }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const rows = db.prepare(`SELECT r.*, c.name AS cname, cu.name AS customer_name, cu.phone AS customer_phone
+  // 带 page/size 时走 SQL 分页（响应 {list,total,page,size}，与 /api/tasks 同约定）；不带时保持历史数组直出
+  const wantPaged = req.query.page !== undefined || req.query.size !== undefined;
+  const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
+  const size = Math.min(200, Math.max(1, parseInt(req.query.size || '20', 10) || 20));
+  const total = wantPaged
+    ? db.prepare(`SELECT COUNT(*) AS n FROM records r ${where}`).get(params).n
+    : 0;
+  let sql = `SELECT r.*, c.name AS cname, cu.name AS customer_name, cu.phone AS customer_phone
     FROM records r
     LEFT JOIN couriers c ON r.courier_id = c.id
     LEFT JOIN customers cu ON r.customer_id = cu.id
-    ${where} ORDER BY r.date DESC, r.id DESC`).all(params);
-  res.json(rows.map(r => Object.assign(rowRecord(r), { customerName: r.customer_name || r.customer, customerPhone: r.customer_phone || '' })));
+    ${where} ORDER BY r.date DESC, r.id DESC`;
+  if (wantPaged) {
+    sql += ' LIMIT :lim OFFSET :off';
+    params.lim = size;
+    params.off = page * size;
+  }
+  const rows = db.prepare(sql).all(params);
+  const items = rows.map(r => Object.assign(rowRecord(r), { customerName: r.customer_name || r.customer, customerPhone: r.customer_phone || '' }));
+  res.json(wantPaged ? { list: items, total, page, size } : items);
 });
 app.post('/api/records', requireAuth, (req, res) => {
   const { date, courierId, customer, customerId, pieces, address = '', region = '', note = '', status = '待取', orderNo = '',

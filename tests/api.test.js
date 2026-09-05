@@ -343,3 +343,32 @@ test('SSE v1 accepts Authorization header without a query session token', async 
   assert.match(stream.headers.get('content-type') || '', /text\/event-stream/);
   await stream.body.cancel();
 });
+
+test('v1 records list pages in SQL when page/size are requested and stays array otherwise', async () => {
+  token = adminToken;
+  for (let i = 0; i < 3; i += 1) {
+    const created = await request('POST', '/api/records', {
+      date: '2026-09-04', customer: `分页台账客户${i}`, pieces: 1,
+      address: '义乌市分页地址', orderNo: `V1-PAGE-${i}`
+    });
+    assert.equal(created.status, 200, JSON.stringify(created.data).slice(0, 200));
+  }
+
+  const paged = await request('GET', '/api/records?page=0&size=2');
+  assert.equal(paged.status, 200);
+  assert.ok(Array.isArray(paged.data.list));
+  assert.equal(paged.data.list.length, 2);
+  assert.ok(paged.data.total >= 3);
+  assert.equal(paged.data.page, 0);
+  assert.equal(paged.data.size, 2);
+
+  const secondPage = await request('GET', '/api/records?page=1&size=2');
+  assert.equal(secondPage.status, 200);
+  assert.equal(secondPage.data.page, 1);
+  assert.equal(secondPage.data.list.length, secondPage.data.total - 2);
+
+  const legacy = await request('GET', '/api/records');
+  assert.equal(legacy.status, 200);
+  assert.ok(Array.isArray(legacy.data));
+  assert.ok(legacy.data.length >= 3);
+});

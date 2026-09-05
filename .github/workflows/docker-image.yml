@@ -29,12 +29,17 @@ jobs:
       - name: Run browser E2E walkthrough
         run: node e2e/web.e2e.js
 
+      - name: Run business journey E2E
+        run: node e2e/journeys.e2e.js
+
       - name: Upload E2E screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-screenshots
-          path: /tmp/hq-e2e-shots-*/
+          path: |
+            /tmp/hq-e2e-shots-*/
+            /tmp/hq-journeys-*/
           if-no-files-found: ignore
 
   build-and-push:

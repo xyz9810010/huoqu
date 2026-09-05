@@ -109,6 +109,7 @@ npm run smoke:container
 
 # 浏览器端到端巡检（真实 Chromium：登录/图表渲染/逐页样式与控制台检查，详见 docs/operations/e2e-web.md）
 npm run test:e2e:web
+npm run test:e2e:journeys   # 客服派单 → 取件员拍照完成 → 通知 → 重量匹配闭环
 
 # 在线一致性备份到 ./backups/<时间戳>/
 docker compose exec -T huoqu npm run backup -- "$(date -u +%Y%m%dT%H%M%SZ)"

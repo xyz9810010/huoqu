@@ -1,4 +1,4 @@
-# Web 浏览器端到端巡检（e2e-web）
+# Web 浏览器端到端巡检（e2e-web / journeys）
 
 在真实 Chromium 中登录、种数据、渲染图表并逐页巡检，捕捉三类构建后才会暴露的问题：
 
@@ -14,6 +14,14 @@
 - 巡检页面：`/customers /dispatch /tasks /match-center /areas /employees /logs /notifications /notification-settings /push-providers /tasks/:id`
 - 截图输出（默认系统临时目录，可用 `E2E_SCREENSHOT_DIR` 覆盖）：`dashboard-chart.png`、`dashboard-table.png`
 
+## 业务旅程巡检（e2e/journeys.e2e.js）
+
+`npm run test:e2e:journeys` 按真实岗位操作顺序跑完整业务闭环：
+客服登录 → UI 派单 → 取件员移动端开始取件 → 拍照上传 → 完成取件 →
+客服收到站内通知并一键已读 → 过机设备上报重量 → 匹配中心补票号自动带出最终重量 →
+越级路由守卫（取件员/客服/匿名）→ 错误密码体验 → 消息设置页渲染。
+两种巡检脚本可在同一条 CI 命令序列中依次执行（见下方 workflow）。
+
 ## 本机运行
 
 前置：服务端依赖 `npm ci`；一个可用的 Playwright 模块与 Chromium 浏览器。
@@ -21,6 +29,8 @@
 ```bash
 # 1) playwright 已装为本项目/全局依赖，且浏览器已安装（npx playwright install chromium）时：
 npm run test:e2e:web
+# 或全量业务旅程
+npm run test:e2e:journeys
 
 # 2) 或通过 PLAYWRIGHT_MODULE 指向 npx 缓存里的模块：
 PLAYWRIGHT_MODULE=/home/<user>/.npm/_npx/<hash>/node_modules/playwright \

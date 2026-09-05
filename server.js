@@ -15,6 +15,7 @@ const { createPreferenceStore } = require('./server/modules/notifications/prefer
 const { createProviderConfigStore } = require('./server/modules/notifications/provider-configs');
 const { createProviderRegistry } = require('./server/modules/notifications/provider-registry');
 const { createDispatcher } = require('./server/modules/notifications/dispatcher');
+const { createNotificationRetention } = require('./server/modules/notifications/retention');
 const { createHuaweiProvider } = require('./server/modules/notifications/providers/huawei');
 const { createWebPushProvider } = require('./server/modules/notifications/providers/web-push');
 const { mountApiRoutes } = require('./server/http/api');
@@ -76,6 +77,8 @@ const notificationDispatcher = createDispatcher({
   providerConfigs: providerConfigStore,
   subscriptions: subscriptionStore
 });
+// 通知/投递/失效订阅保留策略（默认 180/90/30 天，可环境变量覆盖，见 retention.js）
+const notificationRetention = createNotificationRetention(db);
 if (pushSecretBox.available) subscriptionStore.migrateLegacyTokens();
 const MACHINE_API_KEY = process.env.MACHINE_API_KEY || '';
 
@@ -139,6 +142,7 @@ app.use((err, req, res, next) => {
 auth.pruneSessions();
 // 运行期定期清理过期会话（启动清理之外的长尾防护，轻量无阻塞）。
 setInterval(() => { try { auth.pruneSessions(); } catch (e) {} }, 6 * 3600 * 1000).unref();
+notificationRetention.start();
 const adminBootstrap = auth.ensureAdmin();
 const httpServer = app.listen(PORT, () => {
   if (process.env.DISABLE_PUSH !== '1') notificationDispatcher.start();
@@ -152,6 +156,7 @@ let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  notificationRetention.stop();
   await notificationDispatcher.stop();
   httpServer.close(() => {
     try { db.close(); } catch (e) {}

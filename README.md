@@ -94,7 +94,7 @@ docker run -d --name huoqu -p 3000:3000 \
 npm install
 node server.js        # 或 npm start
 ```
-可配置环境变量：`PORT`（默认3000）、`DB_PATH`（数据库路径，默认 ./data/app.db）。首次部署必须配置 `INITIAL_ADMIN_PASSWORD`；启用消息推送必须配置 `PUSH_CONFIG_MASTER_KEY`；启用过机设备接口必须配置 `MACHINE_API_KEY`。
+可配置环境变量：`PORT`（默认3000）、`DB_PATH`（数据库路径，默认 ./data/app.db）。首次部署必须配置 `INITIAL_ADMIN_PASSWORD`；启用消息推送必须配置 `PUSH_CONFIG_MASTER_KEY`；启用过机设备接口必须配置 `MACHINE_API_KEY`。通知保留策略可选：`NOTIFICATION_RETENTION_DAYS`（默认180）、`NOTIFICATION_DELIVERY_RETENTION_DAYS`（默认90）、`NOTIFICATION_SUBSCRIPTION_RETENTION_DAYS`（默认30），周期 `NOTIFICATION_RETENTION_INTERVAL_HOURS`（默认24小时）。
 
 ### 测试与备份
 

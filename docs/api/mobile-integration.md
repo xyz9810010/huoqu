@@ -375,6 +375,20 @@ v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/le
 
 通知对象字段与第 3 节一致（`id/type/title/body/data/read/readAt/createdAt/…`），时间已是 ISO8601 UTC。
 
+**失效订阅“删旧建新”与保留策略**：服务端确认设备令牌/订阅端点已失效（如华为
+`HUAWEI_TOKEN_INVALID`、Web Push 的 404/410）时，会把该设备标记为 `invalid` 并停止继续投递；
+客户端收到这类错误码时应调用 `DELETE /api/v2/push/devices/:id` 注销旧设备，重新向华为 Push Kit /
+浏览器申请 token 后再次 `POST /api/v2/push/devices` 注册（同一 token 会原地刷新，不会重复堆积）。
+
+服务端保留策略默认值可用环境变量覆盖（单位：天），启动即清理一次，之后按
+`NOTIFICATION_RETENTION_INTERVAL_HOURS`（默认 24 小时）周期执行：
+
+| 环境变量 | 默认 | 清理对象 |
+| --- | --- | --- |
+| `NOTIFICATION_RETENTION_DAYS` | 180 | 已读通知（未读不清理） |
+| `NOTIFICATION_DELIVERY_RETENTION_DAYS` | 90 | 终态投递记录（`sent/failed/expired`；重试中的不动） |
+| `NOTIFICATION_SUBSCRIPTION_RETENTION_DAYS` | 30 | 标记为 `invalid` 的失效设备 |
+
 ### 9.7 与 v1 的差异速查
 
 | 事项 | v1（历史） | v2（新端用这个） |

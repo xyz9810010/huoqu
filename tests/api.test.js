@@ -237,6 +237,29 @@ test('v1 photo upload as JSON body is rejected with a clear 400 (multer sees zer
   assert.match(body.error, /multipart\/form-data/);
 });
 
+
+test('customer list and detail expose open/completed order counts', async () => {
+  const name = '订单统计客户' + Date.now();
+  const customer = await request('POST', '/api/customers', { name, address: '统计地址' });
+  const customerId = customer.data.id;
+  const t1 = await request('POST', '/api/tasks', { customerId, customerName: name, address: '统计地址', items: [] });
+  await request('POST', '/api/tasks/' + t1.data.id + '/start', { note: '' });
+  await request('POST', '/api/tasks/' + t1.data.id + '/complete', { note: '' });
+  await request('POST', '/api/tasks', { customerId, customerName: name, address: '统计地址', items: [] });
+
+  const listed = await request('GET', '/api/customers?search=' + encodeURIComponent(name));
+  const row = (Array.isArray(listed.data) ? listed.data : listed.data.list).find((r) => r.id === customerId);
+  assert.ok(row);
+  assert.equal(row.taskCount, 2);
+  assert.equal(row.openTaskCount, 1);
+  assert.equal(row.completedTaskCount, 1);
+
+  const detail = await request('GET', '/api/customers/' + customerId);
+  assert.equal(detail.data.taskCount, 2);
+  assert.equal(detail.data.openTaskCount, 1);
+  assert.equal(detail.data.completedTaskCount, 1);
+});
+
 test('dashboard and attention endpoints summarize the canonical task model', async () => {
   token = adminToken;
   const board = await request('GET', '/api/dashboard/board?range=month');

@@ -48,18 +48,29 @@ async function seedData(page, token) {
     if (status >= 400) throw new Error(`种子数据失败 ${apiPath} status=${status}`)
     return status
   }
-  await seed('/tasks', {
-    customerName: 'E2E客户', address: '义乌E2E地址', taskType: 'rush',
-    items: [{ waybillNo: 'E2E-WB-1', pieces: 2, goodsName: '样品' }]
-  })
   await seed('/customers', { name: 'E2E客户', phone: '13800000000', address: '义乌E2E地址' })
+  const customerList = await page.evaluate(async (token) => {
+    const res = await fetch('/api/customers?search=E2E%E5%AE%A2%E6%88%B7', {
+      headers: { Authorization: 'Bearer ' + token }
+    })
+    return res.json()
+  }, token)
+  const customerRow = (Array.isArray(customerList) ? customerList : []).find((c) => c.name === 'E2E客户')
+  const customerId = customerRow ? customerRow.id : ''
+  if (customerId) {
+    await seed('/tasks', {
+      customerId, customerName: 'E2E客户', address: '义乌E2E地址', taskType: 'rush',
+      items: [{ waybillNo: 'E2E-WB-1', pieces: 2, goodsName: '样品' }]
+    })
+  }
   const list = await page.evaluate(async (token) => {
     const res = await fetch('/api/v2/tasks?page=1&pageSize=5', {
       headers: { Authorization: 'Bearer ' + token }
     })
     return res.json()
   }, token)
-  return list.data && list.data.items && list.data.items[0] ? list.data.items[0].id : ''
+  const taskId = list.data && list.data.items && list.data.items[0] ? list.data.items[0].id : ''
+  return { taskId, customerId }
 }
 
 async function collectStyleFacts(page) {
@@ -155,9 +166,11 @@ async function collectStyleFacts(page) {
   checked.push('login -> ' + page.url())
 
   const token = await page.evaluate(() => localStorage.getItem('token') || '')
-  const taskId = await seedData(page, token)
+  const seeded = await seedData(page, token)
+  const taskId = seeded.taskId
+  const customerId = seeded.customerId
   if (!taskId) problems.push('种子任务未创建，无法巡检任务详情页')
-  checked.push('seeded taskId=' + (taskId || 'none'))
+  checked.push('seeded taskId=' + (taskId || 'none') + ' customerId=' + (customerId || 'none'))
 
   // 看板：表格 + 图表模式
   await page.goto(baseUrl + '/dashboard', { waitUntil: 'networkidle' })
@@ -182,6 +195,15 @@ async function collectStyleFacts(page) {
     await page.goto(baseUrl + '/tasks/' + taskId, { waitUntil: 'networkidle' })
     checked.push('/tasks/:id title=' + (await page.title()))
     await collectStyleFacts(page)
+  }
+  if (customerId) {
+    await page.goto(baseUrl + '/customers/' + customerId, { waitUntil: 'networkidle' })
+    await page.waitForTimeout(300)
+    const detailText = await page.evaluate(() => document.body.innerText)
+    if (!detailText.includes('取件订单')) problems.push('客户详情未渲染「取件订单」区块')
+    if (!/已完成\s*0\s*\/\s*1/.test(detailText)) problems.push('客户详情订单进度文案缺失（应为 已完成 0 / 1）')
+    checked.push('/customers/:id 取件订单区块渲染正常')
+    await page.screenshot({ path: path.join(screenshotDir, 'customer-detail-orders.png') })
   }
   await page.goto(baseUrl + '/dashboard', { waitUntil: 'networkidle' })
   await page.screenshot({ path: path.join(screenshotDir, 'dashboard-table.png') })

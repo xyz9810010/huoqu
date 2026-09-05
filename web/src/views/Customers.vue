@@ -20,6 +20,16 @@
       <el-table-column prop="contactPhone" label="电话" width="130" />
       <el-table-column prop="legacyCustomerId" label="原系统ID" width="120" />
       <el-table-column prop="addressCount" label="地址数" width="80" />
+      <el-table-column label="取件订单" width="170">
+        <template #default="{ row }">
+          <div v-if="row.taskCount" class="order-cell">
+            <el-tag v-if="row.openTaskCount" type="warning" size="small">待办 {{ row.openTaskCount }}</el-tag>
+            <el-tag v-else type="success" size="small">全部完成</el-tag>
+            <div class="order-cell__sub">{{ row.completedTaskCount || 0 }} / {{ row.taskCount }} 已完成</div>
+          </div>
+          <span v-else class="order-none">无订单</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="status" label="状态" width="80">
         <template #default="{ row }">
           <el-tag :type="row.status === 'active' ? 'success' : 'info'">
@@ -51,6 +61,14 @@
         <div class="mobile-field"><span class="mobile-field__label">联系人</span><span class="mobile-field__value">{{ row.contactName || '—' }}</span></div>
         <div class="mobile-field"><span class="mobile-field__label">联系电话</span><span class="mobile-field__value">{{ row.contactPhone || '—' }}</span></div>
         <div class="mobile-field"><span class="mobile-field__label">取件地址</span><span class="mobile-field__value">{{ row.addressCount || 0 }} 个</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">取件订单</span><span class="mobile-field__value">
+          <template v-if="row.taskCount">
+            <el-tag v-if="row.openTaskCount" type="warning" size="small">待办 {{ row.openTaskCount }}</el-tag>
+            <el-tag v-else type="success" size="small">全部完成</el-tag>
+            <span class="order-none" style="margin-left:6px">{{ row.completedTaskCount || 0 }}/{{ row.taskCount }} 已完成</span>
+          </template>
+          <span v-else class="order-none">无订单</span>
+        </span></div>
         <div class="mobile-item__actions" @click.stop>
           <el-button type="primary" plain @click="goDispatch(row)">派单</el-button>
           <el-button @click="router.push('/customers/' + row.id)">查看详情</el-button>
@@ -141,6 +159,10 @@ onMounted(load)
 </script>
 
 <style scoped>
+.order-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.order-cell__sub { color: var(--text-muted, #909399); font-size: 12px; line-height: 1.2; }
+.order-none { color: var(--text-muted, #909399); font-size: 12px; }
+
 .toolbar {
   display: flex;
   gap: 10px;

@@ -88,6 +88,18 @@ const rowCustomer = (c) => ({
   address: c.address || '', note: c.note || '', remark: c.note || '', status: c.status || 'active',
   legacyCustomerId: c.legacy_customer_id || '', importantNote: c.important_note || '', mainCsId: c.main_cs_id || ''
 });
+const customerOrderStats = (db, ids) => {
+  if (!ids.length) return new Map();
+  const rows = db.prepare(`SELECT customer_id AS id,
+      COUNT(*) AS taskCount,
+      SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS openTaskCount,
+      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completedTaskCount
+    FROM pickup_tasks WHERE customer_id IN (${ids.map(() => '?').join(',')}) GROUP BY customer_id`).all(...ids);
+  return new Map(rows.map(row => [row.id, {
+    taskCount: Number(row.taskCount), openTaskCount: Number(row.openTaskCount || 0),
+    completedTaskCount: Number(row.completedTaskCount || 0)
+  }]));
+};
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const STATUSES = ['待取', '已取', '已完成', '已取消'];
 // 客户名称归一化：全角→半角、全角空格→半角、合并连续空白
@@ -1083,7 +1095,11 @@ app.get('/api/customers', requireAuth, (req, res) => {
   const rows = search
     ? db.prepare("SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? OR legacy_customer_id LIKE ? ORDER BY name").all(`%${search}%`, `%${search}%`, `%${search}%`)
     : db.prepare('SELECT * FROM customers ORDER BY name').all();
-  res.json(rows.map(row => ({ ...rowCustomer(row), addressCount: db.prepare('SELECT COUNT(*) AS n FROM customer_addresses WHERE customer_id=?').get(row.id).n })));
+  const stats = customerOrderStats(db, rows.map(row => row.id));
+  res.json(rows.map(row => {
+    const stat = stats.get(row.id) || { taskCount: 0, openTaskCount: 0, completedTaskCount: 0 };
+    return { ...rowCustomer(row), addressCount: db.prepare('SELECT COUNT(*) AS n FROM customer_addresses WHERE customer_id=?').get(row.id).n, ...stat };
+  }));
 });
 app.post('/api/customers', requireAuth, (req, res) => {
   const { name, address = '' } = req.body || {};
@@ -1141,7 +1157,8 @@ app.get('/api/customers/:id', requireAuth, (req, res) => {
     id: a.id, name: a.name, address: a.address, contactName: a.contact_name, contactPhone: a.contact_phone,
     areaId: a.area_id || '', isCommon: Boolean(a.is_common), isActive: Boolean(a.is_active), remark: a.remark || ''
   }));
-  res.json({ ...rowCustomer(row), mainCsName: row.main_cs_name || '', addresses });
+  const stat = customerOrderStats(db, [row.id]).get(row.id) || { taskCount: 0, openTaskCount: 0, completedTaskCount: 0 };
+  res.json({ ...rowCustomer(row), mainCsName: row.main_cs_name || '', addresses, ...stat });
 });
 
 app.patch('/api/customers/:id/status', requireAuth, requireStaff, (req, res) => {

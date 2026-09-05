@@ -24,6 +24,14 @@
         <el-descriptions-item label="原系统ID">{{ customer.legacyCustomerId }}</el-descriptions-item>
         <el-descriptions-item label="重要提醒" :span="3">{{ customer.importantNote }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ customer.remark }}</el-descriptions-item>
+        <el-descriptions-item label="订单进度" :span="3">
+          <template v-if="customer.taskCount">
+            <el-tag v-if="customer.openTaskCount" type="warning" size="small">待办 {{ customer.openTaskCount }}</el-tag>
+            <el-tag v-else type="success" size="small">全部完成</el-tag>
+            <span class="order-count">已完成 {{ customer.completedTaskCount || 0 }} / {{ customer.taskCount }} 单</span>
+          </template>
+          <span v-else class="order-count">暂无取件订单</span>
+        </el-descriptions-item>
       </el-descriptions>
       <div class="mobile-detail-list">
         <div class="mobile-field"><span class="mobile-field__label">编号</span><span class="mobile-field__value">{{ customer.customerNo || '—' }}</span></div>
@@ -34,6 +42,14 @@
         <div class="mobile-field"><span class="mobile-field__label">原系统 ID</span><span class="mobile-field__value">{{ customer.legacyCustomerId || '—' }}</span></div>
         <div class="mobile-field"><span class="mobile-field__label">重要提醒</span><span class="mobile-field__value">{{ customer.importantNote || '—' }}</span></div>
         <div class="mobile-field"><span class="mobile-field__label">备注</span><span class="mobile-field__value">{{ customer.remark || '—' }}</span></div>
+        <div class="mobile-field"><span class="mobile-field__label">订单进度</span><span class="mobile-field__value">
+          <template v-if="customer.taskCount">
+            <el-tag v-if="customer.openTaskCount" type="warning" size="small">待办 {{ customer.openTaskCount }}</el-tag>
+            <el-tag v-else type="success" size="small">全部完成</el-tag>
+            <span style="margin-left:6px">已完成 {{ customer.completedTaskCount || 0 }}/{{ customer.taskCount }}</span>
+          </template>
+          <span v-else>暂无取件订单</span>
+        </span></div>
       </div>
     </el-card>
 
@@ -91,6 +107,58 @@
       </div>
     </el-card>
 
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-head">
+          <span>取件订单</span>
+          <el-tag v-if="customer.openTaskCount" type="warning" size="small">待办 {{ customer.openTaskCount }}</el-tag>
+        </div>
+      </template>
+      <el-table class="desktop-table" :data="tasks" @row-click="(r: any) => router.push('/tasks/' + r.id)" style="cursor:pointer">
+        <el-table-column prop="taskNo" label="任务号" width="150" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.status) as any">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.taskType === 'rush'" type="danger" size="small">加急</el-tag>
+            <el-tag v-else-if="row.taskType === 'scheduled'" type="warning" size="small">预约</el-tag>
+            <span v-else>普通</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="defaultWorkerName" label="取件员" width="100" />
+        <el-table-column label="地址" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.addressPointName || row.address || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="派单时间" width="150">
+          <template #default="{ row }">{{ fmtTime(row.dispatchAt) || fmtTime(row.createdAt) || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="80">
+          <template #default="{ row }">
+            <el-button size="small" @click.stop="router.push('/tasks/' + row.id)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="mobile-list mobile-list--inset">
+        <article v-for="row in tasks" :key="row.id" class="mobile-item mobile-item--clickable"
+                 @click="router.push('/tasks/' + row.id)">
+          <div class="mobile-item__head">
+            <div>
+              <div class="mobile-item__title">{{ row.taskNo }}</div>
+              <div class="mobile-item__sub">{{ row.customerName || '客户' }}</div>
+            </div>
+            <el-tag :type="statusType(row.status) as any" size="small">{{ statusLabel(row.status) }}</el-tag>
+          </div>
+          <div class="mobile-field"><span class="mobile-field__label">地址</span><span class="mobile-field__value">{{ row.addressPointName || row.address || '—' }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未分配' }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">派单时间</span><span class="mobile-field__value">{{ fmtTime(row.dispatchAt) || fmtTime(row.createdAt) || '—' }}</span></div>
+        </article>
+        <el-empty v-if="!tasks.length" description="该客户暂无取件订单" />
+      </div>
+    </el-card>
+
     <el-dialog v-model="editVisible" title="编辑客户" width="560px">
       <el-form :model="editForm" label-width="110px">
         <el-form-item label="客户名称" required><el-input v-model="editForm.name" /></el-form-item>
@@ -139,6 +207,7 @@ const router = useRouter()
 const id = route.params.id as string
 const customer = reactive<any>({})
 const areas = ref<any[]>([])
+const tasks = ref<any[]>([])
 const editVisible = ref(false)
 const addrVisible = ref(false)
 const editForm = reactive<any>({})
@@ -146,6 +215,21 @@ const addrForm = reactive<any>({})
 
 async function load() {
   Object.assign(customer, await http.get(`/customers/${id}`))
+}
+
+async function loadTasks() {
+  const data: any = await http.get('/tasks', { params: { customerId: id, page: 0, size: 20 } })
+  tasks.value = Array.isArray(data) ? data : data.list || []
+}
+
+function statusLabel(s: string) {
+  return { pending: '待取', in_progress: '取件中', completed: '已完成', cancelled: '已取消' }[s] || s
+}
+function statusType(s: string) {
+  return { pending: 'warning', in_progress: 'primary', completed: 'success', cancelled: 'info' }[s] || 'info'
+}
+function fmtTime(t: string) {
+  return t ? t.replace('T', ' ').slice(0, 16) : ''
 }
 
 function areaName(aid: number) {
@@ -207,12 +291,18 @@ function goDispatch() {
 onMounted(async () => {
   areas.value = (await http.get('/areas')) as any[]
   load()
+  loadTasks()
 })
 </script>
 
 <style scoped>
 .block {
   margin-bottom: 16px;
+}
+.order-count {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 .card-head {
   display: flex;

@@ -1579,15 +1579,31 @@ function setLive(status, text){
   const b = document.getElementById('liveBadge');
   if (b) { b.textContent = text; b.style.display = status ? '' : 'none'; }
 }
+function openEventStream(){
+  if (!me || !getToken()) return;
+  if (eventSource) { try { eventSource.close(); } catch(e){} }
+  fetch('/api/v1/events/tickets', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken() } })
+    .then(resp => { if (!resp.ok) throw new Error('ticket'); return resp.json(); })
+    .then(body => {
+      if (!body.data || !body.data.ticket) throw new Error('ticket');
+      eventSource = new EventSource('/api/v1/events?ticket=' + encodeURIComponent(body.data.ticket));
+      eventSource.onopen = () => { setLive(true, '🟢 实时'); stopPolling(); };
+      eventSource.onmessage = (ev) => { try { handleSseEvent(JSON.parse(ev.data)); } catch(e){} };
+      eventSource.onerror = () => {
+        // 票据一次性且 30 秒过期：断线后重新换取票据再连
+        if (eventSource) { try { eventSource.close(); } catch(e){} }
+        eventSource = null;
+        setLive(true, '🟡 重连中'); startPolling();
+        setTimeout(openEventStream, 3000);
+      };
+    })
+    .catch(() => { setLive(true, '🟡 轮询中'); startPolling(); });
+}
 function connectEvents(){
   if (!me || !getToken()) return;
   if ('Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(e){} }
   if (window.EventSource) {
-    if (eventSource) { try { eventSource.close(); } catch(e){} }
-    eventSource = new EventSource('/api/events?token=' + encodeURIComponent(getToken()));
-    eventSource.onopen = () => { setLive(true, '🟢 实时'); stopPolling(); };
-    eventSource.onmessage = (ev) => { try { handleSseEvent(JSON.parse(ev.data)); } catch(e){} };
-    eventSource.onerror = () => { setLive(true, '🟡 重连中'); startPolling(); };
+    openEventStream();
   } else {
     setLive(true, '🟡 轮询中'); startPolling();
   }

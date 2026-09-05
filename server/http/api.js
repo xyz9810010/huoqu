@@ -577,33 +577,11 @@ app.post('/api/v1/notifications/read-all', requireAuth, (req, res) => {
   res.json({ data: { ok: true, updated: result.changes } });
 });
 
-// ================= 华为推送（设备注册） =================
-app.post('/api/push/register', requireAuth, (req, res) => {
-  const token = String((req.body && req.body.token) || '').trim();
-  if (!token) return res.status(400).json({ error: '缺少推送 token' });
-  try {
-    const subscription = subscriptionStore.register({
-      userId: req.user.id,
-      channel: 'vendor_push',
-      providerCode: 'huawei',
-      platform: 'harmonyos',
-      deviceLabel: 'HarmonyOS 设备',
-      role: req.user.role,
-      courierId: req.user.courier_id || '',
-      secret: { token }
-    });
-    db.prepare('DELETE FROM push_tokens WHERE token = ?').run(token);
-    res.json({ ok: true, subscriptionId: subscription.id });
-  } catch (error) {
-    const status = error && error.code === 'PUSH_MASTER_KEY_MISSING' ? 503 : 400;
-    res.status(status).json({ error: error.message || '登记推送订阅失败', code: error.code || '' });
-  }
-});
-app.post('/api/push/unregister', requireAuth, (req, res) => {
-  subscriptionStore.removeProviderForUser(req.user.id, 'huawei');
-  db.prepare('DELETE FROM push_tokens WHERE user_id = ?').run(req.user.id);
-  res.json({ ok: true });
-});
+// ================= 设备注册（旧 /api/push/* 兼容层已下线，保留 410 指引） =================
+const REGISTER_GONE = { error: '该接口已下线，请改用 POST /api/v1/notification-subscriptions（channel=vendor_push/providerCode=huawei）或 POST /api/v2/push/devices' };
+const UNREGISTER_GONE = { error: '该接口已下线，请改用 DELETE /api/v1/notification-subscriptions/:id 或 DELETE /api/v2/push/devices/:id' };
+app.post('/api/push/register', requireAuth, (req, res) => res.status(410).json(REGISTER_GONE));
+app.post('/api/push/unregister', requireAuth, (req, res) => res.status(410).json(UNREGISTER_GONE));
 
 // ================= 实时推送（SSE 连接） =================
 function openSse(req, res, user) {
@@ -642,13 +620,9 @@ app.get('/api/v1/events', (req, res) => {
   openSse(req, res, user);
 });
 
-// 旧客户端兼容入口：会话查询参数会被日志脱敏，客户端迁移后删除。
+// 旧 SSE 兼容入口已下线（URL 携带会话 token 会进日志），统一走票据/请求头通道
 app.get('/api/events', (req, res) => {
-  const token = String(req.query.token || '');
-  const user = token ? auth.findSession(token) : null;
-  if (!user) return res.status(401).json({ error: '未登录' });
-  res.setHeader('Deprecation', 'true');
-  openSse(req, res, user);
+  res.status(410).json({ error: '该实时通道已下线，请先 POST /api/v1/events/tickets 获取票据，再连接 GET /api/v1/events?ticket=…（或直接在请求头带 Authorization）' });
 });
 
 // ================= 用户管理（管理员） =================

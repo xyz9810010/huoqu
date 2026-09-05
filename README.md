@@ -197,7 +197,7 @@ X-Machine-Key: <密钥>
 | POST | `/api/logout` | 注销 |
 | GET | `/api/me` | 当前登录用户信息 |
 | POST | `/api/password` | 修改密码 `{oldPassword,newPassword}` |
-| GET | `/api/events?token=<会话Token>` | 实时推送（SSE），记录/客户/取件员变更时广播事件 |
+| GET | `/api/v1/events?ticket=<票据>`（先 `POST /api/v1/events/tickets` 换取，或请求头带 Bearer） | 实时推送（SSE），记录/客户/取件员变更时广播事件 |
 
 ### 用户管理（管理员）
 | 方法 | 路径 | 说明 |

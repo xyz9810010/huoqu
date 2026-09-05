@@ -221,7 +221,8 @@ Android 侧还需：AGC 开启 Push Kit、客户端 `HuaweiPush.getToken()`、An
    - 立即 `GET /api/v1/events?ticket=<ticket>` 建立 SSE（票据一次性，30 秒内消费）
 2. 直接 Bearer：`GET /api/v1/events`（请求头带 Authorization）。
 
-旧兼容入口 `GET /api/events?token=…`（URL 携带会话 token）已标记 Deprecation，新客户端不要使用。
+旧兼容入口 `GET /api/events?token=…` 与 `/api/push/register`、`/api/push/unregister` 已**下线**（返回 `410` 与迁移提示），
+新客户端请勿使用：设备注册/注销走 `/api/v1/notification-subscriptions` 或 v2 `/api/v2/push/devices`，SSE 只用票据/请求头两种方式。
 
 SSE 事件（`data:` 行，JSON）：
 - `{"type":"notification.created","data":{"notification":{…同第3节对象…}}}`：发给当前登录用户的通知（含站内 + 将推送的业务通知）。收到后刷新未读数与列表。

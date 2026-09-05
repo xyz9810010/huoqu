@@ -361,19 +361,28 @@ test('unified push APIs bind subscriptions to auth and configure Web Push with m
   assert.equal(publicKey.data.data.publicKey, vapid.publicKey);
 });
 
-test('legacy Huawei registration routes delegate to the encrypted unified subscription store', async () => {
+test('vendor push registers via unified store; legacy /api/push/* routes are gone (410)', async () => {
   token = adminToken;
-  const registered = await request('POST', '/api/push/register', { token: 'legacy-route-huawei-token' });
-  assert.equal(registered.status, 200);
-  assert.equal(typeof registered.data.subscriptionId, 'string');
+  const registered = await request('POST', '/api/v1/notification-subscriptions', {
+    channel: 'vendor_push', providerCode: 'huawei', platform: 'harmonyos',
+    deviceLabel: 'API 测试机', token: 'canonical-route-huawei-token'
+  });
+  assert.equal(registered.status, 201, registered.text);
+  assert.equal(registered.data.data.providerCode, 'huawei');
+  const deviceId = registered.data.data.id;
 
   const listed = await request('GET', '/api/v1/notification-subscriptions');
-  assert.equal(listed.data.data.some(item => item.providerCode === 'huawei'), true);
+  assert.equal(listed.data.data.some(item => item.id === deviceId), true);
 
-  const unregistered = await request('POST', '/api/push/unregister');
+  const unregistered = await request('DELETE', `/api/v1/notification-subscriptions/${deviceId}`);
   assert.equal(unregistered.status, 200);
   const after = await request('GET', '/api/v1/notification-subscriptions');
-  assert.equal(after.data.data.some(item => item.providerCode === 'huawei'), false);
+  assert.equal(after.data.data.some(item => item.id === deviceId), false);
+
+  const legacyRegister = await request('POST', '/api/push/register', { token: 'old-route-token' });
+  assert.equal(legacyRegister.status, 410);
+  const legacyUnregister = await request('POST', '/api/push/unregister');
+  assert.equal(legacyUnregister.status, 410);
 });
 
 test('SSE v1 ticket is authenticated and can establish only one stream', async () => {
@@ -401,6 +410,13 @@ test('SSE v1 accepts Authorization header without a query session token', async 
   assert.equal(stream.status, 200);
   assert.match(stream.headers.get('content-type') || '', /text\/event-stream/);
   await stream.body.cancel();
+});
+
+test('legacy /api/events SSE entry is gone and returns 410 with migration hint', async () => {
+  const gone = await fetch(`${baseUrl}/api/events?token=${encodeURIComponent(adminToken)}`);
+  assert.equal(gone.status, 410);
+  const body = await gone.json();
+  assert.match(body.error, /api\/v1\/events/);
 });
 
 test('v1 records list pages in SQL when page/size are requested and stays array otherwise', async () => {

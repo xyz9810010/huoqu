@@ -116,6 +116,7 @@ function onAddressChange() {
 }
 
 async function submit() {
+  if (saving.value) return // 防连点/回车重复提交
   if (!customerId.value || !addressId.value) {
     ElMessage.warning('请选择客户和取件地址')
     return

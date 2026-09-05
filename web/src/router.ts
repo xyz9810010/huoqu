@@ -32,6 +32,7 @@ const router = createRouter({
         { path: 'notifications', component: () => import('./views/Notifications.vue'), meta: { title: '通知中心' } },
         { path: 'notification-settings', component: () => import('./views/NotificationSettings.vue'), meta: { title: '消息设置' } },
         { path: 'push-providers', component: () => import('./views/PushProviders.vue'), meta: { roles: ['admin'], title: '消息推送' } },
+        { path: ':pathMatch(.*)*', component: () => import('./views/NotFound.vue') },
       ],
     },
   ],

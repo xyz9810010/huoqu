@@ -9,6 +9,7 @@ const { mountNotificationRoutes } = require('../modules/notifications/routes');
 const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const { createUploader } = require('./uploads');
+const { withIdempotency } = require('./idempotency');
 const { utcText, utcTextToBjText } = require('../time');
 
 // v1（Web）展示口径：任务域存储为 UTC 空格文本，输出前统一转为北京时间文本。
@@ -187,7 +188,7 @@ app.get('/api/tasks/:id', requireAuth, (req, res) => {
   res.json(task);
 });
 
-app.post('/api/tasks', requireAuth, requireStaff, (req, res) => {
+app.post('/api/tasks', requireAuth, requireStaff, withIdempotency((req, res) => {
   try {
     const input = { ...(req.body || {}) };
     if (input.customerId) {
@@ -214,7 +215,7 @@ app.post('/api/tasks', requireAuth, requireStaff, (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message || '创建任务失败' });
   }
-});
+}));
 
 app.put('/api/tasks/:id/status', requireAuth, (req, res) => {
   try {
@@ -240,6 +241,8 @@ app.post('/api/tasks/:id/items', requireAuth, (req, res) => {
   if (!taskVisibleTo(req.user, task)) return res.status(403).json({ error: '无权操作该任务' });
   const body = req.body || {};
   const pieces = Math.max(1, parseInt(body.pieces || '1', 10) || 1);
+  const finalWeight = num(body.finalWeight);
+  if (!Number.isFinite(finalWeight) || finalWeight < 0) return res.status(400).json({ error: '货品重量不正确' });
   const itemId = randomUUID();
   const createdAt = utcText(); // 任务域机器时刻统一 UTC
   const waybillNo = String(body.waybillNo || '').trim();
@@ -250,8 +253,8 @@ app.post('/api/tasks/:id/items', requireAuth, (req, res) => {
     (id,task_id,worker_id,worker_name_snap,entry_method,waybill_no,goods_name,pieces,sort_order,final_weight,weight_source,match_status,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       itemId, task.id, itemWorkerId, itemWorkerSnap, body.entryMethod || (waybillNo ? 'manual' : 'no_waybill'),
-      waybillNo, String(body.goodsName || body.goods || ''), pieces, task.items.length, num(body.finalWeight),
-      body.weightSource || '', num(body.finalWeight) ? 'matched' : (waybillNo ? 'pending' : 'no_waybill'), createdAt, createdAt
+      waybillNo, String(body.goodsName || body.goods || ''), pieces, task.items.length, finalWeight,
+      body.weightSource || '', finalWeight ? 'matched' : (waybillNo ? 'pending' : 'no_waybill'), createdAt, createdAt
     );
   db.prepare(`INSERT INTO task_events (id,task_id,event_type,note,actor_id,actor_name,created_at)
     VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), task.id, 'item_added', waybillNo, req.user.id, req.user.name || req.user.username, createdAt);
@@ -771,7 +774,7 @@ app.get('/api/records', requireAuth, (req, res) => {
   const items = rows.map(r => Object.assign(rowRecord(r), { customerName: r.customer_name || r.customer, customerPhone: r.customer_phone || '' }));
   res.json(wantPaged ? { list: items, total, page, size } : items);
 });
-app.post('/api/records', requireAuth, (req, res) => {
+app.post('/api/records', requireAuth, withIdempotency((req, res) => {
   const { date, courierId, customer, customerId, pieces, address = '', region = '', note = '', status = '待取', orderNo = '',
           goods = '', weight = 0, volume = 0, trackingNo = '', amountReceivable = 0, amountPayable = 0, settled = '未结算',
           pickupPhone = '', appointmentTime = '' } = req.body || {};
@@ -787,6 +790,11 @@ app.post('/api/records', requireAuth, (req, res) => {
   // 件数仅取件员必填；派单角色（管理员/客服）取件地址必填
   const p = parseInt(pieces, 10) || 0;
   if (req.user.role === 'courier' && p <= 0) return res.status(400).json({ error: '请输入有效的取件件数' });
+  if (p < 0) return res.status(400).json({ error: '件数不能为负数' });
+  const weightFinal = num(weight);
+  const volumeFinal = num(volume);
+  if (!Number.isFinite(weightFinal) || weightFinal < 0) return res.status(400).json({ error: '重量不能为负数' });
+  if (!Number.isFinite(volumeFinal) || volumeFinal < 0) return res.status(400).json({ error: '体积不能为负数' });
   const addressFinal = String(address || '').trim();
   if ((req.user.role === 'admin' || req.user.role === 'cs') && !addressFinal)
     return res.status(400).json({ error: '请输入取件地址' });
@@ -807,7 +815,7 @@ app.post('/api/records', requireAuth, (req, res) => {
   db.prepare(`INSERT INTO records (id,date,courier_id,customer,customer_id,pieces,address,region,note,status,order_no,goods,weight,volume,tracking_no,amount_receivable,amount_payable,settled,pickup_phone,appointment_time,dispatcher_id,dispatcher_name)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, date, cid, custFinal, custId, p, addressFinal, regionFinal, String(note || ''), status, orderFinal,
-         String(goods || '').trim(), num(weight), num(volume), trackingFinal, num(amountReceivable), num(amountPayable), settledFinal,
+         String(goods || '').trim(), weightFinal, volumeFinal, trackingFinal, num(amountReceivable), num(amountPayable), settledFinal,
          String(pickupPhone || '').trim(), String(appointmentTime || '').trim(), req.user.id, req.user.name || req.user.username);
   // 记录状态轨迹
   db.prepare('INSERT INTO record_status_log (id,record_id,status,note,user_name) VALUES (?,?,?,?,?)')
@@ -818,7 +826,7 @@ app.post('/api/records', requireAuth, (req, res) => {
     id: req.user.id, name: req.user.name || req.user.username
   }, randomUUID());
   res.json(created);
-});
+}));
 app.put('/api/records/:id/status', requireAuth, (req, res) => {
   const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
   if (!r) return res.status(404).json({ error: '记录不存在' });

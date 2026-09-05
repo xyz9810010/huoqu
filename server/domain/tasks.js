@@ -121,9 +121,22 @@ function createTaskModule(db, options = {}) {
     return taskFromRow(db, db.prepare('SELECT * FROM pickup_tasks WHERE id = ?').get(taskId));
   }
 
+  // 数值边界：物理量（件数/重量/体积）拒绝负数与非有限数值；0 保留“未称重/占位”语义。
+  function sanitizeItemMetrics(item) {
+    const piecesRaw = item.pieces === undefined || item.pieces === null || item.pieces === '' ? 1 : item.pieces;
+    const pieces = Number(piecesRaw);
+    if (!Number.isInteger(pieces) || pieces < 0) throw new Error('货品件数不正确');
+    const finalWeight = item.finalWeight === undefined || item.finalWeight === null || item.finalWeight === '' ? 0 : Number(item.finalWeight);
+    if (!Number.isFinite(finalWeight) || finalWeight < 0) throw new Error('货品重量不正确');
+    return { pieces, finalWeight };
+  }
+
   function createTask(input, actor = {}) {
     if (!input.customerName || !String(input.customerName).trim()) throw new Error('客户名称不能为空');
     if (!input.address || !String(input.address).trim()) throw new Error('取件地址不能为空');
+    const volume = input.volume === undefined || input.volume === null || input.volume === '' ? 0 : Number(input.volume);
+    if (!Number.isFinite(volume) || volume < 0) throw new Error('体积不能为负数');
+    const items = (input.items || []).map(item => ({ ...item, ...sanitizeItemMetrics(item) }));
     const createdAt = now();
     const taskId = id();
     const createdEventId = input.eventId || id();
@@ -152,7 +165,7 @@ function createTaskModule(db, options = {}) {
         dispatchAt: input.dispatchAt || createdAt,
         pickupNote: input.pickupNote || '',
         internalNote: input.internalNote || '',
-        volume: Number(input.volume || 0),
+        volume: volume,
         dimensions: input.dimensions || '',
         amountReceivable: Number(input.amountReceivable || 0),
         amountPayable: Number(input.amountPayable || 0),
@@ -160,14 +173,14 @@ function createTaskModule(db, options = {}) {
         createdAt,
         updatedAt: createdAt
       });
-      for (const [sortOrder, item] of (input.items || []).entries()) {
+      for (const [sortOrder, item] of items.entries()) {
         const itemWorkerId = item.workerId || input.defaultWorkerId || '';
         insertItem.run({
           id: id(), taskId, workerId: itemWorkerId,
           workerNameSnap: itemWorkerId ? ((workerExists && workerExists.get(itemWorkerId)) || {}).name || '' : '',
           entryMethod: item.entryMethod || (item.waybillNo ? 'scan' : 'manual'),
-          waybillNo: item.waybillNo || '', goodsName: item.goodsName || '', pieces: Number(item.pieces || 1), sortOrder,
-          finalWeight: Number(item.finalWeight || 0), weightSource: item.weightSource || '',
+          waybillNo: item.waybillNo || '', goodsName: item.goodsName || '', pieces: item.pieces, sortOrder,
+          finalWeight: item.finalWeight, weightSource: item.weightSource || '',
           matchStatus: item.matchStatus || (item.waybillNo ? 'pending' : 'no_waybill'), createdAt, updatedAt: createdAt
         });
       }

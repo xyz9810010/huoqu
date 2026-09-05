@@ -130,12 +130,18 @@ app.get('/{*splat}', (req, res, next) => {
   res.sendFile(indexFile);
 });
 
-// 统一错误处理（如 multer 文件类型错误）
+// 统一错误处理（如 multer 文件类型错误）：细节只进服务端日志，
+// 客户端只拿到友好文案，避免把数据库/内部实现细节随错误回传。
 app.use((err, req, res, next) => {
+  if (err) {
+    if (err.type === 'entity.parse.failed') console.warn('[http] 请求体解析失败', req.method, req.originalUrl);
+    else console.error('[http] 请求处理异常', req.method, req.originalUrl, err.message || err);
+  }
   const msg = (err && err.code === 'LIMIT_FILE_SIZE')
     ? '图片过大，请重新拍摄或压缩后再上传'
-    : ((err && err.message) || '请求处理失败');
-  res.status(400).json({ error: msg });
+    : '请求处理失败，请稍后重试';
+  const status = (err && (err.status || err.statusCode)) || 400;
+  res.status(status).json({ error: msg });
 });
 
 // 启动

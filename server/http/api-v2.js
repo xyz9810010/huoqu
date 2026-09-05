@@ -8,6 +8,7 @@
 //      照片/异常/协助），录入型计划时刻（scheduled_time/rush_ship_time）为北京钟面文本。
 const { randomUUID } = require('node:crypto');
 const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
+const { withIdempotency } = require('./idempotency');
 const { createUploader } = require('./uploads');
 const { utcText } = require('../time');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
@@ -209,7 +210,7 @@ function mountApiV2Routes(app, deps) {
     ok(res, { task });
   });
 
-  app.post('/api/v2/tasks', requireAuth, requireStaff, (req, res) => {
+  app.post('/api/v2/tasks', requireAuth, requireStaff, withIdempotency((req, res) => {
     try {
       const input = { ...(req.body || {}) };
       if (input.customerId) {
@@ -235,7 +236,7 @@ function mountApiV2Routes(app, deps) {
     } catch (error) {
       fail(res, 400, error.message || '创建任务失败');
     }
-  });
+  }));
 
   app.put('/api/v2/tasks/:id', requireAuth, requireStaff, (req, res) => {
     const task = tasks.getTask(req.params.id);
@@ -345,6 +346,7 @@ function mountApiV2Routes(app, deps) {
     const createdAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const entryMethod = body.entryMethod || (waybillNo ? 'manual' : 'no_waybill');
     const finalWeight = Number(body.finalWeight) || 0;
+    if (!Number.isFinite(finalWeight) || finalWeight < 0) return fail(res, 400, '货品重量不正确');
     const matchStatus = finalWeight ? 'matched' : (waybillNo ? 'pending' : 'no_waybill');
     const itemWorkerId = req.user.courier_id || task.defaultWorkerId || '';
     const itemWorkerSnap = itemWorkerId

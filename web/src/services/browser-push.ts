@@ -85,7 +85,13 @@ export async function disableBrowserPush(): Promise<void> {
     if (subscription) await subscription.unsubscribe()
   }
   const id = localStorage.getItem(STORAGE_KEY)
-  if (id) await http.delete(`/v1/notification-subscriptions/${encodeURIComponent(id)}`)
+  if (id) {
+    try {
+      await http.delete(`/v1/notification-subscriptions/${encodeURIComponent(id)}`)
+    } catch (_) {
+      // 服务端订阅可能已不存在（清理旧登记属幂等操作），本地照常清除
+    }
+  }
   localStorage.removeItem(STORAGE_KEY)
 }
 

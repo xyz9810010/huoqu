@@ -26,9 +26,13 @@
             :disabled="!pushState.available || pushState.status === 'denied'" :loading="busy" @click="enable">
             开启系统通知
           </el-button>
-          <template v-else>
+          <template v-else-if="activeWebPushId">
             <el-button type="primary" :loading="testing" @click="sendTest">发送测试通知</el-button>
             <el-button :loading="busy" @click="disable">关闭当前浏览器</el-button>
+          </template>
+          <template v-else>
+            <p class="stale-help">浏览器已开启，但服务端缺少该浏览器的有效登记（可能已失效）。</p>
+            <el-button type="primary" :loading="busy" @click="repairBrowserPush">重新登记系统通知</el-button>
           </template>
         </div>
       </el-card>
@@ -70,6 +74,14 @@
           </el-tag></template>
         </el-table-column>
         <el-table-column prop="createdAt" label="登记时间" min-width="180" />
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" plain :disabled="row.status !== 'active'"
+                       :loading="testingId === row.id" @click="testDevice(row)">
+              {{ row.status === 'active' ? '发送测试' : '已失效' }}
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <div class="mobile-list mobile-list--inset">
         <article v-for="device in devices" :key="device.id" class="mobile-item">
@@ -87,6 +99,9 @@
           </div>
           <div class="mobile-field"><span class="mobile-field__label">通道</span><span class="mobile-field__value">{{ device.channel === 'web_push' ? '浏览器通知' : device.providerCode }}</span></div>
           <div class="mobile-field"><span class="mobile-field__label">登记时间</span><span class="mobile-field__value">{{ formatDeviceTime(device.createdAt) }}</span></div>
+          <div v-if="device.status === 'active'" class="mobile-item__actions">
+            <el-button size="small" type="primary" plain :loading="testingId === device.id" @click="testDevice(device)">发送测试通知</el-button>
+          </div>
         </article>
       </div>
       <el-empty v-if="!devices.length" description="暂无已登记的推送设备" :image-size="72" />
@@ -100,7 +115,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import http from '../api'
 import { currentBrowserSubscriptionId, disableBrowserPush, enableBrowserPush,
-  getBrowserPushState, sendBrowserPushTest } from '../services/browser-push'
+  getBrowserPushState } from '../services/browser-push'
 import type { BrowserPushState } from '../services/browser-push'
 import type { NotificationPreference, NotificationSubscription } from '../types/notifications'
 
@@ -110,6 +125,7 @@ const router = useRouter()
 const loading = ref(false)
 const busy = ref(false)
 const testing = ref(false)
+const testingId = ref('')
 const devices = ref<NotificationSubscription[]>([])
 const pushState = ref<BrowserPushState>(getBrowserPushState())
 const preferenceRows = reactive<PreferenceRow[]>([
@@ -185,14 +201,49 @@ async function disable() {
   finally { busy.value = false }
 }
 
+const activeWebPushId = computed(() => {
+  const found = devices.value.find((item) => item.channel === 'web_push' && item.status === 'active')
+  return found ? found.id : ''
+})
+
+async function postTest(deviceId: string) {
+  if (!deviceId) {
+    throw new Error('当前账号还没有可用的推送设备：请先开启并登记浏览器通知；如需测手机（华为）推送，请用已登记鸿蒙/安卓设备的账号')
+  }
+  await http.post(`/v1/notification-subscriptions/${encodeURIComponent(deviceId)}/test`)
+}
+
 async function sendTest() {
   testing.value = true
   try {
-    const ownId = currentBrowserSubscriptionId()
-    const fallback = devices.value.find((item) => item.channel === 'web_push' && item.status === 'active')?.id
-    await sendBrowserPushTest(ownId || fallback); ElMessage.success('测试通知已进入发送队列')
+    await postTest(activeWebPushId.value)
+    ElMessage.success('测试通知已进入发送队列（发送到该账号全部已启用设备）')
   } catch (error: any) { ElMessage.error(error.message || '发送测试通知失败') }
   finally { testing.value = false }
+}
+
+async function testDevice(device: any) {
+  if (device.status !== 'active') {
+    ElMessage.warning('该设备已失效：请在对应端重新登记后再测试')
+    return
+  }
+  testingId.value = device.id
+  try {
+    await postTest(device.id)
+    ElMessage.success('测试通知已进入发送队列（发送到该账号全部已启用设备）')
+  } catch (error: any) { ElMessage.error(error.message || '发送测试通知失败') }
+  finally { testingId.value = '' }
+}
+
+async function repairBrowserPush() {
+  busy.value = true
+  try {
+    await disableBrowserPush()
+    await enableBrowserPush()
+    await load()
+    ElMessage.success('浏览器通知已重新登记')
+  } catch (error: any) { ElMessage.error(error.message || '重新登记失败') }
+  finally { busy.value = false }
 }
 
 async function savePreference(item: PreferenceRow, enabled: boolean) {
@@ -220,6 +271,7 @@ onMounted(load)
 .status-dot.denied, .status-dot.insecure { background: var(--el-color-warning); }
 .status-help { color: var(--qj-muted); font-size: 12px; margin-top: 4px; line-height: 1.5; }
 .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.stale-help { width: 100%; margin: 0 0 2px; color: var(--qj-muted); font-size: 12px; line-height: 1.5; }
 .preference-list { display: grid; }
 .preference-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--qj-border); }
 .preference-row:last-child { border-bottom: 0; }

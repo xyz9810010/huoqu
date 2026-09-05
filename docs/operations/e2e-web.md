@@ -54,9 +54,12 @@ BASE_URL=http://127.0.0.1:3999 npm run test:e2e:web   # 该服务需已有 admin
 docker build -t hq-e2e-img -f e2e/Dockerfile.e2e .
 
 # 2) 被测服务（复用生产镜像，隔离端口/临时库，不碰正式数据）
+#    注意：journeys 旅程含“过机设备上报重量→匹配中心”环节，服务端必须配置 MACHINE_API_KEY，
+#    且与 e2e/journeys.e2e.js 内固定值一致（e2e-machine-key），否则该环节会 503。
 docker run -d --name hq-e2e-server --network host \
   -e PORT=3999 -e DB_PATH=/tmp/hq-e2e.db \
   -e INITIAL_ADMIN_PASSWORD=e2e-strong-password -e DISABLE_PUSH=1 \
+  -e MACHINE_API_KEY=e2e-machine-key \
   huoqu node server.js
 
 # 3) 巡检（BASE_URL 指向上面已起的服务）

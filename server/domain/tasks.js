@@ -359,7 +359,15 @@ function createTaskModule(db, options = {}) {
   function taskWhere(filters = {}) {
     const clauses = [];
     const params = [];
-    if (filters.status) { clauses.push('status = ?'); params.push(filters.status); }
+    if (filters.status) {
+      if (filters.status === 'open') {
+        // 待办口径：待取 + 取件中（Web 任务列表“待办”速览筛选）
+        clauses.push("status IN ('pending','in_progress')");
+      } else {
+        clauses.push('status = ?');
+        params.push(filters.status);
+      }
+    }
     if (filters.workerId) {
       clauses.push('(default_worker_id = ? OR id IN (SELECT task_id FROM task_assistants WHERE worker_id = ?))');
       params.push(filters.workerId, filters.workerId);

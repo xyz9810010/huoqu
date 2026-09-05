@@ -63,6 +63,19 @@ async function seedData(page, token) {
       items: [{ waybillNo: 'E2E-WB-1', pieces: 2, goodsName: '样品' }]
     })
   }
+  // 额外建一单并立即走完 start→complete，供“已完成”行着色/计数断言
+  const doneStatus = await page.evaluate(async ({ token, customerId }) => {
+    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
+    const create = await fetch('/api/tasks', {
+      method: 'POST', headers,
+      body: JSON.stringify({ customerId, customerName: 'E2E客户', address: '义乌E2E地址', items: [] })
+    })
+    const task = await create.json()
+    const start = await fetch('/api/tasks/' + task.id + '/start', { method: 'POST', headers, body: '{}' })
+    const done = await fetch('/api/tasks/' + task.id + '/complete', { method: 'POST', headers, body: '{}' })
+    return done.status
+  }, { token, customerId })
+  if (doneStatus >= 400) throw new Error('种子完成单失败 status=' + doneStatus)
   const list = await page.evaluate(async (token) => {
     const res = await fetch('/api/v2/tasks?page=1&pageSize=5', {
       headers: { Authorization: 'Bearer ' + token }
@@ -184,13 +197,25 @@ async function collectStyleFacts(page) {
   await collectStyleFacts(page)
 
   // 主要页面逐一巡检（校验无解析失败组件/无控制台错误）
-  const routes = ['/customers', '/dispatch', '/tasks', '/match-center', '/areas', '/employees', '/logs',
+  const routes = ['/customers', '/dispatch', '/match-center', '/areas', '/employees', '/logs',
     '/notifications', '/notification-settings', '/push-providers']
   for (const route of routes) {
     await page.goto(baseUrl + route, { waitUntil: 'networkidle' })
     await page.waitForTimeout(300)
     checked.push(route + ' title=' + (await page.title()))
   }
+
+  // 任务列表：状态速览条与行级状态着色（无需筛选即可一眼区分完成与否）
+  await page.goto(baseUrl + '/tasks', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(400)
+  const tabCount = await page.locator('.status-tab').count()
+  const openRows = await page.locator('.task-row--open').count()
+  const doneRows = await page.locator('.task-row--done').count()
+  if (tabCount !== 4) problems.push('任务列表状态速览条应为 4 个（全部/待办/已完成/已取消），实际 ' + tabCount)
+  if (openRows < 1) problems.push('任务列表应有待办（未完成）行着色，实际 open 行 ' + openRows)
+  if (doneRows < 1) problems.push('任务列表应有已完成行着色，实际 done 行 ' + doneRows)
+  checked.push('/tasks 状态速览条 tabs=' + tabCount + ' openRows=' + openRows + ' doneRows=' + doneRows)
+  await page.screenshot({ path: path.join(screenshotDir, 'tasks-status-overview.png') })
   if (taskId) {
     await page.goto(baseUrl + '/tasks/' + taskId, { waitUntil: 'networkidle' })
     checked.push('/tasks/:id title=' + (await page.title()))
@@ -201,7 +226,7 @@ async function collectStyleFacts(page) {
     await page.waitForTimeout(300)
     const detailText = await page.evaluate(() => document.body.innerText)
     if (!detailText.includes('取件订单')) problems.push('客户详情未渲染「取件订单」区块')
-    if (!/已完成\s*0\s*\/\s*1/.test(detailText)) problems.push('客户详情订单进度文案缺失（应为 已完成 0 / 1）')
+    if (!/已完成\s*1\s*\/\s*2/.test(detailText)) problems.push('客户详情订单进度文案缺失（应为 已完成 1 / 2）')
     checked.push('/customers/:id 取件订单区块渲染正常')
     await page.screenshot({ path: path.join(screenshotDir, 'customer-detail-orders.png') })
   }

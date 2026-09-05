@@ -260,6 +260,25 @@ test('customer list and detail expose open/completed order counts', async () => 
   assert.equal(detail.data.completedTaskCount, 1);
 });
 
+
+test('task list status=open combines pending and in_progress only', async () => {
+  const name = '待办筛选客户' + Date.now();
+  const customer = await request('POST', '/api/customers', { name, address: '筛选项' });
+  const pendingTask = await request('POST', '/api/tasks', { customerId: customer.data.id, customerName: name, address: '筛选项', items: [] });
+  const doneTask = await request('POST', '/api/tasks', { customerId: customer.data.id, customerName: name, address: '筛选项', items: [] });
+  await request('POST', '/api/tasks/' + doneTask.data.id + '/start', { note: '' });
+  await request('POST', '/api/tasks/' + doneTask.data.id + '/complete', { note: '' });
+
+  const open = await request('GET', '/api/tasks?status=open&keyword=' + encodeURIComponent(name));
+  const openIds = open.data.list.map((r) => r.id);
+  assert.equal(open.data.total, 1, JSON.stringify(open.data));
+  assert.ok(openIds.includes(pendingTask.data.id));
+  assert.ok(!openIds.includes(doneTask.data.id));
+
+  const cancelled = await request('GET', '/api/tasks?status=cancelled&keyword=' + encodeURIComponent(name));
+  assert.equal(cancelled.data.total, 0);
+});
+
 test('dashboard and attention endpoints summarize the canonical task model', async () => {
   token = adminToken;
   const board = await request('GET', '/api/dashboard/board?range=month');

@@ -18,6 +18,7 @@ const { createDispatcher } = require('./server/modules/notifications/dispatcher'
 const { createHuaweiProvider } = require('./server/modules/notifications/providers/huawei');
 const { createWebPushProvider } = require('./server/modules/notifications/providers/web-push');
 const { mountApiRoutes } = require('./server/http/api');
+const { mountApiV2Routes } = require('./server/http/api-v2');
 const { createBusinessNotificationPublisher } = require('./server/modules/notifications/business-publisher');
 const { createTaskModule } = require('./server/domain/tasks');
 const sseTickets = createSseTicketStore(db);
@@ -87,6 +88,20 @@ mountApiRoutes(app, {
   broadcast,
   uploadsDir,
   machineApiKey: MACHINE_API_KEY
+});
+
+// 面向 Android / HarmonyOS 新客户端的统一 v2 API（server/http/api-v2.js）
+mountApiV2Routes(app, {
+  db,
+  auth,
+  tasks,
+  notificationService,
+  notificationRepository,
+  subscriptionStore,
+  preferenceStore,
+  providerRegistry,
+  broadcast,
+  uploadsDir
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: '接口不存在' }));

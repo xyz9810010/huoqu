@@ -124,6 +124,12 @@ docker compose exec -T huoqu npm run backup -- "$(date -u +%Y%m%dT%H%M%SZ)"
 
 华为通道填写 Project ID 与 AGC 服务账号 JSON；浏览器通道填写 VAPID 联系地址、公钥和私钥。后续新增厂商时只需安装对应服务端适配器，后台表单会读取适配器字段定义自动生成，无需修改业务模块。浏览器系统通知的 HTTPS 部署见 `docs/deployment/browser-push-https.md`。
 
+> ⚠️ 华为通道的“服务账号 JSON”须在 AGC 控制台「项目设置 → 服务账号」下载，内容包含 `key_id`、`sub_account`、`private_key`；不要把鸿蒙工程 `AppScope/agconnect-services.json` 误贴进去，Project ID 也请填写 AGC 项目 ID（如 `101653523864770079`）而非 `client.cp_id`。填错会导致连接测试返回 `HUAWEI_CONFIG_INVALID` 且通道无法启用。
+
+华为鸿蒙推送从 AGC 开通、客户端接入到服务端配置与排障的完整手册见 `docs/deployment/huawei-harmony-push.md`。
+
+Android / HarmonyOS 客户端接入全部 HTTP 接口的规范（认证、任务流、通知、推送注册、SSE、差异与坑）见 `docs/api/mobile-integration.md`；新客户端统一走 `/api/v2` 规范层（成功 `{data}` 包装、page 从 1 起、时间 ISO8601 UTC）。
+
 ### ⚖️ 过机设备对接（重量 / 尺寸自动回传）
 
 公司过机设备称重 / 量方后，调用以下接口把数据写回对应订单：
@@ -255,14 +261,18 @@ X-Machine-Key: <密钥>
 ## 五、目录结构
 ```
 huoqu/
-├── server.js          # 后端服务 + REST API + 鉴权
+├── server.js          # 后端服务入口：依赖装配 + 启动/优雅关闭
 ├── db.js              # SQLite 初始化
 ├── auth.js            # 密码哈希 / 会话 / 登录
 ├── package.json
 ├── Dockerfile
 ├── docker-compose.yml
 ├── web/               # Vue 3 + Element Plus 网页端（npm run web:build 构建）
-├── server/            # 领域服务 / 迁移 / 通知推送等后端模块
+├── server/
+│   ├── http/api.js    # 统一 API 路由模块：全部 /api 接口注册处
+│   ├── domain/        # 领域服务
+│   ├── modules/       # 通知推送等业务模块
+│   └── operations/    # 运维操作（备份等）
 ├── tests/             # 自动化测试（npm test）
 ├── scripts/            # 源码边界、Compose、容器冒烟和备份脚本
 ├── deploy/             # 反向代理与部署配置

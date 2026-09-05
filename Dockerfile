@@ -34,6 +34,7 @@ RUN npm ci --omit=dev
 COPY server.js db.js auth.js ./
 COPY server ./server
 COPY scripts/backup-data.js ./scripts/backup-data.js
+COPY scripts/audit-duplicates.js ./scripts/audit-duplicates.js
 COPY scripts/generate-push-key.js ./scripts/generate-push-key.js
 COPY --from=web-build /src/web/dist ./web/dist
 RUN mkdir -p /app/data /app/backups

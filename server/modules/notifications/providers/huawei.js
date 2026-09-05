@@ -137,10 +137,17 @@ function createHuaweiProvider(options = {}) {
         const error = new Error('华为推送网关请求失败');
         error.statusCode = response.status;
         error.code = `HTTP_${response.status}`;
+        try {
+          const detail = await response.clone().text();
+          if (detail) error.message = `${error.message}：${detail.slice(0, 300)}`;
+        } catch {}
         throw error;
       }
       const result = await response.json();
       if (result.code !== '80000000') {
+        if (String(result.code) === '80300007') {
+          return targets.map(target => ({ targetId: target.id, status: 'invalid_target', code: 'HUAWEI_TOKEN_INVALID' }));
+        }
         return targets.map(target => ({ targetId: target.id, status: 'failed', code: String(result.code || 'HUAWEI_REJECTED') }));
       }
       return targets.map(target => ({

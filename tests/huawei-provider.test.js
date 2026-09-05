@@ -63,3 +63,32 @@ test('Huawei provider classifies rate limiting as retryable', () => {
     status: 'retryable', code: 'HTTP_429'
   });
 });
+
+test('Huawei provider marks every target invalid when gateway says all tokens invalid', async () => {
+  const provider = createHuaweiProvider({
+    getAccessToken: async () => 'access-token',
+    fetch: async () => ({ ok: true, status: 200, json: async () => ({ code: '80300007', msg: 'all tokens invalid' }) })
+  });
+  const targets = [{ id: 's1', secret: { token: 'dead-1' } }, { id: 's2', secret: { token: 'dead-2' } }];
+  const result = await provider.send({ id: 'n1', title: 't', body: 'b', type: 'system.test', data: {} }, targets, {
+    projectId: 'project-1', serviceAccount: '{}'
+  });
+  assert.deepEqual(result, [
+    { targetId: 's1', status: 'invalid_target', code: 'HUAWEI_TOKEN_INVALID' },
+    { targetId: 's2', status: 'invalid_target', code: 'HUAWEI_TOKEN_INVALID' }
+  ]);
+});
+
+test('Huawei provider keeps gateway body detail on HTTP failures', async () => {
+  const provider = createHuaweiProvider({
+    getAccessToken: async () => 'access-token',
+    fetch: async () => ({
+      ok: false, status: 401, clone: () => ({ text: async () => '{"code":"80200001","msg":"auth expired"}' })
+    })
+  });
+  await assert.rejects(
+    () => provider.send({ id: 'n1', title: 't', body: 'b', type: 'system.test', data: {} },
+      [{ id: 's1', secret: { token: 't1' } }], { projectId: 'project-1', serviceAccount: '{}' }),
+    (error) => error.code === 'HTTP_401' && /80200001/.test(error.message)
+  );
+});

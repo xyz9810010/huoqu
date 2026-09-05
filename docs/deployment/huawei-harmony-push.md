@@ -30,6 +30,13 @@
 
 服务端加密保存并返回订阅 id；退出登录时 `DELETE /api/v1/notification-subscriptions/:id`。
 
+> **一句话回答“需要填什么”**：Web「消息推送 → 华为 Push Kit」只需填两个字段——
+> ① **Project ID**：AGC 控制台「项目设置 → 常规信息」里的项目 ID（18 位数字，本项目 `101653523864770079`，不是 `agconnect-services.json` 里的 `cp_id`）；
+> ② **服务账号 JSON**：AGC「项目设置 → 服务账号」下载的 `<项目ID><数字>private.json` 全文（含 `key_id`、`sub_account`、`private_key`）。
+> 不要把 `agconnect-services.json`（工程配置）当服务账号粘贴，服务端会直接给出针对性报错。
+> 填完按「保存配置 → 连接测试 → 启用」三步走，页面出现「运行中」即完成。以下为完整说明。
+
+
 ## 一、AGC 控制台（一次性）
 
 1. 登录 [AppGallery Connect](https://developer.huawei.com/consumer/cn/service/josp/agc/index.html)，创建**鸿蒙（HarmonyOS）应用**，包名必须与工程 `AppScope/app.json5` 的 `bundleName` 一致：`com.cargo.pickupstats`。
@@ -61,8 +68,9 @@
 1. `.env` 必须配置 `PUSH_CONFIG_MASTER_KEY`（用于加密保存推送凭据，已配置）。
 2. 管理员登录 Web → 「消息推送」→ 华为 Push Kit：
    - Project ID：`101653523864770079`（你的 AGC 项目 ID）
-   - 服务账号 JSON：把 AGC 下载的服务账号 JSON **全文**粘贴进去
+   - 服务账号 JSON：把 AGC 下载的服务账号 JSON **全文**粘贴进去（生产服务器本地文件 `data/101653523864770079118652461private.json` 就是它）
 3. 依次执行：**保存配置 → 连接测试 → 启用**。
+   - 当前生产库（2026-09-05 实测）：`enabled=1 / healthStatus=healthy / config_version=tested_version=6`，页面应显示「运行中」；**不要重复保存覆盖**。只有凭据失效（AGC 侧删了服务账号或换项目）才需要重填。
    - 保存/测试返回 `HUAWEI_CONFIG_INVALID` 时，新版服务端会直接提示缺哪个字段或“像 agconnect-services.json”，按提示修正。
    - 成功标志：页面显示“运行中”/ `healthStatus=healthy`、`enabled=true`。
 4. 部署生效：容器镜像内含代码，改动后需 `docker compose up -d --build huoqu` 重建。
@@ -85,9 +93,13 @@
 | 鸿蒙端 `getToken()` 失败 | AGC 是否开通 Push Kit；`agconnect-services.json` 是否与工程包名匹配；`module.json5` 的 `client_id`；自动签名/证书；抓 hilog 错误码后对照 AGC 文档 |
 | 服务端根本没生成 huawei 投递 | 通知接收人与订阅用户不一致；用户通知偏好里 `vendor_push` 被关闭（`notification_preferences`）；订阅 `status=invalid` |
 | 一批投递整体 `failed`（非 80000000） | 该批中可能混入失效 token；服务端当前对整批结果处理，建议清理失效订阅后再试 |
+| 投递返回码 `80300007`（全部 Token 无效） | 新版服务端会把该订阅自动置为 `invalid`（不再反复重试）。HarmonyOS 3.x/4.x 升级到 5.0 后 Push Token 必须重新获取：在鸿蒙端重新登录触发 `getToken()` 重新注册，并删除旧订阅 |
+| 投递 `sent`、网关返回 80000000 但手机没弹 | 问题不在服务端/接口，按「四、验证 → 4」的客户端清单查：通知权限、`requestEnableNotification()`、通知分类/免打扰、包名与签名是否与 AGC 一致 |
 
-## 六、本项目现状（2026-09-05）
+## 六、本项目现状（2026-09-05 实测）
 
-- 华为通道凭据曾于 09-04 被误改（Project ID 填成 `cp_id`、服务账号贴成 `agconnect-services.json`），目前 `enabled=0 / health=failed / HUAWEI_CONFIG_INVALID`，需按第三节重新配置并启用。
-- 数据库有 3 条 `huawei` 订阅（归属取件员账号 `www`）：两条 09-04 有更新，一条 09-03 注册后未再更新（可能已失效，建议在鸿蒙端重新登录触发新注册并清理旧订阅）。
-- 正确服务账号文件在服务器 `data/101653523864770079118652461private.json`，可直接取其内容粘贴。
+- 服务端华为通道**已配置且启用**：`enabled=1 / healthStatus=healthy / config_version=tested_version=6`，最近一次连接测试 09-05 02:03 UTC 通过。
+- 存库凭据与本地 `data/101653523864770079118652461private.json` **逐字段一致**（Project ID、`key_id`、`sub_account`、`private_key` 哈希比对通过），不是 `agconnect-services.json`。
+- 网关实测：09-05 03:38–03:41 UTC 对 3 条活跃鸿蒙订阅逐一发送，华为全部返回 `code=80000000 Success` 并给出 requestId；此前 09-04 18:48–09-05 01:24 另有 103 条投递记录为 `sent`。**服务端 → 华为 Push Kit → 设备通道已被网关受理，接口无需再改配置。**
+- 数据库 3 条 `huawei` 订阅归属取件员账号：09-05 00:41（最新，`HarmonyOS Device`）、09-04 15:27（`HuoQu 鸿蒙原生端`）、09-03 02:49（`HarmonyOS 设备`）。三条 token 当前都被网关接受，但卸载重装/系统升级后旧 token 会逐步失效，建议在鸿蒙端以“删旧建新”策略重新注册。
+- 若手机此时仍未弹通知：请按第四节第 4 条与第五节逐项检查手机端（权限、免打扰、包名/签名与 AGC 一致）。服务端记录 `sent` 且网关 80000000 时，问题只可能出在手机/客户端，不在本仓库。

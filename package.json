@@ -17,7 +17,8 @@
     "push:key": "node scripts/generate-push-key.js",
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web run build",
-    "build": "npm run web:build"
+    "build": "npm run web:build",
+    "audit:duplicates": "node scripts/audit-duplicates.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

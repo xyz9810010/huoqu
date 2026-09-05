@@ -56,6 +56,8 @@ docker compose ps
 
 `docker compose ps` 中服务应显示为 `healthy`。如需完整验证，可运行 `npm run smoke:container`；该命令使用独立临时数据库和端口，不会访问正式 `./data`。
 
+`npm run audit:duplicates` 可对当前 `./data/app.db` 做只读稽核：识别重复业务单号、重复面单号与同秒孪生任务（详见 `docs/operations/audit-2026-09-05.md`）。
+
 ### 使用 GitHub 自动构建的镜像（ghcr.io，可选）
 
 每次推送代码到 `main`，仓库的 GitHub Actions 工作流会自动构建并推送多架构镜像（linux/amd64 + linux/arm64）到 [ghcr.io/xyz9810010/huoqu](https://github.com/xyz9810010/huoqu/pkgs/container/huoqu)，NAS 无需本地构建即可部署：

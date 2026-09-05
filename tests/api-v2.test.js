@@ -317,6 +317,11 @@ test('v2 基础资料/看板/历史记录：统一包装并按角色隔离', asy
     username, password: 'worker123', role: 'courier', courierId, name: 'v2 取件员'
   });
   assert.equal(user.status, 200);
+  const userId = user.body.id;
+  // 有进行中的任务或绑定账号时不允许删除档案（删除保护）
+  const blockedDelete = await request('DELETE', `/api/v2/couriers/${courierId}`);
+  assert.equal(blockedDelete.status, 400);
+  assert.match(blockedDelete.body.error, /绑定着登录账号/);
   const workerLogin = await request('POST', '/api/v2/auth/login', { username, password: 'worker123' }, false);
   assert.equal(workerLogin.status, 200);
   token = workerLogin.body.data.token;
@@ -342,6 +347,8 @@ test('v2 基础资料/看板/历史记录：统一包装并按角色隔离', asy
   assert.equal(deniedCustomer.status, 403);
 
   token = adminToken;
+  const userRemoved = await request('DELETE', `/api/users/${userId}`);
+  assert.equal(userRemoved.status, 200);
   const deleted = await request('DELETE', `/api/v2/couriers/${courierId}`);
   assert.equal(deleted.status, 200);
   assert.equal(deleted.body.data.ok, true);

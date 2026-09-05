@@ -168,12 +168,12 @@ function taskDetail(taskId) {
   if (!task) return null;
   const worker = task.defaultWorkerId ? db.prepare('SELECT name FROM couriers WHERE id=?').get(task.defaultWorkerId) : null;
   const mainCs = task.mainCsId ? db.prepare('SELECT name FROM users WHERE id=?').get(task.mainCsId) : null;
-  task.defaultWorkerName = worker ? worker.name : '';
+  task.defaultWorkerName = task.defaultWorkerName || (worker ? worker.name : '');
   task.mainCsName = mainCs ? mainCs.name : '';
   task.addressPointName = task.areaName || '默认地址';
   task.items = task.items.map(item => {
     const itemWorker = item.workerId ? db.prepare('SELECT name FROM couriers WHERE id=?').get(item.workerId) : null;
-    return Object.assign(item, { workerName: itemWorker ? itemWorker.name : task.defaultWorkerName });
+    return Object.assign(item, { workerName: item.workerNameSnap || (itemWorker ? itemWorker.name : '') || task.defaultWorkerName });
   });
   task.photos = db.prepare('SELECT * FROM pickup_photos WHERE task_id=? ORDER BY created_at,id').all(taskId).map(photo => ({
     id: photo.id, type: photo.photo_type, filename: photo.filename, filePath: '/uploads/' + photo.filename, createdAt: photo.created_at
@@ -186,7 +186,8 @@ function taskDetail(taskId) {
   if (task.defaultWorkerId) task.workers.push({ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' });
   for (const assistantId of task.assistWorkerIds || []) {
     const assistant = db.prepare('SELECT name FROM couriers WHERE id=?').get(assistantId);
-    if (assistant) task.workers.push({ userId: assistantId, name: assistant.name, role: 'assist' });
+    const assistantName = task.assistWorkerNames[assistantId] || (assistant ? assistant.name : '');
+    if (assistantName) task.workers.push({ userId: assistantId, name: assistantName, role: 'assist' });
   }
   return localizeTaskForWeb(task);
 }
@@ -273,10 +274,13 @@ app.post('/api/tasks/:id/items', requireAuth, (req, res) => {
   const itemId = randomUUID();
   const createdAt = utcText(); // 任务域机器时刻统一 UTC
   const waybillNo = String(body.waybillNo || '').trim();
+  const itemWorkerId = req.user.courier_id || task.defaultWorkerId || '';
+  const itemWorkerSnap = itemWorkerId
+    ? (db.prepare('SELECT name FROM couriers WHERE id=?').get(itemWorkerId) || {}).name || '' : '';
   db.prepare(`INSERT INTO pickup_items
-    (id,task_id,worker_id,entry_method,waybill_no,goods_name,pieces,sort_order,final_weight,weight_source,match_status,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-      itemId, task.id, req.user.courier_id || task.defaultWorkerId || '', body.entryMethod || (waybillNo ? 'manual' : 'no_waybill'),
+    (id,task_id,worker_id,worker_name_snap,entry_method,waybill_no,goods_name,pieces,sort_order,final_weight,weight_source,match_status,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      itemId, task.id, itemWorkerId, itemWorkerSnap, body.entryMethod || (waybillNo ? 'manual' : 'no_waybill'),
       waybillNo, String(body.goodsName || body.goods || ''), pieces, task.items.length, num(body.finalWeight),
       body.weightSource || '', num(body.finalWeight) ? 'matched' : (waybillNo ? 'pending' : 'no_waybill'), createdAt, createdAt
     );
@@ -712,6 +716,8 @@ app.delete('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (u.role === 'admin' && db.prepare('SELECT COUNT(*) n FROM users WHERE role=?').get('admin').n <= 1)
     return res.status(400).json({ error: '系统至少需要一个管理员' });
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+  // 客户主客服引用指向已删账号时清空，避免悬空引用
+  db.prepare('UPDATE customers SET main_cs_id=? WHERE main_cs_id=?').run('', u.id);
   db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
   res.json({ ok: true });
 });
@@ -745,14 +751,45 @@ app.put('/api/couriers/:id', requireAuth, requireAdmin, (req, res) => {
   const region = (req.body && req.body.region != null) ? String(req.body.region).trim() : (cur.region || '');
   const rate = (req.body && req.body.commissionRate != null) ? num(req.body.commissionRate) : (cur.commission_rate || 0);
   if (!name) return res.status(400).json({ error: '姓名不能为空' });
+  const rename = name !== cur.name;
   db.prepare('UPDATE couriers SET name = ?, region = ?, commission_rate = ? WHERE id = ?').run(name, region, rate, req.params.id);
+  if (rename) {
+    // 档案改名：同步历史任务/明细/协助上的姓名快照，保持展示一致
+    db.prepare("UPDATE pickup_tasks SET default_worker_name_snap=? WHERE default_worker_id=?").run(name, cur.id);
+    db.prepare("UPDATE pickup_items SET worker_name_snap=? WHERE worker_id=?").run(name, cur.id);
+    db.prepare("UPDATE task_assistants SET worker_name_snap=? WHERE worker_id=?").run(name, cur.id);
+  }
   broadcast({ type: 'couriers.updated' });
   res.json(rowCourier(db.prepare('SELECT * FROM couriers WHERE id = ?').get(req.params.id)));
 });
+
+function courierActiveTaskCount(courierId) {
+  // 主取件员、协助名单或明细归属在任一进行中任务中，都视为档案被占用
+  return db.prepare(`SELECT COUNT(*) AS n FROM pickup_tasks WHERE status IN ('pending','in_progress')
+    AND (default_worker_id=? OR id IN (SELECT task_id FROM task_assistants WHERE worker_id=?)
+      OR id IN (SELECT task_id FROM pickup_items WHERE worker_id=?))`)
+    .get(courierId, courierId, courierId).n;
+}
+
 app.delete('/api/couriers/:id', requireAuth, requireAdmin, (req, res) => {
-  if (!db.prepare('SELECT * FROM couriers WHERE id = ?').get(req.params.id))
-    return res.status(404).json({ error: '取件员不存在' });
-  db.prepare('DELETE FROM couriers WHERE id = ?').run(req.params.id);
+  const cur = db.prepare('SELECT * FROM couriers WHERE id = ?').get(req.params.id);
+  if (!cur) return res.status(404).json({ error: '取件员不存在' });
+  if (courierActiveTaskCount(cur.id) > 0)
+    return res.status(400).json({ error: '该取件员有进行中的任务，请先转派或完成后再删除' });
+  if (db.prepare('SELECT 1 FROM users WHERE courier_id=?').get(cur.id))
+    return res.status(400).json({ error: '该取件员绑定着登录账号，请先删除对应账号' });
+  const removal = db.transaction(() => {
+    // 档案删除前固化历史任务/明细/协助上的姓名快照，保证历史档案可追溯
+    db.prepare("UPDATE pickup_tasks SET default_worker_name_snap=? WHERE default_worker_id=? AND (default_worker_name_snap IS NULL OR default_worker_name_snap='')")
+      .run(cur.name, cur.id);
+    db.prepare("UPDATE pickup_items SET worker_name_snap=? WHERE worker_id=? AND (worker_name_snap IS NULL OR worker_name_snap='')")
+      .run(cur.name, cur.id);
+    db.prepare("UPDATE task_assistants SET worker_name_snap=? WHERE worker_id=? AND (worker_name_snap IS NULL OR worker_name_snap='')")
+      .run(cur.name, cur.id);
+    db.prepare('DELETE FROM area_workers WHERE worker_id=?').run(cur.id);
+    db.prepare('DELETE FROM couriers WHERE id=?').run(cur.id);
+  });
+  removal();
   broadcast({ type: 'couriers.updated' });
   res.json({ ok: true });
 });
@@ -1131,9 +1168,16 @@ app.put('/api/customers/:id', requireAuth, requireStaff, (req, res) => {
   res.json(rowCustomer(db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id)));
 });
 app.delete('/api/customers/:id', requireAuth, requireStaff, (req, res) => {
-  if (!db.prepare('SELECT id FROM customers WHERE id = ?').get(req.params.id))
-    return res.status(404).json({ error: '客户不存在' });
-  db.prepare('DELETE FROM customers WHERE id = ?').run(req.params.id);
+  const cur = db.prepare('SELECT id FROM customers WHERE id = ?').get(req.params.id);
+  if (!cur) return res.status(404).json({ error: '客户不存在' });
+  const active = db.prepare("SELECT COUNT(*) AS n FROM pickup_tasks WHERE customer_id=? AND status IN ('pending','in_progress')")
+    .get(cur.id).n;
+  if (active > 0) return res.status(400).json({ error: '该客户有进行中的任务，请先完成或取消后再删除' });
+  const removal = db.transaction(() => {
+    db.prepare('DELETE FROM customer_addresses WHERE customer_id=?').run(cur.id);
+    db.prepare('DELETE FROM customers WHERE id=?').run(cur.id);
+  });
+  removal();
   broadcast({ type: 'customers.updated' });
   res.json({ ok: true });
 });

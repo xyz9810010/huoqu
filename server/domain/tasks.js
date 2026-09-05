@@ -24,7 +24,7 @@ function taskNo() {
 }
 
 function itemFromRow(row) {
-  return {
+  const item = {
     id: row.id,
     taskId: row.task_id,
     workerId: row.worker_id,
@@ -39,11 +39,14 @@ function itemFromRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+  Object.defineProperty(item, 'workerNameSnap', { value: row.worker_name_snap || '', enumerable: false });
+  return item;
 }
 
 function taskFromRow(db, row) {
   if (!row) return null;
-  return {
+  const assistants = db.prepare('SELECT worker_id, worker_name_snap FROM task_assistants WHERE task_id = ? ORDER BY created_at, id').all(row.id);
+  const task = {
     id: row.id,
     taskNo: row.task_no,
     businessOrderNo: row.business_order_no,
@@ -57,6 +60,7 @@ function taskFromRow(db, row) {
     dispatchCsId: row.dispatch_cs_id,
     dispatchCsName: row.dispatch_cs_name,
     defaultWorkerId: row.default_worker_id,
+    defaultWorkerName: row.default_worker_name_snap || '',
     taskType: row.task_type,
     scheduledKind: row.scheduled_kind,
     scheduledTime: row.scheduled_time,
@@ -76,8 +80,14 @@ function taskFromRow(db, row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     items: db.prepare('SELECT * FROM pickup_items WHERE task_id = ? ORDER BY sort_order, created_at, id').all(row.id).map(itemFromRow),
-    assistWorkerIds: db.prepare('SELECT worker_id FROM task_assistants WHERE task_id = ? ORDER BY created_at, id').all(row.id).map(row => row.worker_id)
+    assistWorkerIds: assistants.map(assist => assist.worker_id)
   };
+  // 内部使用的协助人姓名快照映射，不参与 JSON 输出（避免污染 v1/v2 契约）
+  Object.defineProperty(task, 'assistWorkerNames', {
+    value: Object.fromEntries(assistants.map(assist => [assist.worker_id, assist.worker_name_snap || ''])),
+    enumerable: false
+  });
+  return task;
 }
 
 function createTaskModule(db, options = {}) {
@@ -88,23 +98,23 @@ function createTaskModule(db, options = {}) {
     id,task_no,business_order_no,customer_id,customer_name_snap,address_snap,contact_snap,phone_snap,
     area_name_snap,main_cs_id,dispatch_cs_id,dispatch_cs_name,default_worker_id,task_type,scheduled_kind,
     scheduled_time,rush_ship_time,rush_reason,dispatch_at,status,pickup_note,internal_note,volume,dimensions,
-    amount_receivable,amount_payable,settled,created_at,updated_at
+    amount_receivable,amount_payable,settled,default_worker_name_snap,created_at,updated_at
   ) VALUES (
     @id,@taskNo,@businessOrderNo,@customerId,@customerName,@address,@contact,@phone,@areaName,@mainCsId,
     @dispatchCsId,@dispatchCsName,@defaultWorkerId,@taskType,@scheduledKind,@scheduledTime,@rushShipTime,
     @rushReason,@dispatchAt,'pending',@pickupNote,@internalNote,@volume,@dimensions,@amountReceivable,
-    @amountPayable,@settled,@createdAt,@updatedAt
+    @amountPayable,@settled,@defaultWorkerNameSnap,@createdAt,@updatedAt
   )`);
   const insertItem = db.prepare(`INSERT INTO pickup_items (
-    id,task_id,worker_id,entry_method,waybill_no,goods_name,pieces,sort_order,final_weight,weight_source,match_status,created_at,updated_at
-  ) VALUES (@id,@taskId,@workerId,@entryMethod,@waybillNo,@goodsName,@pieces,@sortOrder,@finalWeight,@weightSource,@matchStatus,@createdAt,@updatedAt)`);
+    id,task_id,worker_id,worker_name_snap,entry_method,waybill_no,goods_name,pieces,sort_order,final_weight,weight_source,match_status,created_at,updated_at
+  ) VALUES (@id,@taskId,@workerId,@workerNameSnap,@entryMethod,@waybillNo,@goodsName,@pieces,@sortOrder,@finalWeight,@weightSource,@matchStatus,@createdAt,@updatedAt)`);
   const insertEvent = db.prepare(`INSERT INTO task_events
     (id,task_id,event_type,from_status,to_status,note,actor_id,actor_name,created_at)
     VALUES (@id,@taskId,@eventType,@fromStatus,@toStatus,@note,@actorId,@actorName,@createdAt)`);
-  const insertAssistant = db.prepare(`INSERT INTO task_assistants (id,task_id,worker_id,added_by,created_at)
-    VALUES (@id,@taskId,@workerId,@addedBy,@createdAt)`);
+  const insertAssistant = db.prepare(`INSERT INTO task_assistants (id,task_id,worker_id,worker_name_snap,added_by,created_at)
+    VALUES (@id,@taskId,@workerId,@workerNameSnap,@addedBy,@createdAt)`);
   const hasCouriers = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='couriers'").get());
-  const workerExists = hasCouriers ? db.prepare('SELECT id FROM couriers WHERE id=?') : null;
+  const workerExists = hasCouriers ? db.prepare('SELECT id,name FROM couriers WHERE id=?') : null;
   const isAssistant = db.prepare('SELECT 1 FROM task_assistants WHERE task_id=? AND worker_id=?');
 
   function getTask(taskId) {
@@ -132,6 +142,8 @@ function createTaskModule(db, options = {}) {
         dispatchCsId: actor.id || input.dispatchCsId || '',
         dispatchCsName: actor.name || input.dispatchCsName || '',
         defaultWorkerId: input.defaultWorkerId || '',
+        defaultWorkerNameSnap: (workerExists && input.defaultWorkerId
+          ? (workerExists.get(String(input.defaultWorkerId)) || {}).name || '' : ''),
         taskType: input.taskType || 'normal',
         scheduledKind: input.scheduledKind || '',
         scheduledTime: input.scheduledTime || '',
@@ -149,8 +161,10 @@ function createTaskModule(db, options = {}) {
         updatedAt: createdAt
       });
       for (const [sortOrder, item] of (input.items || []).entries()) {
+        const itemWorkerId = item.workerId || input.defaultWorkerId || '';
         insertItem.run({
-          id: id(), taskId, workerId: item.workerId || input.defaultWorkerId || '',
+          id: id(), taskId, workerId: itemWorkerId,
+          workerNameSnap: itemWorkerId ? ((workerExists && workerExists.get(itemWorkerId)) || {}).name || '' : '',
           entryMethod: item.entryMethod || (item.waybillNo ? 'scan' : 'manual'),
           waybillNo: item.waybillNo || '', goodsName: item.goodsName || '', pieces: Number(item.pieces || 1), sortOrder,
           finalWeight: Number(item.finalWeight || 0), weightSource: item.weightSource || '',
@@ -173,8 +187,11 @@ function createTaskModule(db, options = {}) {
     if (task.defaultWorkerId === workerId) return task;
     const changedAt = now();
     const eventId = actor.eventId || id();
+    const targetRow = workerId ? (workerExists && workerExists.get(String(workerId))) || null : null;
     const transaction = db.transaction(() => {
-      db.prepare('UPDATE pickup_tasks SET default_worker_id=?,updated_at=? WHERE id=?').run(workerId || '', changedAt, taskId);
+      // 转派/改派/收回时同步姓名快照，保证历史与展示一致
+      db.prepare('UPDATE pickup_tasks SET default_worker_id=?,default_worker_name_snap=?,updated_at=? WHERE id=?')
+        .run(workerId || '', targetRow ? (targetRow.name || '') : '', changedAt, taskId);
       insertEvent.run({
         id: eventId, taskId, eventType: 'assigned', fromStatus: '', toStatus: '',
         note: `${task.defaultWorkerId || ''}->${workerId || ''}`,
@@ -224,14 +241,15 @@ function createTaskModule(db, options = {}) {
     if (!task) throw new Error('取件任务不存在');
     const worker = String(workerId || '').trim();
     if (!worker) throw new Error('请选择协助取件员');
-    if (!workerExists || !workerExists.get(worker)) throw new Error('协助取件员不存在');
+    const workerRow = workerExists && workerExists.get(worker);
+    if (!workerRow) throw new Error('协助取件员不存在');
     if (task.status === 'completed' || task.status === 'cancelled') throw new Error('已完成或已取消任务不能再邀请协助');
     if (task.defaultWorkerId === worker) throw new Error('主取件员无需邀请协助');
     if (isAssistant.get(taskId, worker)) throw new Error('该取件员已在协助名单');
     const changedAt = now();
     const eventId = actor.eventId || id();
     const transaction = db.transaction(() => {
-      insertAssistant.run({ id: eventId, taskId, workerId: worker, addedBy: actor.id || '', createdAt: changedAt });
+      insertAssistant.run({ id: eventId, taskId, workerId: worker, workerNameSnap: workerRow.name || '', addedBy: actor.id || '', createdAt: changedAt });
       insertEvent.run({
         id: eventId, taskId, eventType: 'assist_added', fromStatus: '', toStatus: '',
         note: `${task.defaultWorkerId || ''}->${worker}`, actorId: actor.id || '', actorName: actor.name || '', createdAt: changedAt

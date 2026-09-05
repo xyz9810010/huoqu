@@ -69,6 +69,7 @@ function createSchema(db) {
       amount_receivable REAL DEFAULT 0,
       amount_payable REAL DEFAULT 0,
       settled TEXT DEFAULT '未结算',
+      default_worker_name_snap TEXT DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -89,6 +90,7 @@ function createSchema(db) {
       final_weight REAL DEFAULT 0,
       weight_source TEXT DEFAULT '',
       match_status TEXT NOT NULL DEFAULT 'pending',
+      worker_name_snap TEXT DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
@@ -126,6 +128,7 @@ function createSchema(db) {
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
       worker_id TEXT NOT NULL,
+      worker_name_snap TEXT DEFAULT '',
       added_by TEXT DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(task_id, worker_id),
@@ -283,6 +286,26 @@ function createSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id);
   `);
 
+  ensureColumn(db, 'pickup_tasks', 'default_worker_name_snap', "TEXT DEFAULT ''");
+  ensureColumn(db, 'pickup_items', 'worker_name_snap', "TEXT DEFAULT ''");
+  ensureColumn(db, 'task_assistants', 'worker_name_snap', "TEXT DEFAULT ''");
+  // 历史取件员档案姓名快照回填（幂等：仅填空；改名/删除时由路由层同步/固化）
+  if (tableExists(db, 'couriers')) {
+    db.exec(`UPDATE pickup_tasks SET default_worker_name_snap = COALESCE(
+        (SELECT c.name FROM couriers c WHERE c.id=pickup_tasks.default_worker_id),
+        default_worker_name_snap)
+      WHERE default_worker_id<>'' AND (default_worker_name_snap IS NULL OR default_worker_name_snap='')`);
+    db.exec(`UPDATE pickup_items SET worker_name_snap = COALESCE(
+        (SELECT c.name FROM couriers c WHERE c.id=pickup_items.worker_id),
+        worker_name_snap)
+      WHERE worker_id<>'' AND (worker_name_snap IS NULL OR worker_name_snap='')`);
+    db.exec(`UPDATE task_assistants SET worker_name_snap = COALESCE(
+        (SELECT c.name FROM couriers c WHERE c.id=task_assistants.worker_id),
+        worker_name_snap)
+      WHERE (worker_name_snap IS NULL OR worker_name_snap='')`);
+    // 历史版本删除取件员档案时未清理区域指派，启动时清除悬空引用
+    db.exec('DELETE FROM area_workers WHERE worker_id NOT IN (SELECT id FROM couriers)');
+  }
   ensureColumn(db, 'users', 'phone', "TEXT DEFAULT ''");
   ensureColumn(db, 'users', 'employee_no', "TEXT DEFAULT ''");
   ensureColumn(db, 'users', 'status', "TEXT NOT NULL DEFAULT 'active'");

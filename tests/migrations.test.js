@@ -112,3 +112,64 @@ test('migrate skips orphaned legacy status logs whose record was already deleted
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM pickup_tasks').get().count, 1);
   db.close();
 });
+
+test('migrate backfills courier name snapshots on pre-snapshot schema and removes orphan area assignments', () => {
+  const db = new Database(':memory:');
+  // 旧版任务模型：pickup_tasks/pickup_items/task_assistants 尚无 *_name_snap 列
+  db.exec(`
+    CREATE TABLE couriers (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, region TEXT DEFAULT '', commission_rate REAL DEFAULT 0
+    );
+    CREATE TABLE pickup_tasks (
+      id TEXT PRIMARY KEY, task_no TEXT NOT NULL UNIQUE, customer_id TEXT DEFAULT '',
+      customer_name_snap TEXT DEFAULT '', default_worker_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
+      dispatch_at TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      completed_at TEXT DEFAULT '', amount_receivable REAL DEFAULT 0, amount_payable REAL DEFAULT 0
+    );
+    CREATE TABLE pickup_items (
+      id TEXT PRIMARY KEY, task_id TEXT NOT NULL, worker_id TEXT DEFAULT '', entry_method TEXT DEFAULT '',
+      waybill_no TEXT DEFAULT '', goods_name TEXT DEFAULT '', pieces INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0,
+      final_weight REAL DEFAULT 0, weight_source TEXT DEFAULT '', match_status TEXT DEFAULT 'pending',
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE task_assistants (
+      id TEXT PRIMARY KEY, task_id TEXT NOT NULL, worker_id TEXT NOT NULL, added_by TEXT DEFAULT '',
+      created_at TEXT NOT NULL, UNIQUE(task_id, worker_id)
+    );
+    CREATE TABLE areas (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, code TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE area_workers (
+      area_id TEXT NOT NULL, worker_id TEXT NOT NULL, worker_role TEXT NOT NULL DEFAULT 'default',
+      PRIMARY KEY(area_id, worker_id, worker_role)
+    );
+  `);
+  db.prepare('INSERT INTO couriers VALUES (?,?,?,?)').run('c-1', '快照甲', '江东', 3);
+  db.prepare('INSERT INTO couriers VALUES (?,?,?,?)').run('c-2', '快照乙', '稠城', 2);
+  db.prepare(`INSERT INTO pickup_tasks (id,task_no,customer_id,customer_name_snap,default_worker_id,status,created_at,updated_at)
+    VALUES ('t-1','QJ20260901-AAAA01','cust-1','历史客户','c-1','completed','2026-09-01 01:00:00','2026-09-01 02:00:00')`).run();
+  db.prepare(`INSERT INTO pickup_items (id,task_id,worker_id,goods_name,created_at,updated_at)
+    VALUES ('i-1','t-1','c-2','纸箱','2026-09-01 01:05:00','2026-09-01 01:05:00')`).run();
+  db.prepare(`INSERT INTO task_assistants (id,task_id,worker_id,created_at) VALUES ('a-1','t-1','c-2','2026-09-01 01:03:00')`).run();
+  // 旧版本删除取件员档案时遗留的区域悬空指派
+  db.prepare("INSERT INTO areas (id,name) VALUES ('ar-1','江东区')").run();
+  db.prepare("INSERT INTO area_workers VALUES ('ar-1','c-2','default')").run();
+  db.prepare("INSERT INTO area_workers VALUES ('ar-1','gone-courier','backup')").run();
+  db.prepare("INSERT INTO task_assistants (id,task_id,worker_id,created_at) VALUES ('a-2','t-1','gone-courier','2026-09-01 01:04:00')").run();
+
+  migrate(db);
+
+  const task = db.prepare('SELECT * FROM pickup_tasks WHERE id=?').get('t-1');
+  assert.equal(task.default_worker_name_snap, '快照甲');
+  assert.equal(db.prepare('SELECT worker_name_snap FROM pickup_items WHERE id=?').get('i-1').worker_name_snap, '快照乙');
+  assert.equal(db.prepare('SELECT worker_name_snap FROM task_assistants WHERE id=?').get('a-1').worker_name_snap, '快照乙');
+  // 已不存在的档案无从回填，保持空（路由层在删除时会先固化，属历史遗留数据）
+  assert.equal(db.prepare('SELECT worker_name_snap FROM task_assistants WHERE id=?').get('a-2').worker_name_snap, '');
+  // 悬空区域指派被清理，有效指派保留
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM area_workers WHERE worker_id=?').get('gone-courier').n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM area_workers WHERE worker_id=?').get('c-2').n, 1);
+
+  migrate(db);
+  // 幂等：快照不覆盖既有值、不重复处理
+  assert.equal(db.prepare('SELECT default_worker_name_snap FROM pickup_tasks WHERE id=?').get('t-1').default_worker_name_snap, '快照甲');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM area_workers').get().n, 1);
+  db.close();
+});

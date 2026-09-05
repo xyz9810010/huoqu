@@ -338,8 +338,12 @@ v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/le
 | --- | --- | --- | --- |
 | GET | `/api/v2/couriers?page=&pageSize=` | 客服+ | 取件员档案（主数据量小，拉取用 `pageSize=100`） |
 | POST | `/api/v2/couriers` | 管理员 | 新增 `{"name","region","commissionRate"}` |
-| PUT | `/api/v2/couriers/:id` | 管理员 | 编辑（支持部分字段） |
-| DELETE | `/api/v2/couriers/:id` | 管理员 | 删除 |
+| PUT | `/api/v2/couriers/:id` | 管理员 | 编辑（支持部分字段）；改名会同步历史任务/明细/协助上的姓名快照 |
+| DELETE | `/api/v2/couriers/:id` | 管理员 | 删除；有进行中任务（主取件/协助/明细归属）或绑定着登录账号时返回 `400` 并说明原因，先转派/解绑再删 |
+
+删除与改名后的历史可追溯：任务详情里的 `defaultWorkerName`、`workers[]`（含协助人）与明细归属姓名
+以任务创建/最近改派时的取件员姓名为准（服务端快照优先、档案现查兜底），档案删除后仍能正确显示；
+转派/改派（`/transfer`、`/reassign`）后 `defaultWorkerName` 立即跟随新取件员。
 | GET | `/api/v2/areas?page=&pageSize=` | 登录用户 | 区域与默认取件员/备用取件员 |
 | GET | `/api/v2/dashboard/me` | 取件员 | 我的待取/进行中/已完成/件数 |
 | GET | `/api/v2/dashboard/board?range=today\|yesterday\|week\|month` | 客服+ | 汇总看板（件数/重量/客户数等） |

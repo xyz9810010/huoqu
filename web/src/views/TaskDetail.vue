@@ -8,7 +8,7 @@
         <div class="bar-no">{{ task.taskNo || '任务详情' }}</div>
         <div class="bar-sub">{{ task.customerName }}</div>
       </div>
-      <el-tag class="bar-tag" size="small" :type="statusType(task.status)">{{ statusLabel(task.status) }}</el-tag>
+      <el-tag class="bar-tag" size="small" :type="statusType(task.status) as any">{{ statusLabel(task.status) }}</el-tag>
     </header>
 
     <!-- 客户与取件信息 -->

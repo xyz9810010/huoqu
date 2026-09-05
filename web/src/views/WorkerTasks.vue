@@ -15,7 +15,7 @@
              :class="{ rush: t.taskType === 'rush' }">
       <div class="task-head">
         <div class="left">
-          <el-tag size="small" :type="statusType(t.status)">{{ statusLabel(t.status) }}</el-tag>
+          <el-tag size="small" :type="statusType(t.status) as any">{{ statusLabel(t.status) }}</el-tag>
           <el-tag v-if="t.taskType === 'rush'" type="danger" size="small">🔴 赶 {{ fmt(t.rushShipTime) }} 出货</el-tag>
           <el-tag v-else-if="t.taskType === 'scheduled'" type="warning" size="small">指定时间 {{ fmt(t.scheduledTime) }}</el-tag>
         </div>

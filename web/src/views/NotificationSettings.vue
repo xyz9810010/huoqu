@@ -42,7 +42,7 @@
           <div v-for="item in preferenceRows" :key="item.type" class="preference-row">
             <div><strong>{{ item.label }}</strong><span>{{ item.description }}</span></div>
             <el-switch v-model="item.enabled" :loading="item.saving"
-              @change="(value: boolean) => savePreference(item, value)" />
+              @change="(value: string | number | boolean) => savePreference(item, Boolean(value))" />
           </div>
         </div>
       </el-card>

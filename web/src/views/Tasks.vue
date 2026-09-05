@@ -39,7 +39,7 @@
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
+          <el-tag :type="statusType(row.status) as any">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
     </el-table>
@@ -52,7 +52,7 @@
             <div class="mobile-item__title">{{ row.customerName || '未命名客户' }}</div>
             <div class="mobile-item__sub">{{ row.taskNo }}</div>
           </div>
-          <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+          <el-tag :type="statusType(row.status) as any" size="small">{{ statusLabel(row.status) }}</el-tag>
         </div>
         <div class="task-type">
           <el-tag v-if="row.taskType === 'rush'" type="danger" size="small">赶 {{ fmtTime(row.rushShipTime) }} 出货</el-tag>

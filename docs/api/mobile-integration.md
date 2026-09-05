@@ -212,6 +212,9 @@ Body: {
 
 Android 侧还需：AGC 开启 Push Kit、客户端 `HuaweiPush.getToken()`、Android 13+ 通知权限运行时申请。HarmonyOS 侧：`pushService.getToken()` + `notificationManager.requestEnableNotification()`。完整端到端配置见 `docs/deployment/huawei-harmony-push.md`。
 
+> 已用 v1 接口上线的鸿蒙/安卓端可继续用本节接口；**新端统一改走 v2 等价接口**（§9.6 `POST /api/v2/push/devices`），
+> 同一 token 会原地刷新不堆积，契约一致。
+
 ## 5. 实时事件（SSE）
 
 移动端建议用**服务端推送（第 4 节）做“有通知横幅”的提醒**，用 SSE 做 App 前台时的即时刷新。两种连接方式：
@@ -282,12 +285,16 @@ Android 与鸿蒙端的 token 获取、通知权限、AGC 配置见 `docs/deploy
 
 实现：`server/http/api-v2.js`，与 v1 同进程同库，登录会话互通（v1/v2 的 token 可混用）。
 
-### 9.1 四条铁律（v2 全接口遵守）
+### 9.1 五条铁律（v2 全接口遵守）
 
 1. 成功响应一律 `{"data": …}`；列表一律 `{"data":{"items":[…],"total":N,"page":P,"pageSize":S}}`；看板/对账/提成等汇总接口也套 `data`，内部结构见各小节。
 2. 分页：`page` 从 **1** 起；`pageSize` 默认 **20**、上限 **100**（超出截断）；取件员/区域等主数据建议显式传 `pageSize=100`。
 3. 错误响应一律 `{"error":"信息","code"?:…}` + 恰当 HTTP 状态码；错误体**不套** `data`。
 4. 时间字段（任务、货品、照片、异常、通知、历史记录）一律 **ISO8601 UTC**（`2026-09-05T01:47:38.000Z`）；客户端直接 `new Date(...)` 解析即可，不要自行假设 +8。
+5. **会“凭空造单”的写请求（建取件任务）必须带幂等键**：请求头 `X-Idempotency-Key`（同义头 `Idempotency-Key` 亦可）。
+   同一登录用户 + 同一键 + 10 分钟窗口内的重复请求只执行一次，后续请求直接回放首次 2xx 的响应体和状态码。
+   每次「新建一单」的意图用**新的键**；网络超时/断网重试/用户连点**复用同一个键**。不带键不防重
+   （详见 §9.8）。
 
 鉴权方式与 v1 相同：`Authorization: Bearer <token>`，401 = 登录失效。
 
@@ -307,7 +314,7 @@ Android 与鸿蒙端的 token 获取、通知权限、AGC 配置见 `docs/deploy
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/v2/tasks?page=&pageSize=&status=&customerId=&keyword=&workerId=` | 分页列表（courier 自动只看自己） |
-| POST | `/api/v2/tasks` | 创建（客服+），Body 同 v1 语义 + 可选 `customerId`/`addressId` 自动带出客户信息 |
+| POST | `/api/v2/tasks` | 创建（客服+），Body 同 v1 语义 + 可选 `customerId`/`addressId` 自动带出客户信息；**必须带 `X-Idempotency-Key` 请求头**（见 §9.8） |
 | GET | `/api/v2/tasks/:id` | 详情，含 `items/photos/exceptions/workers/mainCsName/addressPointName` |
 | PUT | `/api/v2/tasks/:id` | 改单（客服+）：`taskType/scheduledKind/scheduledTime/rushShipTime/rushReason/pickupNote/internalNote` |
 | POST | `/api/v2/tasks/:id/start` `/complete` `/cancel` | 状态流转，Body 可选 `{"note"}` |
@@ -401,3 +408,156 @@ v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/le
 | 任务/客户/通知/取件员/区域/台账 | 见第 2/4/6 节及 v1 直出结构 | 见上表（全部 `{data}` 包装） |
 
 **SSE 实时通道仍用 v1**：`POST /api/v1/events/tickets` + `GET /api/v1/events`（v2 暂未提供 SSE 入口，其余全部业务请求走 v2）。
+
+### 9.8 幂等键（防重复建单，Android / HarmonyOS 必读）
+
+服务端实现：`server/http/idempotency.js`。覆盖三个创建端点：`POST /api/v2/tasks`（客服+建任务）、
+v1 `POST /api/tasks`、v1 `POST /api/records`；其余端点（改单、状态流转、补货、邀请协助等）不做幂等，
+重复调用本身有状态机校验兜底。
+
+**请求头**：`X-Idempotency-Key: <键>`（或 `Idempotency-Key`）。键为任意 ≤128 字符字符串，
+**建议每次新建意图生成一个 UUIDv4 / `hq-<时间戳>-<随机串>`**。空键 = 不做去重。
+
+**服务端行为**：
+
+- 同一登录用户 + 同一键，10 分钟（`10*60*1000` ms）内重复请求：不重复建单，**回放首次成功响应的
+  状态码与响应体**（首次 201，回放也是 201；首次 200，回放也是 200）。
+- 只缓存 2xx 成功结果：首次请求若 4xx/5xx，不缓存，重试可再次提交（不会“吃掉”一次失败后的重试）。
+- 键按用户隔离：不同用户用同一个键互不影响；同用户并发同键会串成同一次创建。
+- 窗口记录在**服务端进程内存**中：进程重启后窗口清空（可防双击/断网重试这一类最常见重复；
+  跨重启的极端窗口重复由 P3 稽核脚本兜底发现，未来「进行中任务部分唯一索引」提供硬约束）。
+
+**客户端规则（照抄即可不踩坑）**：
+
+1. 用户点「下单」瞬间生成键 A；请求发出。
+2. 收到 2xx → 结束，清除键 A（同一表单再次提交时用新键）。
+3. 网络超时/断网/5xx 且**不确定服务端是否已建单** → 用**同一个键 A** 原样重试（建议退避重试
+   1s/3s/10s，最多 3 次）。
+4. 收到明确 4xx（参数错、客户不存在等）→ 不重试，提示用户修改；键 A 作废。
+5. 列表页下拉刷新即可看到新任务；推送/SSE 只做加速展示，不参与正确性判断。
+
+请求示例：
+
+```http
+POST /api/v2/tasks HTTP/1.1
+Authorization: Bearer <token>
+Content-Type: application/json
+X-Idempotency-Key: 9f0a2b1c-0000-4000-8000-1234567890ab
+
+{
+  "customerId": "…",            // 或直接传 customerName/contact/phone/address
+  "address": "上海市…",
+  "taskType": "normal",
+  "scheduledTime": "2026-09-05T02:00:00.000Z",
+  "pickupNote": "客户要求上午取"
+}
+```
+
+成功 `201 {"data":{"task":{…}}}`；10 分钟内同键重发返回同样 `201` 与同一 `task.id`（不新建）。
+
+### 9.9 HarmonyOS（ArkTS）接入骨架示例
+
+> 下列为**参考骨架**：统一封装「登录 → 注册华为推送 token → 幂等建单 → 查通知/已读 → 退出注销」，
+> 覆盖本项目全部移动端约定（§9.1 五条铁律）。import 路径与类名请按你 DevEco 工程的 API 版本校准
+> （API 12+ 为 `@kit.*`；API 9/10 工程请换 `@ohos.*` 对应模块）；网络层若已有封装可只抄策略部分。
+> 示意代码未在本仓库内编译验证，集成后请在你的鸿蒙工程里编译联调。
+
+```ts
+import { http } from '@kit.NetworkKit';
+import { pushService } from '@kit.PushKit';
+import { notificationManager } from '@kit.NotificationKit';
+
+const BASE_URL = 'https://<你的服务器域名>'; // 生产必须 HTTPS
+
+class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function newIdempotencyKey(): string {
+  // ≤128 字符即可；UUIDv4 更佳。每个“新建一单”的意图生成一次并保存到调用处变量，
+  // 网络超时重试时复用同一个键（见 §9.8）。
+  const rnd = Math.random().toString(36).slice(2, 10);
+  return `hq-${Date.now()}-${rnd}`;
+}
+
+class ApiClient {
+  private token: string = '';
+
+  async request<T>(method: http.RequestMethod, path: string, body?: object,
+                   idempotencyKey?: string): Promise<T> {
+    const req = http.createHttp();
+    const header: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.token) header['Authorization'] = `Bearer ${this.token}`;
+    if (idempotencyKey) header['X-Idempotency-Key'] = idempotencyKey;
+    const resp = await req.request(`${BASE_URL}${path}`, {
+      method, header,
+      extraData: body ? JSON.stringify(body) : undefined,
+      expectDataType: http.HttpDataType.STRING,
+      readTimeout: 15000, // 建单/上传类可单独调大；列表类保持短超时
+    });
+    const status = resp.responseCode;
+    const text = String(resp.result);
+    let payload: Record<string, Object> = {};
+    try { payload = JSON.parse(text) as Record<string, Object>; } catch (_) { /* 非 JSON 兜底 */ }
+    if (status >= 200 && status < 300) return (payload['data'] as T);
+    if (status === 401) { /* token 失效：清本地 token 回登录页 */ }
+    throw new ApiError(status, String((payload['error'] as string) ?? '请求失败'));
+  }
+
+  async login(username: string, password: string): Promise<void> {
+    const data = await this.request<{ token: string; user: object }>(
+      http.RequestMethod.POST, '/api/v2/auth/login', { username, password });
+    this.token = data.token;
+    // 登录成功后：本地持久化 token；随后调用 registerPushToken()
+  }
+
+  // 华为鸿蒙推送：登录成功、或 app 启动检测到 token 变化时调用
+  async registerPushToken(platform: 'harmonyos' | 'android' = 'harmonyos'): Promise<string> {
+    try { await notificationManager.requestEnableNotification(); } catch (_) { /* 用户拒绝也继续 */ }
+    const hwToken = await pushService.getToken(); // 失败时按 docs/deployment/huawei-harmony-push.md 排查
+    const device = await this.request<{ id: string }>(
+      http.RequestMethod.POST, '/api/v2/push/devices', {
+        providerCode: 'huawei', platform, token: hwToken,
+        deviceLabel: 'HuoQu 鸿蒙端', appVersion: '1.0.0',
+      });
+    return device.id; // 退出登录时 DELETE /api/v2/push/devices/:id
+  }
+
+  // 客服/管理员建单：双击、超时重试都只会产生一单（关键示例）
+  async createPickupTask(form: object): Promise<object> {
+    const key = newIdempotencyKey();      // 生成一次
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await this.request<object>(http.RequestMethod.POST, '/api/v2/tasks', form, key);
+      } catch (e) {
+        if (e instanceof ApiError) throw e;              // 4xx：提示用户，不重试
+        if (attempt === 3) throw e;
+        await new Promise(res => setTimeout(res, 1000 * attempt)); // 1s/2s 退避，复用同一 key
+      }
+    }
+    throw new Error('unreachable');
+  }
+
+  async unreadCount(): Promise<number> {
+    const data = await this.request<{ count: number }>(
+      http.RequestMethod.GET, '/api/v2/notifications/unread-count');
+    return data.count;
+  }
+
+  async logout(): Promise<void> {
+    try { await this.request(http.RequestMethod.POST, '/api/v2/logout'); } catch (_) { /* 本地照常清理 */ }
+    this.token = '';
+    // 同时 DELETE /api/v2/push/devices/:id（本地保存的 deviceId）注销推送设备
+  }
+}
+
+export default ApiClient;
+```
+
+关键点回顾：推送 token 走 v2 注册后，服务端在派单/状态变更时才会给该设备投递华为通知横幅；
+App 冷启动/回到前台时以 `GET /api/v2/tasks` 与 `/api/v2/notifications` 拉取为准，不要依赖厂商回调
+判断数据是否正确。

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
+    "test:e2e:web": "node e2e/web.e2e.js",
     "test:container": "docker compose -f compose.test.yaml run --build --rm huoqu-test",
     "check:artifacts": "node scripts/check-source-artifacts.js",
     "check:compose": "node scripts/verify-compose-config.js",

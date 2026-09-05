@@ -404,3 +404,65 @@ test('v2 分页一致性 / 客户搜索 / 照片上传', async () => {
     // 清理失败不阻塞断言结果
   }
 });
+
+test('v2 records 分页上限收敛 / 越界页与稳定倒序', async () => {
+  const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
+  assert.equal(admin.status, 200);
+  const couriers = await request('GET', '/api/v2/couriers');
+  const courierId = couriers.body.data.items[0] && couriers.body.data.items[0].id;
+  for (const date of ['2026-09-02', '2026-09-03', '2026-09-04']) {
+    const created = await request('POST', '/api/records', {
+      date, courierId: courierId || '', customer: 'v2 排序客户', pieces: 1,
+      address: '义乌', goods: '排序件', amountReceivable: 1
+    });
+    assert.equal(created.status, 200, JSON.stringify(created.body).slice(0, 200));
+  }
+  const huge = await request('GET', '/api/v2/records?page=1&pageSize=9999');
+  assert.equal(huge.status, 200);
+  assert.equal(huge.body.data.pageSize, 100, 'pageSize 应被收敛到 100');
+  assert.ok(huge.body.data.items.length <= 100);
+  const dates = huge.body.data.items.map(item => item.date);
+  for (let i = 1; i < dates.length; i += 1) {
+    assert.ok(dates[i - 1] >= dates[i], `records 应按 date 倒序: ${dates[i - 1]} >= ${dates[i]}`);
+  }
+  const beyond = await request('GET', '/api/v2/records?page=9999&pageSize=5');
+  assert.equal(beyond.status, 200);
+  assert.equal(beyond.body.data.items.length, 0);
+  assert.ok(beyond.body.data.total >= 1);
+});
+
+test('v2 通知全部已读后未读数归零', async () => {
+  const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
+  assert.equal(admin.status, 200);
+  const device = await request('POST', '/api/v2/push/devices', {
+    providerCode: 'huawei', platform: 'harmonyos', token: `v2-readall-${Date.now()}`, deviceLabel: 'read-all'
+  });
+  assert.equal(device.status, 201);
+  const sent = await request('POST', `/api/v2/push/devices/${device.body.data.device.id}/test`);
+  assert.equal(sent.status, 202);
+  const before = await request('GET', '/api/v2/notifications/unread-count');
+  assert.ok(before.body.data.count >= 1);
+  const readAll = await request('POST', '/api/v2/notifications/read-all');
+  assert.equal(readAll.status, 200);
+  assert.equal(readAll.body.data.ok, true);
+  const after = await request('GET', '/api/v2/notifications/unread-count');
+  assert.equal(after.body.data.count, 0);
+});
+
+test('v2 推送设备重复登记同一 token 幂等（设备列表不重复）', async () => {
+  const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
+  assert.equal(admin.status, 200);
+  const tokenValue = `v2-dup-token-${Date.now()}`;
+  const first = await request('POST', '/api/v2/push/devices', {
+    providerCode: 'huawei', platform: 'android', token: tokenValue, deviceLabel: '重复登记'
+  });
+  assert.equal(first.status, 201);
+  const second = await request('POST', '/api/v2/push/devices', {
+    providerCode: 'huawei', platform: 'android', token: tokenValue, deviceLabel: '重复登记2'
+  });
+  assert.equal(second.status, 201);
+  assert.equal(second.body.data.device.id, first.body.data.device.id, '同 token 应复用同一设备记录');
+  const devices = await request('GET', '/api/v2/push/devices');
+  const matches = devices.body.data.items.filter(item => item.id === first.body.data.device.id);
+  assert.equal(matches.length, 1);
+});

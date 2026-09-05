@@ -38,6 +38,7 @@
               :show-password="field.secret && field.control !== 'textarea'"
               :placeholder="field.secret && provider.fields[field.key]?.configured ? '已安全保存，留空表示不修改' : `请输入${field.label}`"
               autocomplete="off" />
+            <div v-if="field.hint" class="field-hint">{{ field.hint }}</div>
             <div v-if="field.secret && provider.fields[field.key]?.configured" class="field-state">
               <el-icon><Lock /></el-icon>已加密保存
             </div>
@@ -70,7 +71,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import http from '../api'
-import { canEnableProvider, createProviderDraft } from '../services/provider-form'
+import { canEnableProvider, createProviderDraft, validateProviderCredentials } from '../services/provider-form'
 import type { PushProvider } from '../types/notifications'
 
 const providers = ref<PushProvider[]>([])
@@ -101,6 +102,11 @@ function credentialsFor(provider: PushProvider): Record<string, string> {
 }
 
 async function save(provider: PushProvider) {
+  const issues = validateProviderCredentials(provider, credentialsFor(provider))
+  if (issues.length) {
+    ElMessage.error(issues[0])
+    return
+  }
   busy[provider.code] = 'save'
   try {
     const updated = await http.put<any, PushProvider>(`/v1/admin/push-providers/${encodeURIComponent(provider.code)}`, {
@@ -162,6 +168,7 @@ onMounted(load)
 .provider-card :deep(.el-form-item__label) { color: var(--qj-text-2); font-size: 13px; }
 .provider-card :deep(.el-form-item__label i) { margin-left: 7px; color: var(--el-color-danger); font-size: 11px; font-style: normal; font-weight: 400; }
 .field-state { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--el-color-success); font-size: 11px; }
+.field-hint { margin-top: 6px; color: var(--qj-muted); font-size: 12px; line-height: 1.5; }
 .health-row { min-height: 30px; flex-wrap: wrap; gap: 6px 14px; padding: 9px 11px; margin: 4px 0 16px; border: 1px solid var(--qj-border); border-radius: 7px; background: #fafbfc; color: var(--qj-muted); font-size: 11px; }
 .health-error { color: var(--el-color-danger); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .provider-actions { gap: 8px; flex-wrap: wrap; }

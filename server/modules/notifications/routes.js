@@ -126,7 +126,10 @@ function mountNotificationRoutes(app, dependencies) {
       const validation = await adapter.validateConfig(providerConfigs.getDecrypted(adapter.code));
       if (!validation.ok) {
         providerConfigs.recordHealth(adapter.code, validation);
-        return res.status(400).json({ error: '供应商配置校验失败', code: validation.code || 'PROVIDER_CONFIG_INVALID' });
+        return res.status(400).json({
+          error: validation.message || '供应商配置校验失败',
+          code: validation.code || 'PROVIDER_CONFIG_INVALID'
+        });
       }
       res.json({ data: providerConfigs.publicView(adapter.code, adapter.credentialSchema) });
     } catch (error) {
@@ -145,7 +148,13 @@ function mountNotificationRoutes(app, dependencies) {
       providerConfigs.recordHealth(adapter.code, result);
       audit(req.user, '测试推送供应商配置', 'push_provider', adapter.code, `结果：${result.ok ? 'healthy' : (result.code || 'unhealthy')}`);
       const view = providerConfigs.publicView(adapter.code, adapter.credentialSchema);
-      if (!result.ok) return res.status(400).json({ error: '供应商连接测试失败', code: result.code || '', data: view });
+      if (!result.ok) {
+        return res.status(400).json({
+          error: result.message || '供应商连接测试失败',
+          code: result.code || '',
+          data: view
+        });
+      }
       res.json({ data: view });
     } catch (error) {
       res.status(400).json({ error: '供应商连接测试失败', code: error.code || 'PROVIDER_TEST_FAILED' });

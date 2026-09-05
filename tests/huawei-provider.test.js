@@ -14,6 +14,25 @@ test('Huawei provider declares configuration fields and validates service accoun
   })).ok, true);
 });
 
+test('Huawei provider explains which service account fields are missing', async () => {
+  const provider = createHuaweiProvider({ fetch: async () => { throw new Error('not called'); } });
+  const result = await provider.validateConfig({
+    projectId: 'project-1',
+    serviceAccount: JSON.stringify({ agcgw: { url: 'connect-drcn.dbankcloud.cn' }, appInfos: [] })
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'HUAWEI_CONFIG_INVALID');
+  assert.match(result.message, /agconnect-services\.json/);
+
+  const partial = await provider.validateConfig({
+    projectId: 'project-1',
+    serviceAccount: JSON.stringify({ key_id: 'key-1' })
+  });
+  assert.equal(partial.ok, false);
+  assert.match(partial.message, /sub_account/);
+  assert.match(partial.message, /private_key/);
+});
+
 test('Huawei provider maps a successful gateway response to each target', async () => {
   let capturedUrl = '';
   let capturedBody = null;

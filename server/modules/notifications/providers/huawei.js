@@ -9,18 +9,48 @@ function parseServiceAccount(value) {
   try { return JSON.parse(String(value || '{}')); } catch { return {}; }
 }
 
+function serviceAccountProblem(raw) {
+  let parsed = null;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (!text) return '服务账号 JSON 为空';
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return '服务账号 JSON 不是有效的 JSON 文本';
+    }
+  } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    parsed = raw;
+  } else {
+    return '服务账号 JSON 缺失';
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return '服务账号 JSON 必须是 JSON 对象（包含 key_id、sub_account、private_key 字段）';
+  }
+  const looksLikeAgconnect = parsed && typeof parsed === 'object' &&
+    (parsed.agcgw || parsed.appInfos || parsed.oauth_client);
+  if (looksLikeAgconnect) {
+    return '检测到内容像是 agconnect-services.json（AGC 工程配置）。请粘贴 AGC「项目设置 → 服务账号」下载的 JSON，其中包含 key_id、sub_account、private_key 字段';
+  }
+  const missing = ['key_id', 'sub_account', 'private_key']
+    .filter(key => !(parsed && typeof parsed[key] === 'string' && parsed[key].trim()));
+  if (missing.length) {
+    return `服务账号 JSON 缺少字段：${missing.join('、')}。请粘贴 AGC「项目设置 → 服务账号」下载的 JSON`;
+  }
+  return '';
+}
+
 function createHuaweiProvider(options = {}) {
   const request = options.fetch || fetch;
   const customAccessToken = options.getAccessToken;
   const tokenCache = new Map();
 
   async function validateConfig(config) {
-    const serviceAccount = parseServiceAccount(config && config.serviceAccount);
-    const ok = Boolean(
-      config && String(config.projectId || '').trim() &&
-      serviceAccount.key_id && serviceAccount.sub_account && serviceAccount.private_key
-    );
-    return ok ? { ok: true } : { ok: false, code: 'HUAWEI_CONFIG_INVALID' };
+    const projectId = String((config && config.projectId) || '').trim();
+    if (!projectId) return { ok: false, code: 'HUAWEI_CONFIG_INVALID', message: '缺少 Project ID（应为 AGC 项目 ID，如 101653523864770079）' };
+    const problem = serviceAccountProblem(config && config.serviceAccount);
+    if (problem) return { ok: false, code: 'HUAWEI_CONFIG_INVALID', message: problem };
+    return { ok: true };
   }
 
   async function getAccessToken(config) {
@@ -62,8 +92,10 @@ function createHuaweiProvider(options = {}) {
     platforms: ['harmonyos'],
     capabilities: { batch: true, maxBatchSize: 1000 },
     credentialSchema: [
-      { key: 'projectId', label: 'Project ID', secret: false, required: true, control: 'text' },
-      { key: 'serviceAccount', label: '服务账号 JSON', secret: true, required: true, control: 'textarea' }
+      { key: 'projectId', label: 'Project ID', secret: false, required: true, control: 'text',
+        hint: 'AGC 项目 ID（项目设置 → 常规信息），不是 cp_id。本应用为 101653523864770079' },
+      { key: 'serviceAccount', label: '服务账号 JSON', secret: true, required: true, control: 'textarea',
+        hint: '粘贴 AGC「项目设置 → 服务账号」下载的 JSON（含 key_id、sub_account、private_key）。不要把 AppScope/agconnect-services.json 工程配置贴进来' }
     ],
     validateConfig,
     async healthCheck(config) {
@@ -72,8 +104,12 @@ function createHuaweiProvider(options = {}) {
       try {
         await getAccessToken(config);
         return { ok: true };
-      } catch {
-        return { ok: false, code: 'HUAWEI_CREDENTIAL_INVALID' };
+      } catch (error) {
+        return {
+          ok: false,
+          code: 'HUAWEI_CREDENTIAL_INVALID',
+          message: `凭据校验失败：无法用 private_key 签发访问令牌（${(error && error.message || '未知错误').split('\n')[0]}）`
+        };
       }
     },
     normalizeError,

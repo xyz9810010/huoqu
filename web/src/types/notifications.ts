@@ -39,6 +39,7 @@ export interface PushCredentialField {
   secret: boolean
   required: boolean
   control?: 'text' | 'password' | 'textarea'
+  hint?: string
 }
 
 export interface PushProviderFieldState {

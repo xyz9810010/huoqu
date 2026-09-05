@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import 'element-plus/es/components/message/style/css'
 import router from './router'
 import { unwrapResponse } from './api-contract'
 

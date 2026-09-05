@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [
     vue(),
     Components({
-      // 样式统一走 main.ts 的 element-plus/dist/index.css，避免逐组件注入重复样式
-      resolvers: [ElementPlusResolver({ importStyle: false })],
+      // element-plus 组件样式按需注入；base.css 与程序化组件（message/message-box）样式在 main.ts/使用处显式引入
+      resolvers: [ElementPlusResolver()],
       dts: 'src/components.d.ts'
     }),
   ],

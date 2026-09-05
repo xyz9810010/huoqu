@@ -122,6 +122,18 @@ function createSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
 
+    CREATE TABLE IF NOT EXISTS task_assistants (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      worker_id TEXT NOT NULL,
+      added_by TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      UNIQUE(task_id, worker_id),
+      FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_assistants_task ON task_assistants(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_assistants_worker ON task_assistants(worker_id);
+
     CREATE TABLE IF NOT EXISTS task_exceptions (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,

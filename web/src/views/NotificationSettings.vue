@@ -114,6 +114,7 @@ const devices = ref<NotificationSubscription[]>([])
 const pushState = ref<BrowserPushState>(getBrowserPushState())
 const preferenceRows = reactive<PreferenceRow[]>([
   { type: 'pickupTask.assigned', label: '新任务与改派', description: '有新的取件任务分配给我时提醒', enabled: true, saving: false },
+  { type: 'pickupTask.assistInvited', label: '协助取件邀请', description: '被邀请协助取件任务时提醒', enabled: true, saving: false },
   { type: 'pickupTask.statusChanged', label: '任务状态变化', description: '任务开始、完成或取消时提醒', enabled: true, saving: false },
   { type: 'pickupTask.overdue', label: '超时与紧急任务', description: '临近赶货时间或任务超时时提醒', enabled: true, saving: false },
   { type: 'pickupTask.exception', label: '异常处理', description: '出现异常或处理完成时提醒', enabled: true, saving: false },

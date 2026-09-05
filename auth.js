@@ -9,6 +9,52 @@ function hashPassword(password, salt) {
 }
 function createSalt() { return crypto.randomBytes(16).toString('hex'); }
 
+// ---------- 登录限速（按 用户名+来源IP 记账，内存态，无外部依赖） ----------
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_FAILURES = 8;
+const loginFailures = new Map();
+
+function loginFailureKey(username, ip) {
+  return String(username || '').trim().toLowerCase() + '|' + String(ip || '').replace('::ffff:', '');
+}
+
+function pruneLoginFailures() {
+  const now = Date.now();
+  for (const [key, entry] of loginFailures) {
+    if (now - entry.firstAt > LOGIN_FAILURE_WINDOW_MS) loginFailures.delete(key);
+  }
+}
+
+function loginBlockedSeconds(username, ip) {
+  const entry = loginFailures.get(loginFailureKey(username, ip));
+  if (!entry) return 0;
+  const elapsed = Date.now() - entry.firstAt;
+  if (elapsed > LOGIN_FAILURE_WINDOW_MS) {
+    loginFailures.delete(loginFailureKey(username, ip));
+    return 0;
+  }
+  if (entry.count < MAX_LOGIN_FAILURES) return 0;
+  return Math.max(1, Math.ceil((LOGIN_FAILURE_WINDOW_MS - elapsed) / 1000));
+}
+
+function noteLoginFailure(username, ip) {
+  const key = loginFailureKey(username, ip);
+  const entry = loginFailures.get(key);
+  const now = Date.now();
+  if (!entry || now - entry.firstAt > LOGIN_FAILURE_WINDOW_MS) {
+    loginFailures.set(key, { count: 1, firstAt: now });
+  } else {
+    entry.count += 1;
+    loginFailures.set(key, entry);
+  }
+  if (loginFailures.size > 2000) pruneLoginFailures();
+  return loginBlockedSeconds(username, ip);
+}
+
+function clearLoginFailures(username, ip) {
+  loginFailures.delete(loginFailureKey(username, ip));
+}
+
 // ---------- 会话 ----------
 const SESSION_TTL_DAYS = 30;
 function createSession(userId) {
@@ -73,5 +119,7 @@ function verifyLogin(username, password) {
 
 module.exports = {
   hashPassword, createSalt, createSession, findSession, destroySession,
-  pruneSessions, publicUser, ensureAdmin, verifyLogin
+  pruneSessions, publicUser, ensureAdmin, verifyLogin,
+  loginBlockedSeconds, noteLoginFailure, clearLoginFailures,
+  LOGIN_FAILURE_WINDOW_MS, MAX_LOGIN_FAILURES
 };

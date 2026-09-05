@@ -126,8 +126,8 @@ GET /api/tasks/:id
 | 开始取件 | `POST /api/tasks/:id/start` | `{"note":"可选"}` |
 | 完成取件 | `POST /api/tasks/:id/complete` | `{"note":"可选"}` |
 | 取消 | `POST /api/tasks/:id/cancel` | `{"note":"可选"}` |
-| 请求协助 | `POST /api/tasks/:id/assist` | 无需 body（原样返回任务） |
-| 转单给他人 | `POST /api/tasks/:id/transfer` | `{"workerId":"目标取件员档案ID"}`（对自己可见任务可转） |
+| 邀请协助 | `POST /api/tasks/:id/assist` | 主取件员或客服/管理员；`{"workerId":"被邀取件员档案ID"}`。成功后返回 `201`+任务（`workers[]` 含 `role:"assist"`、`assistWorkerIds[]`）；协助人随后可查看/操作该任务并计入其“协助次数” |
+| 转单给他人 | `POST /api/tasks/:id/transfer` | 主取件员或客服/管理员；`{"workerId":"目标取件员档案ID"}`（目标必须存在；空串=收回） |
 | 再次取件（复制新单） | `POST /api/tasks/:id/again` | 客服/管理员；无需 body，返回 `201` + 新任务 |
 | 添加面单/货物 | `POST /api/tasks/:id/items` | `{"waybillNo":"…","goodsName":"…","pieces":1}`（返回 `201`+任务） |
 | 上报异常 | `POST /api/tasks/:id/exceptions` | `{"type":"…","description":"…"}`（返回 `201`+任务） |
@@ -299,7 +299,7 @@ Android 与鸿蒙端的 token 获取、通知权限、AGC 配置见 `docs/deploy
 | POST | `/api/v2/logout` | - | `{data:{ok:true}}` |
 | POST | `/api/v2/password` | `{"oldPassword","newPassword"}` | 新密码 ≥6 位 |
 
-角色与数据范围同第 1 节（courier 只能看/操作绑定自己的任务）。
+角色与数据范围同第 1 节（courier 只能看/操作绑定自己的任务；被邀请为“协助取件员”后，可查看并操作该任务、在任务列表中出现，完成的任务计入其“协助次数”，不占用其主取件统计）。
 
 ### 9.3 任务
 
@@ -313,7 +313,8 @@ Android 与鸿蒙端的 token 获取、通知权限、AGC 配置见 `docs/deploy
 | POST | `/api/v2/tasks/:id/items` | 补录货品：`{"entryMethod","waybillNo","goodsName","pieces","finalWeight","weightSource"}` |
 | POST | `/api/v2/tasks/:id/photos` | 上传照片（`multipart/form-data`，任意图片字段，可多张） |
 | POST | `/api/v2/tasks/:id/exceptions` | 上报异常 `{"type","description"}` |
-| POST | `/api/v2/tasks/:id/transfer` | 转派（任意角色）`{"workerId"}`（可为空=收回） |
+| POST | `/api/v2/tasks/:id/assist` | 邀请协助（主取件员或客服+）`{"workerId"}`，返回 `201` |
+| POST | `/api/v2/tasks/:id/transfer` | 转派（主取件员或客服+）`{"workerId"}`（目标必须存在；空串=收回） |
 | POST | `/api/v2/tasks/:id/reassign` | 改派（客服+）`{"workerId"}` |
 | POST | `/api/v2/tasks/:id/again` | 一键再来一单（客服+） |
 | POST | `/api/v2/exceptions/:id/resolve` | 处理异常（客服+）`{"resolution"}` → `{data:{exception}}` |

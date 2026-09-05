@@ -33,6 +33,7 @@
       </div>
       <div class="meta-grid">
         <div v-if="task.defaultWorkerName" class="meta"><span>取件员</span><b>{{ task.defaultWorkerName }}</b></div>
+        <div v-if="assistWorkerNames.length" class="meta"><span>协助取件</span><b>{{ assistWorkerNames.join('、') }}</b></div>
         <div v-if="task.mainCsName" class="meta"><span>主客服</span><b>{{ task.mainCsName }}</b></div>
         <div class="meta"><span>派单时间</span><b>{{ fmt(task.dispatchAt) || '—' }}</b></div>
         <div v-if="task.completedAt" class="meta"><span>完成时间</span><b>{{ fmt(task.completedAt) }}</b></div>
@@ -59,8 +60,8 @@
         <div class="grid2">
           <el-button type="primary" @click="itemVisible = true">扫码 / 录单</el-button>
           <el-button @click="uploadVisible = true">拍照留底</el-button>
-          <el-button @click="transferVisible = true">转派</el-button>
-          <el-button @click="assistVisible = true">邀请协助</el-button>
+          <el-button v-if="isPrimaryWorker" @click="transferVisible = true">转派</el-button>
+          <el-button v-if="isPrimaryWorker" @click="assistVisible = true">邀请协助</el-button>
           <el-button type="danger" plain @click="exceptionVisible = true">上报异常</el-button>
         </div>
       </div>
@@ -286,6 +287,8 @@ const exceptionTypes = ['客户取消', '到场无货', '联系不上', '地址�
 
 const isCs = computed(() => ['cs', 'admin'].includes(auth.role))
 const isWorker = computed(() => auth.role === 'worker')
+const isPrimaryWorker = computed(() => isWorker.value && Boolean(auth.user?.courierId && task.defaultWorkerId === auth.user.courierId))
+const assistWorkerNames = computed(() => (task.workers || []).filter((w: any) => w.role === 'assist').map((w: any) => w.name))
 const isBoss = computed(() => ['boss', 'admin'].includes(auth.role))
 const totalPieces = computed(() => (task.items || []).reduce((s: number, i: any) => s + (i.pieces || 0), 0))
 const canOperate = computed(() => {

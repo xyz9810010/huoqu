@@ -29,6 +29,14 @@ app.use(express.json({ limit: '20mb' }));
 // 请求日志统一隐藏会话票据、访问令牌和 API 密钥。
 app.use(createRequestLogger());
 
+// 基础安全响应头：防 MIME 嗅探、防点击劫持、不向外部页面泄漏来源地址。
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
 const PORT = process.env.PORT || 3000;
 // 图片上传目录（数据卷内）；上传处理集中在 server/http/api.js
 const uploadsDir = path.join(__dirname, 'data', 'uploads');
@@ -129,6 +137,8 @@ app.use((err, req, res, next) => {
 
 // 启动
 auth.pruneSessions();
+// 运行期定期清理过期会话（启动清理之外的长尾防护，轻量无阻塞）。
+setInterval(() => { try { auth.pruneSessions(); } catch (e) {} }, 6 * 3600 * 1000).unref();
 const adminBootstrap = auth.ensureAdmin();
 const httpServer = app.listen(PORT, () => {
   if (process.env.DISABLE_PUSH !== '1') notificationDispatcher.start();

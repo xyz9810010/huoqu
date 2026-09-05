@@ -41,6 +41,21 @@ function createBusinessNotificationPublisher(db, notifications) {
     });
   }
 
+  function taskAssistInvited(task, workerId, eventId) {
+    if (!task || !workerId || !workerUser) return null;
+    const recipient = workerUser.get(workerId);
+    if (!recipient) return null;
+    return notifications.publish({
+      recipientUserId: recipient.id,
+      type: 'pickupTask.assistInvited',
+      title: '协助取件邀请',
+      body: `${task.customerName} · ${task.address}`.slice(0, 500),
+      data: taskData(task, { assistWorkerId: workerId }),
+      priority: task.taskType === 'rush' ? 'high' : 'normal',
+      dedupeKey: `${eventId}:${recipient.id}`
+    });
+  }
+
   function taskStatusChanged(task, previousStatus, actor, eventId) {
     const actorId = actor && actor.id;
     return publishToUsers([task.dispatchCsId, task.mainCsId].filter(userId => userId !== actorId), eventId, () => ({
@@ -133,7 +148,7 @@ function createBusinessNotificationPublisher(db, notifications) {
   }
 
   return {
-    taskAssigned, taskStatusChanged, taskUrgent, taskException, taskExceptionResolved,
+    taskAssigned, taskStatusChanged, taskUrgent, taskException, taskExceptionResolved, taskAssistInvited,
     recordAssigned, recordStatusChanged
   };
 }

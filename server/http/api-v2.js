@@ -51,7 +51,10 @@ function fail(res, status, message, code = '') {
 
 function taskVisibleTo(user, task) {
   if (user.role === 'admin' || user.role === 'cs') return true;
-  return Boolean(user.courier_id && task.defaultWorkerId === user.courier_id);
+  return Boolean(user.courier_id && (
+    task.defaultWorkerId === user.courier_id ||
+    (Array.isArray(task.assistWorkerIds) && task.assistWorkerIds.includes(user.courier_id))
+  ));
 }
 
 function taskDetailV2(db, tasks, taskId) {
@@ -70,7 +73,12 @@ function taskDetailV2(db, tasks, taskId) {
     id: row.id, type: row.exception_type, description: row.description, resolved: Boolean(row.resolved),
     resolution: row.resolution, createdAt: row.created_at, resolvedAt: row.resolved_at
   }));
-  task.workers = task.defaultWorkerId ? [{ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' }] : [];
+  task.workers = [];
+  if (task.defaultWorkerId) task.workers.push({ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' });
+  for (const assistantId of task.assistWorkerIds || []) {
+    const assistant = db.prepare('SELECT name FROM couriers WHERE id=?').get(assistantId);
+    if (assistant) task.workers.push({ userId: assistantId, name: assistant.name, role: 'assist' });
+  }
   return isoTask(task);
 }
 
@@ -170,8 +178,16 @@ function mountApiV2Routes(app, deps) {
   // ============ 认证 ============
   app.post('/api/v2/auth/login', (req, res) => {
     const { username, password } = req.body || {};
+    const clientIp = String(req.ip || '').replace('::ffff:', '');
+    const blocked = auth.loginBlockedSeconds(username, clientIp);
+    if (blocked) return fail(res, 429, `登录失败次数过多，请 ${blocked} 秒后再试`, 'LOGIN_THROTTLED');
     const userRow = auth.verifyLogin(username, password);
-    if (!userRow) return fail(res, 401, '用户名或密码错误');
+    if (!userRow) {
+      const retryAfterSeconds = auth.noteLoginFailure(username, clientIp);
+      if (retryAfterSeconds) return fail(res, 429, `登录失败次数过多，请 ${retryAfterSeconds} 秒后再试`, 'LOGIN_THROTTLED');
+      return fail(res, 401, '用户名或密码错误');
+    }
+    auth.clearLoginFailures(username, clientIp);
     const token = auth.createSession(userRow.id);
     ok(res, { token, user: auth.publicUser(userRow) });
   });
@@ -263,6 +279,7 @@ function mountApiV2Routes(app, deps) {
         const updated = tasks.transitionTask(task.id, status, {
           id: req.user.id, name: req.user.name || req.user.username
         }, String((req.body && req.body.note) || ''));
+        broadcast({ type: 'task.updated', taskId: updated.id });
         ok(res, { task: isoTask(taskDetailV2(db, tasks, updated.id)) });
       } catch (error) {
         fail(res, 400, error.message || '更新任务失败');
@@ -274,17 +291,35 @@ function mountApiV2Routes(app, deps) {
   app.post('/api/v2/tasks/:id/cancel', requireAuth, transitionV2('cancelled'));
 
   app.post('/api/v2/tasks/:id/assist', requireAuth, (req, res) => {
-    const task = tasks.getTask(req.params.id);
-    if (!task) return fail(res, 404, '取件任务不存在');
-    ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) });
+    try {
+      const task = tasks.getTask(req.params.id);
+      if (!task) return fail(res, 404, '取件任务不存在');
+      const isPrimary = Boolean(req.user.courier_id && task.defaultWorkerId === req.user.courier_id);
+      if (req.user.role !== 'admin' && req.user.role !== 'cs' && !isPrimary) {
+        return fail(res, 403, '无权邀请协助');
+      }
+      const workerId = String((req.body && req.body.workerId) || '');
+      const updated = tasks.assistTask(task.id, workerId, { id: req.user.id, name: req.user.name || req.user.username });
+      broadcast({ type: 'task.updated', taskId: updated.id });
+      ok(res, { task: isoTask(taskDetailV2(db, tasks, updated.id)) }, 201);
+    } catch (error) {
+      fail(res, 400, error.message || '邀请协助失败');
+    }
   });
 
   app.post('/api/v2/tasks/:id/transfer', requireAuth, (req, res) => {
     const task = requireTaskAccess(req, res);
     if (!task) return;
     const workerId = String((req.body && req.body.workerId) || '');
+    if (workerId && !db.prepare('SELECT 1 FROM couriers WHERE id=?').get(workerId)) {
+      return fail(res, 400, '取件员不存在');
+    }
+    if (req.user.role !== 'admin' && req.user.role !== 'cs' && task.defaultWorkerId !== req.user.courier_id) {
+      return fail(res, 403, '只有主取件员或客服可以转派');
+    }
     try {
       const updated = tasks.assignTask(task.id, workerId, { id: req.user.id, name: req.user.name || req.user.username });
+      broadcast({ type: 'task.updated', taskId: updated.id });
       ok(res, { task: isoTask(taskDetailV2(db, tasks, updated.id)) });
     } catch (error) {
       fail(res, 400, error.message || '转派失败');
@@ -344,6 +379,7 @@ function mountApiV2Routes(app, deps) {
     db.prepare(`INSERT INTO task_events (id,task_id,event_type,note,actor_id,actor_name,created_at)
       VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), task.id, 'item_added', waybillNo,
       req.user.id, req.user.name || req.user.username, createdAt);
+    broadcast({ type: 'task.updated', taskId: task.id });
     ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) }, 201);
   });
 
@@ -353,6 +389,7 @@ function mountApiV2Routes(app, deps) {
     const createdAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
     const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
     for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);
+    broadcast({ type: 'task.updated', taskId: task.id });
     ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) }, 201);
   });
 

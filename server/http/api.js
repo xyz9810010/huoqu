@@ -93,8 +93,20 @@ function dataFilter(user) {
 // ================= 认证 =================
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
+  const clientIp = String(req.ip || '').replace('::ffff:', '');
+  const blocked = auth.loginBlockedSeconds(username, clientIp);
+  if (blocked) {
+    return res.status(429).json({ error: `登录失败次数过多，请 ${blocked} 秒后再试`, retryAfterSeconds: blocked });
+  }
   const u = auth.verifyLogin(username, password);
-  if (!u) return res.status(401).json({ error: '用户名或密码错误' });
+  if (!u) {
+    const retryAfterSeconds = auth.noteLoginFailure(username, clientIp);
+    if (retryAfterSeconds) {
+      return res.status(429).json({ error: `登录失败次数过多，请 ${retryAfterSeconds} 秒后再试`, retryAfterSeconds });
+    }
+    return res.status(401).json({ error: '用户名或密码错误' });
+  }
+  auth.clearLoginFailures(username, clientIp);
   const token = auth.createSession(u.id);
   res.json({ token, user: auth.publicUser(u) });
 });
@@ -120,7 +132,10 @@ app.post('/api/password', requireAuth, (req, res) => {
 // ================= 统一取件任务 =================
 function taskVisibleTo(user, task) {
   if (user.role === 'admin' || user.role === 'cs') return true;
-  return Boolean(user.courier_id && task.defaultWorkerId === user.courier_id);
+  return Boolean(user.courier_id && (
+    task.defaultWorkerId === user.courier_id ||
+    (Array.isArray(task.assistWorkerIds) && task.assistWorkerIds.includes(user.courier_id))
+  ));
 }
 
 function taskDetail(taskId) {
@@ -142,7 +157,12 @@ function taskDetail(taskId) {
     id: row.id, type: row.exception_type, description: row.description, resolved: Boolean(row.resolved),
     resolution: row.resolution, createdAt: row.created_at, resolvedAt: row.resolved_at
   }));
-  task.workers = task.defaultWorkerId ? [{ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' }] : [];
+  task.workers = [];
+  if (task.defaultWorkerId) task.workers.push({ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' });
+  for (const assistantId of task.assistWorkerIds || []) {
+    const assistant = db.prepare('SELECT name FROM couriers WHERE id=?').get(assistantId);
+    if (assistant) task.workers.push({ userId: assistantId, name: assistant.name, role: 'assist' });
+  }
   return task;
 }
 
@@ -237,6 +257,7 @@ app.post('/api/tasks/:id/items', requireAuth, (req, res) => {
     );
   db.prepare(`INSERT INTO task_events (id,task_id,event_type,note,actor_id,actor_name,created_at)
     VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), task.id, 'item_added', waybillNo, req.user.id, req.user.name || req.user.username, createdAt);
+  broadcast({ type: 'task.updated', taskId: task.id });
   res.status(201).json(taskDetail(task.id));
 });
 
@@ -285,26 +306,49 @@ app.post('/api/tasks/:id/reassign', requireAuth, requireStaff, (req, res) => {
   const workerId = String((req.body && req.body.workerId) || '');
   if (workerId && !db.prepare('SELECT 1 FROM couriers WHERE id=?').get(workerId)) return res.status(400).json({ error: '取件员不存在' });
   try {
-    res.json(taskDetail(tasks.assignTask(req.params.id, workerId, {
+    const updated = tasks.assignTask(req.params.id, workerId, {
       id: req.user.id, name: req.user.name || req.user.username
-    }).id));
+    });
+    broadcast({ type: 'task.updated', taskId: updated.id });
+    res.json(taskDetail(updated.id));
   } catch (error) {
     res.status(400).json({ error: error.message || '改派失败' });
   }
 });
 app.post('/api/tasks/:id/transfer', requireAuth, (req, res) => {
   const workerId = String((req.body && req.body.workerId) || '');
+  if (workerId && !db.prepare('SELECT 1 FROM couriers WHERE id=?').get(workerId)) return res.status(400).json({ error: '取件员不存在' });
   const task = tasks.getTask(req.params.id);
   if (!task || !taskVisibleTo(req.user, task)) return res.status(task ? 403 : 404).json({ error: task ? '无权操作该任务' : '取件任务不存在' });
+  if (req.user.role !== 'admin' && req.user.role !== 'cs' && task.defaultWorkerId !== req.user.courier_id) {
+    return res.status(403).json({ error: '只有主取件员或客服可以转派' });
+  }
   try {
-    res.json(taskDetail(tasks.assignTask(task.id, workerId, {
+    const updated = tasks.assignTask(task.id, workerId, {
       id: req.user.id, name: req.user.name || req.user.username
-    }).id));
+    });
+    broadcast({ type: 'task.updated', taskId: updated.id });
+    res.json(taskDetail(updated.id));
   } catch (error) {
     res.status(400).json({ error: error.message || '转派失败' });
   }
 });
-app.post('/api/tasks/:id/assist', requireAuth, (req, res) => res.json(taskDetail(req.params.id)));
+app.post('/api/tasks/:id/assist', requireAuth, (req, res) => {
+  try {
+    const task = tasks.getTask(req.params.id);
+    if (!task) return res.status(404).json({ error: '取件任务不存在' });
+    const isPrimary = Boolean(req.user.courier_id && task.defaultWorkerId === req.user.courier_id);
+    if (req.user.role !== 'admin' && req.user.role !== 'cs' && !isPrimary) {
+      return res.status(403).json({ error: '无权邀请协助' });
+    }
+    const workerId = String((req.body && req.body.workerId) || '');
+    const updated = tasks.assistTask(task.id, workerId, { id: req.user.id, name: req.user.name || req.user.username });
+    broadcast({ type: 'task.updated', taskId: task.id });
+    res.status(201).json(taskDetail(updated.id));
+  } catch (error) {
+    res.status(400).json({ error: error.message || '邀请协助失败' });
+  }
+});
 
 app.put('/api/tasks/:id', requireAuth, requireStaff, (req, res) => {
   const task = tasks.getTask(req.params.id);
@@ -312,6 +356,7 @@ app.put('/api/tasks/:id', requireAuth, requireStaff, (req, res) => {
   try {
     const updated = tasks.updateTask(task.id, req.body || {}, { id: req.user.id, name: req.user.name || req.user.username });
     logOperation(req.user, '修改取件任务', 'task', task.id);
+    broadcast({ type: 'task.updated', taskId: updated.id });
     res.json(taskDetail(updated.id));
   } catch (error) {
     res.status(400).json({ error: error.message || '修改取件任务失败' });
@@ -329,6 +374,7 @@ app.post('/api/tasks/:id/again', requireAuth, requireStaff, (req, res) => {
       internalNote: source.internalNote, items: source.items.map(item => ({ goodsName: item.goodsName, pieces: item.pieces }))
     }, { id: req.user.id, name: req.user.name || req.user.username });
     logOperation(req.user, '再次取件', 'task', created.id, `来源 ${source.taskNo}`);
+    broadcast({ type: 'task.created', taskId: created.id, status: created.status });
     res.status(201).json(created);
   } catch (error) {
     res.status(400).json({ error: error.message || '创建任务失败' });
@@ -343,6 +389,7 @@ app.post('/api/tasks/:id/photos', requireAuth, imageUpload.any(), (req, res) => 
   const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
   for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);
   logOperation(req.user, '上传取件照片', 'task', task.id, String((req.files || []).length));
+  broadcast({ type: 'task.updated', taskId: task.id });
   res.status(201).json(taskDetail(task.id));
 });
 
@@ -404,11 +451,13 @@ app.get('/api/dashboard/workers', requireAuth, (req, res) => {
     const taskRows = db.prepare('SELECT * FROM pickup_tasks WHERE default_worker_id=?').all(worker.id);
     const ids = taskRows.map(row => row.id);
     const itemRows = ids.length ? db.prepare(`SELECT * FROM pickup_items WHERE task_id IN (${ids.map(() => '?').join(',')})`).all(...ids) : [];
+    const assistCount = db.prepare(`SELECT COUNT(DISTINCT t.id) AS n FROM pickup_tasks t
+      JOIN task_assistants a ON a.task_id=t.id WHERE a.worker_id=? AND t.status='completed'`).get(worker.id).n;
     return {
       id: worker.id, name: worker.name, pickupCount: taskRows.filter(row => row.status === 'completed').length,
       customerCount: new Set(taskRows.map(row => row.customer_id || row.customer_name_snap)).size,
       pieces: itemRows.reduce((sum, row) => sum + Number(row.pieces || 0), 0),
-      weight: itemRows.reduce((sum, row) => sum + num(row.final_weight), 0), assistCount: 0,
+      weight: itemRows.reduce((sum, row) => sum + num(row.final_weight), 0), assistCount,
       pending: taskRows.filter(row => row.status === 'pending' || row.status === 'in_progress').length
     };
   }));
@@ -444,9 +493,35 @@ app.get('/api/dashboard/attention', requireAuth, (req, res) => {
   });
 });
 
+function workerStatsWindow(db, courierId, start, end) {
+  const base = `SELECT COALESCE(SUM(i.pieces),0) AS pieces,
+      COALESCE(SUM(CASE WHEN i.match_status='matched' THEN i.final_weight ELSE 0 END),0) AS matchedWeight
+    FROM pickup_tasks t JOIN pickup_items i ON i.task_id=t.id
+    WHERE t.status='completed' AND t.default_worker_id=? AND substr(COALESCE(NULLIF(t.completed_at,''),t.updated_at),1,10) BETWEEN ? AND ?`;
+  const counts = db.prepare(`SELECT COUNT(*) AS pickupCount,
+      COUNT(DISTINCT t.customer_id || '|' || t.customer_name_snap) AS customerCount
+    FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
+      AND substr(COALESCE(NULLIF(t.completed_at,''),t.updated_at),1,10) BETWEEN ? AND ?`).get(courierId, start, end);
+  const sums = db.prepare(base).get(courierId, start, end);
+  return { pickupCount: counts.pickupCount, customerCount: counts.customerCount, pieces: sums.pieces, matchedWeight: Math.round(sums.matchedWeight * 100) / 100 };
+}
+
 app.get('/api/dashboard/me', requireAuth, (req, res) => {
-  const list = tasks.listTasks({ workerId: req.user.courier_id || '__none__' });
-  res.json({ pending: list.filter(t => t.status === 'pending').length, inProgress: list.filter(t => t.status === 'in_progress').length, completed: list.filter(t => t.status === 'completed').length, pieces: list.flatMap(t => t.items).reduce((s, i) => s + i.pieces, 0) });
+  const courierId = req.user.courier_id || '__none__';
+  const list = tasks.listTasks({ workerId: courierId });
+  const today = todayStr();
+  const monthStart = today.slice(0, 8) + '01';
+  const assistCount = courierId === '__none__' ? 0 : db.prepare(`SELECT COUNT(DISTINCT t.id) AS n FROM pickup_tasks t
+    JOIN task_assistants a ON a.task_id=t.id WHERE a.worker_id=? AND t.status='completed'`).get(courierId).n;
+  res.json({
+    pending: list.filter(t => t.status === 'pending').length,
+    inProgress: list.filter(t => t.status === 'in_progress').length,
+    completed: list.filter(t => t.status === 'completed').length,
+    pieces: list.flatMap(t => t.items).reduce((s, i) => s + Number(i.pieces || 0), 0),
+    assistCount,
+    today: workerStatsWindow(db, courierId, today, today),
+    month: workerStatsWindow(db, courierId, monthStart, today)
+  });
 });
 app.get('/api/worker/tasks', requireAuth, (req, res) => res.json(tasks.listTasks({ workerId: req.user.courier_id || '__none__', status: String(req.query.status || '') })));
 
@@ -1398,30 +1473,78 @@ function maskName(name) {
   return s.length <= 1 ? s : s[0] + '**';
 }
 // 客户自助查单（免登录）：按订单号/面单号，或按「手机号 + 姓氏」查询轨迹
+function trackTaskRecord(q, phone, surname) {
+  // 新任务模型优先（业务订单号/任务号/明细面单号），旧 records 兜底，兼顾迁移后的老单。
+  if (q) {
+    const task = db.prepare(`SELECT DISTINCT t.* FROM pickup_tasks t
+      LEFT JOIN pickup_items i ON i.task_id = t.id
+      WHERE t.business_order_no = ? OR t.task_no = ? OR i.waybill_no = ?
+      ORDER BY t.created_at DESC LIMIT 1`).get(q, q, q);
+    if (task) return { task };
+    const legacy = db.prepare('SELECT * FROM records WHERE order_no = ? OR tracking_no = ?').get(q, q);
+    return { legacy };
+  }
+  if (phone) {
+    const custIds = db.prepare('SELECT id,name,contact FROM customers WHERE phone = ?').all(phone)
+      .filter(c => String(c.name || '').startsWith(surname) || String(c.contact || '').startsWith(surname))
+      .map(c => c.id);
+    const task = custIds.length
+      ? db.prepare(`SELECT * FROM pickup_tasks WHERE customer_id IN (${custIds.map(() => '?').join(',')})
+          ORDER BY created_at DESC LIMIT 1`).get(...custIds)
+      : null;
+    if (!task) {
+      const bySnap = db.prepare(`SELECT * FROM pickup_tasks
+        WHERE phone_snap = ? AND (customer_name_snap LIKE ? OR contact_snap LIKE ?)
+        ORDER BY created_at DESC LIMIT 1`).get(phone, surname + '%', surname + '%');
+      if (bySnap) return { task: bySnap };
+    } else {
+      return { task };
+    }
+    if (!custIds.length) return {};
+    const legacy = db.prepare(`SELECT * FROM records WHERE customer_id IN (${custIds.map(() => '?').join(',')})
+      ORDER BY date DESC, id DESC LIMIT 1`).get(...custIds);
+    return { legacy };
+  }
+  return {};
+}
+
 app.get('/api/track', (req, res) => {
   const q = String(req.query.q || '').trim();
   const phone = String(req.query.phone || '').trim();
   const surname = String(req.query.surname || '').trim();
-  let r = null;
-  if (q) {
-    r = db.prepare('SELECT * FROM records WHERE order_no = ? OR tracking_no = ?').get(q, q);
-  } else if (phone) {
-    if (!surname) return res.status(400).json({ error: '请同时输入姓氏以确认身份' });
-    const custs = db.prepare('SELECT * FROM customers WHERE phone = ?').all(phone);
-    if (!custs.length) return res.status(404).json({ error: '未查询到该手机号对应的订单' });
-    const matched = custs.filter(c => String(c.name || '').startsWith(surname) || String(c.contact || '').startsWith(surname));
-    if (!matched.length) return res.status(404).json({ error: '手机号与姓氏不匹配，无法查询' });
-    const ids = matched.map(c => c.id);
-    r = db.prepare(`SELECT * FROM records WHERE customer_id IN (${ids.map(() => '?').join(',')}) ORDER BY date DESC, id DESC LIMIT 1`).get(...ids);
-  } else {
-    return res.status(400).json({ error: '请输入订单号、面单号或手机号' });
+  if (!q && !phone) return res.status(400).json({ error: '请输入订单号、面单号或手机号' });
+  if (phone && !surname) return res.status(400).json({ error: '请同时输入姓氏以确认身份' });
+  const found = trackTaskRecord(q, phone, surname);
+  const task = found.task;
+  const legacy = found.legacy;
+  if (task) {
+    const label = { pending: '待取', in_progress: '取件中', completed: '已完成', cancelled: '已取消' }[task.status] || task.status;
+    const totalPieces = db.prepare('SELECT COALESCE(SUM(pieces),0) AS n FROM pickup_items WHERE task_id=?').get(task.id).n;
+    const waybills = db.prepare("SELECT waybill_no FROM pickup_items WHERE task_id=? AND waybill_no<>'' ORDER BY sort_order").all(task.id).map(r => r.waybill_no);
+    const timeline = db.prepare(`SELECT event_type,note,actor_name AS by,created_at AS at FROM task_events
+      WHERE task_id=? ORDER BY created_at,rowid`).all(task.id).map(row => ({
+        status: ({ created: '已下单', assigned: '已派单', assist_added: '已邀请协助', status_changed: label, updated: '信息更新', exception_resolved: '异常已处理' })[row.event_type] || row.event_type,
+        note: row.note || '', by: row.by || '', at: row.at || ''
+      }));
+    return res.json({
+      taskNo: task.task_no || '',
+      orderNo: task.business_order_no || '',
+      trackingNo: waybills.join('、'),
+      customer: maskName(task.customer_name_snap || ''),
+      pieces: totalPieces,
+      goods: task.pickup_note || '',
+      status: label,
+      timeline
+    });
   }
-  if (!r) return res.status(404).json({ error: '未查询到该单' });
-  const timeline = db.prepare('SELECT status, note, user_name AS by, created_at AS at FROM record_status_log WHERE record_id = ? ORDER BY rowid ASC').all(r.id);
-  res.json({
-    orderNo: r.order_no || '', trackingNo: r.tracking_no || '', customer: maskName(r.customer),
-    pieces: r.pieces, goods: r.goods || '', status: r.status || '待取', timeline
-  });
+  if (legacy) {
+    const timeline = db.prepare('SELECT status, note, user_name AS by, created_at AS at FROM record_status_log WHERE record_id = ? ORDER BY rowid ASC').all(legacy.id);
+    return res.json({
+      orderNo: legacy.order_no || '', trackingNo: legacy.tracking_no || '', customer: maskName(legacy.customer),
+      pieces: legacy.pieces, goods: legacy.goods || '', status: legacy.status || '待取', timeline
+    });
+  }
+  return res.status(404).json({ error: '未查询到该单' });
 });
 
 // 健康检查

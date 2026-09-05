@@ -73,13 +73,14 @@ function taskFromRow(db, row) {
     settled: row.settled,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    items: db.prepare('SELECT * FROM pickup_items WHERE task_id = ? ORDER BY sort_order, created_at, id').all(row.id).map(itemFromRow)
+    items: db.prepare('SELECT * FROM pickup_items WHERE task_id = ? ORDER BY sort_order, created_at, id').all(row.id).map(itemFromRow),
+    assistWorkerIds: db.prepare('SELECT worker_id FROM task_assistants WHERE task_id = ? ORDER BY created_at, id').all(row.id).map(row => row.worker_id)
   };
 }
 
 function createTaskModule(db, options = {}) {
   const publisher = Object.assign({
-    taskAssigned() {}, taskStatusChanged() {}, taskUrgent() {}, taskException() {}, taskExceptionResolved() {}
+    taskAssigned() {}, taskStatusChanged() {}, taskUrgent() {}, taskException() {}, taskExceptionResolved() {}, taskAssistInvited() {}
   }, options.publisher || {});
   const insertTask = db.prepare(`INSERT INTO pickup_tasks (
     id,task_no,business_order_no,customer_id,customer_name_snap,address_snap,contact_snap,phone_snap,
@@ -98,6 +99,11 @@ function createTaskModule(db, options = {}) {
   const insertEvent = db.prepare(`INSERT INTO task_events
     (id,task_id,event_type,from_status,to_status,note,actor_id,actor_name,created_at)
     VALUES (@id,@taskId,@eventType,@fromStatus,@toStatus,@note,@actorId,@actorName,@createdAt)`);
+  const insertAssistant = db.prepare(`INSERT INTO task_assistants (id,task_id,worker_id,added_by,created_at)
+    VALUES (@id,@taskId,@workerId,@addedBy,@createdAt)`);
+  const hasCouriers = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='couriers'").get());
+  const workerExists = hasCouriers ? db.prepare('SELECT id FROM couriers WHERE id=?') : null;
+  const isAssistant = db.prepare('SELECT 1 FROM task_assistants WHERE task_id=? AND worker_id=?');
 
   function getTask(taskId) {
     return taskFromRow(db, db.prepare('SELECT * FROM pickup_tasks WHERE id = ?').get(taskId));
@@ -211,6 +217,29 @@ function createTaskModule(db, options = {}) {
     return getTask(taskId);
   }
 
+  function assistTask(taskId, workerId, actor = {}) {
+    const task = getTask(taskId);
+    if (!task) throw new Error('取件任务不存在');
+    const worker = String(workerId || '').trim();
+    if (!worker) throw new Error('请选择协助取件员');
+    if (!workerExists || !workerExists.get(worker)) throw new Error('协助取件员不存在');
+    if (task.status === 'completed' || task.status === 'cancelled') throw new Error('已完成或已取消任务不能再邀请协助');
+    if (task.defaultWorkerId === worker) throw new Error('主取件员无需邀请协助');
+    if (isAssistant.get(taskId, worker)) throw new Error('该取件员已在协助名单');
+    const changedAt = now();
+    const eventId = actor.eventId || id();
+    const transaction = db.transaction(() => {
+      insertAssistant.run({ id: eventId, taskId, workerId: worker, addedBy: actor.id || '', createdAt: changedAt });
+      insertEvent.run({
+        id: eventId, taskId, eventType: 'assist_added', fromStatus: '', toStatus: '',
+        note: `${task.defaultWorkerId || ''}->${worker}`, actorId: actor.id || '', actorName: actor.name || '', createdAt: changedAt
+      });
+      publisher.taskAssistInvited(getTask(taskId), worker, eventId);
+    });
+    transaction();
+    return getTask(taskId);
+  }
+
   function updateTask(taskId, input = {}, actor = {}) {
     const task = getTask(taskId);
     if (!task) throw new Error('取件任务不存在');
@@ -298,7 +327,10 @@ function createTaskModule(db, options = {}) {
     const clauses = [];
     const params = [];
     if (filters.status) { clauses.push('status = ?'); params.push(filters.status); }
-    if (filters.workerId) { clauses.push('default_worker_id = ?'); params.push(filters.workerId); }
+    if (filters.workerId) {
+      clauses.push('(default_worker_id = ? OR id IN (SELECT task_id FROM task_assistants WHERE worker_id = ?))');
+      params.push(filters.workerId, filters.workerId);
+    }
     if (filters.customerId) { clauses.push('customer_id = ?'); params.push(filters.customerId); }
     if (filters.keyword) {
       clauses.push('(task_no LIKE ? OR business_order_no LIKE ? OR customer_name_snap LIKE ? OR address_snap LIKE ?)');
@@ -323,7 +355,7 @@ function createTaskModule(db, options = {}) {
     return db.prepare(sql).all(...bound).map(row => taskFromRow(db, row));
   }
 
-  return { createTask, getTask, countTasks, listTasks, transitionTask, assignTask, updateTask, reportException, resolveException };
+  return { createTask, getTask, countTasks, listTasks, transitionTask, assignTask, updateTask, assistTask, reportException, resolveException };
 }
 
 module.exports = { createTaskModule, STATUS_LABELS };

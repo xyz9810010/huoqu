@@ -209,14 +209,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { init, use, type ECharts } from 'echarts/core'
-import { BarChart, LineChart, PieChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
+import type { ECharts } from 'echarts/core'
 import http from '../api'
 import { createRealtimeRefreshSubscription, isTaskRealtimeEvent } from '../services/realtime-events'
-
-use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 const mode = ref<'table' | 'chart'>('table')
 const range = ref('today')
@@ -232,6 +227,14 @@ const workerChartEl = ref<HTMLElement>()
 const customerChartEl = ref<HTMLElement>()
 const csChartEl = ref<HTMLElement>()
 let charts: ECharts[] = []
+let echartsSetupPromise: Promise<typeof import('../services/echarts-setup')> | null = null
+let renderSeq = 0
+async function getEchartsSetup() {
+  if (!echartsSetupPromise) {
+    echartsSetupPromise = import('../services/echarts-setup')
+  }
+  return echartsSetupPromise
+}
 const liveRefresh = createRealtimeRefreshSubscription({ predicate: isTaskRealtimeEvent, refresh: loadAll, delayMs: 250 })
 
 const metrics = computed(() => [
@@ -275,18 +278,23 @@ function disposeCharts() {
   charts = []
 }
 
-function initChart(el: HTMLElement | undefined, option: any) {
+async function initChart(el: HTMLElement | undefined, option: any, seq: number) {
   if (!el) return
-  const c = init(el)
+  const setup = await getEchartsSetup()
+  if (seq !== renderSeq) return
+  const c = setup.createChart(el)
   c.setOption(option)
   charts.push(c)
 }
 
-function renderCharts() {
+async function renderCharts() {
+  const seq = ++renderSeq
   disposeCharts()
+  await getEchartsSetup()
+  if (seq !== renderSeq) return
 
   // 出货重量趋势：折线图
-  initChart(trendChartEl.value, {
+  await initChart(trendChartEl.value, {
     tooltip: { trigger: 'axis' },
     grid: { left: 55, right: 20, top: 30, bottom: 30 },
     xAxis: { type: 'category', data: trends.weight.map((t: any) => t.date), boundaryGap: false },
@@ -296,11 +304,11 @@ function renderCharts() {
       data: trends.weight.map((t: any) => t.weight),
       areaStyle: { opacity: 0.08 }, itemStyle: { color: '#3370ff' }, lineStyle: { width: 2.5 },
     }],
-  })
+  }, seq)
 
   // 取件员重量排行：横向柱状图
   const ws = [...workers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0))
-  initChart(workerChartEl.value, {
+  await initChart(workerChartEl.value, {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 90, right: 40, top: 20, bottom: 30 },
     xAxis: { type: 'value', name: 'kg' },
@@ -309,11 +317,11 @@ function renderCharts() {
       type: 'bar', data: ws.map((w) => w.weight), barMaxWidth: 22,
       itemStyle: { borderRadius: [0, 4, 4, 0], color: '#3370ff' },
     }],
-  })
+  }, seq)
 
   // 客户重量占比：环形饼图
   const topCustomers = [...customers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0)).slice(0, 8)
-  initChart(customerChartEl.value, {
+  await initChart(customerChartEl.value, {
     tooltip: { trigger: 'item', formatter: '{b}: {c} kg ({d}%)' },
     legend: { bottom: 0, type: 'scroll' },
     series: [{
@@ -322,10 +330,10 @@ function renderCharts() {
       label: { formatter: '{b}\n{d}%' },
       itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
     }],
-  })
+  }, seq)
 
   // 客服重量：柱状图
-  initChart(csChartEl.value, {
+  await initChart(csChartEl.value, {
     tooltip: { trigger: 'axis' },
     grid: { left: 55, right: 20, top: 30, bottom: 30 },
     xAxis: { type: 'category', data: cs.value.map((c) => c.name) },
@@ -334,7 +342,7 @@ function renderCharts() {
       type: 'bar', data: cs.value.map((c) => c.weight), barMaxWidth: 30,
       itemStyle: { borderRadius: [4, 4, 0, 0], color: '#34c724' },
     }],
-  })
+  }, seq)
 }
 
 watch(mode, async (m) => {

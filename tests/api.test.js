@@ -221,6 +221,22 @@ test('v1 photo upload to a task without permission rejects before multer writes 
   token = adminToken;
 });
 
+
+test('v1 photo upload as JSON body is rejected with a clear 400 (multer sees zero files)', async () => {
+  const courier = await request('POST', '/api/couriers', { name: 'JSON上传测试', region: '江东', commissionRate: 3 });
+  const task = await request('POST', '/api/tasks', {
+    customerName: 'JSON上传客户', address: '地址Y', defaultWorkerId: courier.data.id, items: []
+  });
+  const res = await fetch(baseUrl + `/api/tasks/${task.data.id}/photos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ photoBase64: 'aW1hZ2UtYnl0ZXM=', caption: 'base64 不是 multipart 文件' })
+  });
+  const body = await res.json();
+  assert.equal(res.status, 400);
+  assert.match(body.error, /multipart\/form-data/);
+});
+
 test('dashboard and attention endpoints summarize the canonical task model', async () => {
   token = adminToken;
   const board = await request('GET', '/api/dashboard/board?range=month');

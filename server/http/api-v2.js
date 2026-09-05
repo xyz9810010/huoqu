@@ -372,6 +372,9 @@ function mountApiV2Routes(app, deps) {
     next();
   }, imageUpload.any(), (req, res) => {
     const task = req.huoquTask;
+    if (!req.files || !req.files.length) {
+      return fail(res, 400, '未收到图片文件：请以 multipart/form-data 的图片字段上传');
+    }
     const createdAt = utcText();
     const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
     for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);

@@ -435,6 +435,24 @@ test('v2 photo upload to a missing task rejects before multer writes anything', 
   assert.equal(res.status, 404);
 });
 
+
+test('v2 photo upload without a file part is rejected with a clear 400', async () => {
+  const created = await request('POST', '/api/v2/tasks', {
+    customerName: '空文件客户', address: '地址', items: []
+  });
+  const taskId = created.body.data.task.id;
+  const form = new FormData();
+  form.append('caption', 'not a file'); // multipart 但没有文件字段
+  const res = await fetch(baseUrl + `/api/v2/tasks/${taskId}/photos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form
+  });
+  const body = await res.json();
+  assert.equal(res.status, 400);
+  assert.match(body.error, /multipart\/form-data/);
+});
+
 test('v2 records 分页上限收敛 / 越界页与稳定倒序', async () => {
   const admin = await request('POST', '/api/v2/auth/login', { username: 'admin', password: 'test-admin-strong-password' }, false);
   assert.equal(admin.status, 200);

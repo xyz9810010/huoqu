@@ -491,12 +491,35 @@ function migrateTaskTimestamps(db) {
   }
 }
 
+// 手机推送按“一个用户一台工作手机”策略去重：同用户同供应商仅保留最新一条 active 的
+// vendor_push 订阅，其余作废并把仍在等待的投递直接置为失败（防重复推送 + 防止无用重试）。
+// 每次启动幂等执行，可修复历史多 token 残留（例如鸿蒙端换包/重装后旧登记仍 active）。
+function dedupeActiveVendorSubscriptions(db) {
+  const superseded = db.prepare(`SELECT a.id FROM notification_subscriptions a
+    WHERE a.channel='vendor_push' AND a.status='active'
+      AND EXISTS (SELECT 1 FROM notification_subscriptions b
+        WHERE b.channel='vendor_push' AND b.status='active'
+          AND b.user_id=a.user_id AND b.provider_code=a.provider_code
+          AND (b.updated_at>a.updated_at OR (b.updated_at=a.updated_at AND b.rowid>a.rowid)))`).all();
+  if (!superseded.length) return 0;
+  const ids = superseded.map(row => row.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const timestamp = new Date().toISOString();
+  db.prepare(`UPDATE notification_subscriptions SET status='invalid', invalidated_at=?, updated_at=?
+    WHERE id IN (${placeholders})`).run(timestamp, timestamp, ...ids);
+  db.prepare(`UPDATE notification_deliveries SET status='failed', locked_at='', next_attempt_at='',
+    last_error_code='TARGET_SUPERSEDED', last_error_message=''
+    WHERE subscription_id IN (${placeholders}) AND status IN ('pending','processing')`).run(...ids);
+  return superseded.length;
+}
+
 function migrate(db) {
   const migration = db.transaction(() => {
     db.pragma('foreign_keys = ON');
     createSchema(db);
     migrateLegacyRecords(db);
     migrateTaskTimestamps(db);
+    dedupeActiveVendorSubscriptions(db);
   });
   migration();
   return db;

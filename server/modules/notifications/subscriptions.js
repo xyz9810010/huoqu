@@ -35,6 +35,13 @@ function createSubscriptionStore(db, secretBox, options = {}) {
       platform=excluded.platform,device_label=excluded.device_label,app_version=excluded.app_version,
       role=excluded.role,courier_id=excluded.courier_id,status='active',invalidated_at='',
       last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at`);
+  const activeVendorForUser = db.prepare(`SELECT id FROM notification_subscriptions
+    WHERE channel='vendor_push' AND status='active' AND user_id=? AND provider_code=? AND id<>?`);
+  const supersedeActive = db.prepare(`UPDATE notification_subscriptions
+    SET status='invalid', invalidated_at=?, updated_at=? WHERE id=?`);
+  const failSupersededDeliveries = db.prepare(`UPDATE notification_deliveries
+    SET status='failed', locked_at='', next_attempt_at='', last_error_code='TARGET_SUPERSEDED', last_error_message=''
+    WHERE subscription_id=? AND status IN ('pending','processing')`);
 
   function register(input) {
     const userId = String(input.userId || '').trim();
@@ -48,7 +55,16 @@ function createSubscriptionStore(db, secretBox, options = {}) {
       String(input.platform || ''), String(input.deviceLabel || ''), String(input.appVersion || ''),
       String(input.role || ''), String(input.courierId || ''), timestamp, timestamp, timestamp
     );
-    return publicSubscription(findByTarget.get(providerCode, targetFingerprint));
+    const registered = findByTarget.get(providerCode, targetFingerprint);
+    if (channel === 'vendor_push') {
+      // 手机推送按“一个用户一台工作手机”策略：新登记取代该用户同供应商的旧登记，
+      // 避免旧 token 残留导致一次派单在鸿蒙/安卓端收到重复推送。
+      for (const stale of activeVendorForUser.all(userId, providerCode, registered.id)) {
+        supersedeActive.run(timestamp, timestamp, stale.id);
+        failSupersededDeliveries.run(stale.id);
+      }
+    }
+    return publicSubscription(registered);
   }
 
   function tableExists(table) {

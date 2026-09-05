@@ -8,6 +8,29 @@ const XLSX = require('xlsx');
 const { mountNotificationRoutes } = require('../modules/notifications/routes');
 const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
 const { createUploader } = require('./uploads');
+const { utcText, utcTextToBjText } = require('../time');
+
+// v1（Web）展示口径：任务域存储为 UTC 空格文本，输出前统一转为北京时间文本。
+// 只转换机器时刻字段；scheduled_time/rush_ship_time 为录入型北京钟面文本，保持原样。
+const TASK_UTC_FIELDS = ['createdAt', 'updatedAt', 'dispatchAt', 'completedAt'];
+function localizeTimeFields(obj, fields) {
+  if (!obj) return obj;
+  for (const key of fields) {
+    if (obj[key] !== undefined) obj[key] = utcTextToBjText(obj[key]);
+  }
+  return obj;
+}
+function localizeTaskForWeb(task) {
+  if (!task) return task;
+  localizeTimeFields(task, TASK_UTC_FIELDS);
+  for (const item of task.items || []) localizeTimeFields(item, ['createdAt', 'updatedAt']);
+  for (const photo of task.photos || []) localizeTimeFields(photo, ['createdAt']);
+  for (const exception of task.exceptions || []) localizeTimeFields(exception, ['createdAt', 'resolvedAt']);
+  return task;
+}
+function localizeExceptionForWeb(exception) {
+  return localizeTimeFields(exception, ['createdAt', 'resolvedAt']);
+}
 
 function mountApiRoutes(app, deps) {
   const {
@@ -41,6 +64,8 @@ function mountApiRoutes(app, deps) {
 const pad = (n) => (n < 10 ? '0' + n : '' + n);
 const bjNow = () => new Date(Date.now() + 8 * 3600 * 1000); // 北京时间(UTC+8)
 const todayStr = () => { const d = bjNow(); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
+// nowStr 只用于北京自洽模块（操作日志/旧 records/基础资料等原样展示的表）；
+// 任务域机器时刻一律 utcText()（见 server/time.js）。
 const nowStr = () => { const d = bjNow(); return todayStr() + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()); };
 const startOfWeek = () => { const d = bjNow(); const day = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() - day + 1); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
 const rowCourier = (c) => ({ id: c.id, name: c.name, region: c.region || '', commissionRate: c.commission_rate || 0 });
@@ -163,7 +188,7 @@ function taskDetail(taskId) {
     const assistant = db.prepare('SELECT name FROM couriers WHERE id=?').get(assistantId);
     if (assistant) task.workers.push({ userId: assistantId, name: assistant.name, role: 'assist' });
   }
-  return task;
+  return localizeTaskForWeb(task);
 }
 
 function logOperation(user, action, targetType = '', targetId = '', detail = '') {
@@ -181,7 +206,7 @@ app.get('/api/tasks', requireAuth, (req, res) => {
   const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
   const size = Math.min(200, Math.max(1, parseInt(req.query.size || '20', 10) || 20));
   const total = tasks.countTasks(filters);
-  const list = tasks.listTasks(filters, { limit: size, offset: page * size });
+  const list = tasks.listTasks(filters, { limit: size, offset: page * size }).map(localizeTaskForWeb);
   res.json({ list, total, page, size });
 });
 
@@ -215,7 +240,7 @@ app.post('/api/tasks', requireAuth, requireStaff, (req, res) => {
     const task = tasks.createTask(input, { id: req.user.id, name: req.user.name || req.user.username });
     logOperation(req.user, '创建取件任务', 'task', task.id, task.taskNo);
     broadcast({ type: 'task.created', taskId: task.id, status: task.status });
-    res.status(201).json(task);
+    res.status(201).json(localizeTaskForWeb(task));
   } catch (error) {
     res.status(400).json({ error: error.message || '创建任务失败' });
   }
@@ -233,7 +258,7 @@ app.put('/api/tasks/:id/status', requireAuth, (req, res) => {
       String((req.body && req.body.note) || '')
     );
     broadcast({ type: 'task.status', taskId: task.id, status: task.status });
-    res.json(task);
+    res.json(localizeTaskForWeb(task));
   } catch (error) {
     res.status(400).json({ error: error.message || '更新任务状态失败' });
   }
@@ -246,7 +271,7 @@ app.post('/api/tasks/:id/items', requireAuth, (req, res) => {
   const body = req.body || {};
   const pieces = Math.max(1, parseInt(body.pieces || '1', 10) || 1);
   const itemId = randomUUID();
-  const createdAt = nowStr();
+  const createdAt = utcText(); // 任务域机器时刻统一 UTC
   const waybillNo = String(body.waybillNo || '').trim();
   db.prepare(`INSERT INTO pickup_items
     (id,task_id,worker_id,entry_method,waybill_no,goods_name,pieces,sort_order,final_weight,weight_source,match_status,created_at,updated_at)
@@ -293,9 +318,9 @@ app.post('/api/tasks/:id/exceptions', requireAuth, (req, res) => {
 
 app.post('/api/exceptions/:id/resolve', requireAuth, requireStaff, (req, res) => {
   try {
-    res.json(tasks.resolveException(req.params.id, String((req.body && req.body.resolution) || ''), {
+    res.json(localizeExceptionForWeb(tasks.resolveException(req.params.id, String((req.body && req.body.resolution) || ''), {
       id: req.user.id, name: req.user.name || req.user.username
-    }));
+    })));
   } catch (error) {
     const status = /不存在/.test(error.message || '') ? 404 : 400;
     res.status(status).json({ error: error.message || '处理异常失败' });
@@ -385,7 +410,7 @@ app.post('/api/tasks/:id/photos', requireAuth, imageUpload.any(), (req, res) => 
   const task = tasks.getTask(req.params.id);
   if (!task) return res.status(404).json({ error: '取件任务不存在' });
   if (!taskVisibleTo(req.user, task)) return res.status(403).json({ error: '无权操作该任务' });
-  const createdAt = nowStr();
+  const createdAt = utcText(); // 任务域机器时刻统一 UTC
   const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
   for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);
   logOperation(req.user, '上传取件照片', 'task', task.id, String((req.files || []).length));
@@ -410,7 +435,7 @@ app.post('/api/sync/match/:id', requireAuth, requireStaff, (req, res) => {
   const found = findWaybillWeight(waybillNo);
   db.prepare(`UPDATE pickup_items SET waybill_no=?,entry_method='manual',final_weight=?,weight_source=?,match_status=?,updated_at=? WHERE id=?`)
     .run(waybillNo, found.matched ? found.finalWeight : num(item.final_weight),
-      found.matched ? 'waybill_sync' : '', found.matched ? 'matched' : 'pending', nowStr(), item.id);
+      found.matched ? 'waybill_sync' : '', found.matched ? 'matched' : 'pending', utcText(), item.id);
   res.json({ matched: found.matched, finalWeight: found.finalWeight });
 });
 
@@ -425,8 +450,9 @@ function dashboardRangeStart(range) {
   return '';
 }
 function dashboardWhere(range, alias = 't') {
+  // created_at 为 UTC 文本：先 +8 小时换算为北京日期再按天过滤
   const start = dashboardRangeStart(range);
-  return start ? { sql: `WHERE substr(${alias}.created_at,1,10)>=?`, params: [start] } : { sql: '', params: [] };
+  return start ? { sql: `WHERE date(${alias}.created_at,'+8 hours')>=?`, params: [start] } : { sql: '', params: [] };
 }
 
 app.get('/api/dashboard/board', requireAuth, (req, res) => {
@@ -477,15 +503,15 @@ app.get('/api/dashboard/customers', requireAuth, (req, res) => {
 });
 
 app.get('/api/dashboard/trends', requireAuth, (req, res) => {
-  const weight = db.prepare(`SELECT substr(t.created_at,1,10) AS date,ROUND(COALESCE(SUM(i.final_weight),0),2) AS weight
-    FROM pickup_tasks t LEFT JOIN pickup_items i ON i.task_id=t.id GROUP BY substr(t.created_at,1,10) ORDER BY date DESC LIMIT 30`).all().reverse();
+  const weight = db.prepare(`SELECT date(t.created_at,'+8 hours') AS date,ROUND(COALESCE(SUM(i.final_weight),0),2) AS weight
+    FROM pickup_tasks t LEFT JOIN pickup_items i ON i.task_id=t.id GROUP BY date(t.created_at,'+8 hours') ORDER BY date DESC LIMIT 30`).all().reverse();
   res.json({ weight });
 });
 
 app.get('/api/dashboard/attention', requireAuth, (req, res) => {
   res.json({
     rushNearDeadline: db.prepare("SELECT COUNT(*) AS count FROM pickup_tasks WHERE task_type='rush' AND status IN ('pending','in_progress') AND rush_ship_time<>'' AND datetime(rush_ship_time)<=datetime('now','+8 hours','+2 hours')").get().count,
-    overdue: db.prepare("SELECT COUNT(*) AS count FROM pickup_tasks WHERE status='pending' AND datetime(created_at)<=datetime('now','+8 hours','-2 hours')").get().count,
+    overdue: db.prepare("SELECT COUNT(*) AS count FROM pickup_tasks WHERE status='pending' AND datetime(created_at,'+8 hours')<=datetime('now','+8 hours','-2 hours')").get().count,
     unmatchedWaybill: db.prepare("SELECT COUNT(*) AS count FROM pickup_items WHERE match_status='pending'").get().count,
     noWaybill: db.prepare("SELECT COUNT(*) AS count FROM pickup_items WHERE match_status='no_waybill'").get().count,
     unresolvedException: db.prepare('SELECT COUNT(*) AS count FROM task_exceptions WHERE resolved=0').get().count,
@@ -497,11 +523,11 @@ function workerStatsWindow(db, courierId, start, end) {
   const base = `SELECT COALESCE(SUM(i.pieces),0) AS pieces,
       COALESCE(SUM(CASE WHEN i.match_status='matched' THEN i.final_weight ELSE 0 END),0) AS matchedWeight
     FROM pickup_tasks t JOIN pickup_items i ON i.task_id=t.id
-    WHERE t.status='completed' AND t.default_worker_id=? AND substr(COALESCE(NULLIF(t.completed_at,''),t.updated_at),1,10) BETWEEN ? AND ?`;
+    WHERE t.status='completed' AND t.default_worker_id=? AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`;
   const counts = db.prepare(`SELECT COUNT(*) AS pickupCount,
       COUNT(DISTINCT t.customer_id || '|' || t.customer_name_snap) AS customerCount
     FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
-      AND substr(COALESCE(NULLIF(t.completed_at,''),t.updated_at),1,10) BETWEEN ? AND ?`).get(courierId, start, end);
+      AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`).get(courierId, start, end);
   const sums = db.prepare(base).get(courierId, start, end);
   return { pickupCount: counts.pickupCount, customerCount: counts.customerCount, pieces: sums.pieces, matchedWeight: Math.round(sums.matchedWeight * 100) / 100 };
 }
@@ -523,7 +549,7 @@ app.get('/api/dashboard/me', requireAuth, (req, res) => {
     month: workerStatsWindow(db, courierId, monthStart, today)
   });
 });
-app.get('/api/worker/tasks', requireAuth, (req, res) => res.json(tasks.listTasks({ workerId: req.user.courier_id || '__none__', status: String(req.query.status || '') })));
+app.get('/api/worker/tasks', requireAuth, (req, res) => res.json(tasks.listTasks({ workerId: req.user.courier_id || '__none__', status: String(req.query.status || '') }).map(localizeTaskForWeb)));
 
 function legacyNotification(notification) {
   return {
@@ -1524,7 +1550,7 @@ app.get('/api/track', (req, res) => {
     const timeline = db.prepare(`SELECT event_type,note,actor_name AS by,created_at AS at FROM task_events
       WHERE task_id=? ORDER BY created_at,rowid`).all(task.id).map(row => ({
         status: ({ created: '已下单', assigned: '已派单', assist_added: '已邀请协助', status_changed: label, updated: '信息更新', exception_resolved: '异常已处理' })[row.event_type] || row.event_type,
-        note: row.note || '', by: row.by || '', at: row.at || ''
+        note: row.note || '', by: row.by || '', at: utcTextToBjText(row.at || '')
       }));
     return res.json({
       taskNo: task.task_no || '',

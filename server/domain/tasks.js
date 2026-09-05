@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { utcText, bjDateStamp } = require('../time');
 
 const STATUS_LABELS = {
   pending: '待取',
@@ -7,8 +8,9 @@ const STATUS_LABELS = {
   cancelled: '已取消'
 };
 
+// 任务域机器时刻：统一 UTC 空格文本（与 time.js 口径一致，勿改北京时区）
 function now() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+  return utcText();
 }
 
 function id() {
@@ -16,7 +18,7 @@ function id() {
 }
 
 function taskNo() {
-  const day = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+  const day = bjDateStamp(); // 任务号日期面向业务，按北京时间日生成
   const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase();
   return `QJ${day}-${suffix}`;
 }

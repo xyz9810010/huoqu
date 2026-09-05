@@ -3,10 +3,13 @@
 //   1. 成功响应一律 { "data": ... }；列表一律 { data: { items, total, page, pageSize } }
 //   2. 分页 page 从 1 开始、pageSize 默认 20 上限 100
 //   3. 错误响应一律 { error, code? }，并配合恰当的 HTTP 状态码
-//   4. 服务端以 UTC 生成的时间输出 ISO8601（带 Z）；北京时区录入的时间同样转 ISO8601 UTC
+//   4. 服务端以 UTC 生成的时间输出 ISO8601（带 Z）；北京时区录入的时间同样转 ISO8601 UTC。
+//      存储口径见 server/time.js：任务域机器时刻统一 UTC 空格文本（任务/明细/事件/
+//      照片/异常/协助），录入型计划时刻（scheduled_time/rush_ship_time）为北京钟面文本。
 const { randomUUID } = require('node:crypto');
 const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
 const { createUploader } = require('./uploads');
+const { utcText } = require('../time');
 
 const TIME_TEXT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -27,7 +30,7 @@ function isoTask(task, utc = true) {
     item.createdAt = toIso(item.createdAt, utc);
     item.updatedAt = toIso(item.updatedAt, utc);
   }
-  for (const photo of task.photos || []) photo.createdAt = toIso(photo.createdAt, false);
+  for (const photo of task.photos || []) photo.createdAt = toIso(photo.createdAt, utc);
   for (const exception of task.exceptions || []) {
     exception.createdAt = toIso(exception.createdAt, utc);
     exception.resolvedAt = toIso(exception.resolvedAt, utc);
@@ -132,8 +135,9 @@ function mountApiV2Routes(app, deps) {
     return '';
   };
   const dashboardWhere = (range, alias = 't') => {
+    // created_at 为 UTC 文本：先 +8 小时换算为北京日期再按天过滤
     const start = dashboardRangeStart(range);
-    return start ? { sql: `WHERE substr(${alias}.created_at,1,10)>=?`, params: [start] } : { sql: '', params: [] };
+    return start ? { sql: `WHERE date(${alias}.created_at,'+8 hours')>=?`, params: [start] } : { sql: '', params: [] };
   };
   const num = v => {
     const n = parseFloat(v);
@@ -386,7 +390,7 @@ function mountApiV2Routes(app, deps) {
   app.post('/api/v2/tasks/:id/photos', requireAuth, imageUpload.any(), (req, res) => {
     const task = requireTaskAccess(req, res);
     if (!task) return;
-    const createdAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+    const createdAt = utcText();
     const insert = db.prepare('INSERT INTO pickup_photos (id,task_id,photo_type,filename,uploaded_by,created_at) VALUES (?,?,?,?,?,?)');
     for (const file of req.files || []) insert.run(randomUUID(), task.id, 'pickup', file.filename, req.user.id, createdAt);
     broadcast({ type: 'task.updated', taskId: task.id });
@@ -569,7 +573,7 @@ function mountApiV2Routes(app, deps) {
   app.get('/api/v2/dashboard/attention', requireAuth, requireStaff, (req, res) => {
     ok(res, {
       rushNearDeadline: db.prepare("SELECT COUNT(*) AS count FROM pickup_tasks WHERE task_type='rush' AND status IN ('pending','in_progress') AND rush_ship_time<>'' AND datetime(rush_ship_time)<=datetime('now','+8 hours','+2 hours')").get().count,
-      overdue: db.prepare("SELECT COUNT(*) AS count FROM pickup_tasks WHERE status='pending' AND datetime(created_at)<=datetime('now','+8 hours','-2 hours')").get().count,
+      overdue: db.prepare("SELECT COUNT(*) AS count FROM pickup_tasks WHERE status='pending' AND datetime(created_at,'+8 hours')<=datetime('now','+8 hours','-2 hours')").get().count,
       unmatchedWaybill: db.prepare("SELECT COUNT(*) AS count FROM pickup_items WHERE match_status='pending'").get().count,
       noWaybill: db.prepare("SELECT COUNT(*) AS count FROM pickup_items WHERE match_status='no_waybill'").get().count,
       unresolvedException: db.prepare('SELECT COUNT(*) AS count FROM task_exceptions WHERE resolved=0').get().count,

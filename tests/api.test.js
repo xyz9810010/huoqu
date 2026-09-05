@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const webpush = require('web-push');
+const Database = require('better-sqlite3');
+
+const TIME_TEXT_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
 const port = 34000 + Math.floor(Math.random() * 1000);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -94,6 +97,62 @@ test('task API creates and lists one task with multiple cargo items', async () =
   assert.equal(listed.status, 200);
   assert.equal(listed.data.total, 1);
   assert.equal(listed.data.list[0].taskNo, created.data.taskNo);
+});
+
+test('v1 task times render as Beijing wall-clock text while storage keeps UTC text', async () => {
+  const created = await request('POST', '/api/tasks', {
+    customerName: '时间口径客户',
+    address: '义乌市江东街道',
+    taskType: 'scheduled',
+    scheduledTime: '2026-09-02 10:00:00',
+    items: []
+  });
+  assert.equal(created.status, 201);
+  assert.match(created.data.createdAt, TIME_TEXT_RE);
+  assert.equal(created.data.scheduledTime, '2026-09-02 10:00:00', '录入型计划时刻保持原样');
+  const detail = await request('GET', `/api/tasks/${created.data.id}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.data.createdAt, created.data.createdAt);
+
+  const db = new Database(path.join(tempDir, 'app.db'), { readonly: true });
+  const stored = db.prepare('SELECT created_at FROM pickup_tasks WHERE id=?').get(created.data.id).created_at;
+  db.close();
+  assert.match(stored, TIME_TEXT_RE);
+  const diffHours = (Date.parse(detail.data.createdAt.replace(' ', 'T') + 'Z')
+    - Date.parse(stored.replace(' ', 'T') + 'Z')) / 3600000;
+  assert.equal(diffHours, 8, 'v1 输出应为存储 UTC + 8 小时（北京钟面）');
+});
+
+test('dashboard day filter attributes Beijing-midnight tasks to the Beijing day', async () => {
+  token = adminToken;
+  const createOne = async name => {
+    const created = await request('POST', '/api/tasks', { customerName: name, address: '边界地址', items: [] });
+    assert.equal(created.status, 201);
+    return created.data.id;
+  };
+  const board = async range => (await request('GET', `/api/dashboard/board?range=${range}`)).data;
+  const count = body => body.pendingCount + body.pickupCount;
+  const midNight = await createOne('边界凌晨客户');
+  const lateNight = await createOne('边界深夜客户');
+  const bT = count(await board('today'));
+  const bY = count(await board('yesterday'));
+
+  const bjNow = new Date(Date.now() + 8 * 3600 * 1000);
+  const yDay = new Date(bjNow.getTime() - 86400000).toISOString().slice(0, 10);
+  const db = new Database(path.join(tempDir, 'app.db'));
+  // A：北京今天 00:30 == UTC 昨日 16:30（文本日期在昨天，必须在看板算进今天）
+  // B：北京昨天 23:59 == UTC 昨日 15:59（文本日期在昨天，应算进昨天）
+  db.prepare('UPDATE pickup_tasks SET created_at=? WHERE id=?').run(`${yDay} 16:30:00`, midNight);
+  db.prepare('UPDATE pickup_tasks SET created_at=? WHERE id=?').run(`${yDay} 15:59:00`, lateNight);
+  db.close();
+
+  const afterT = count(await board('today'));
+  const afterY = count(await board('yesterday'));
+  // B 从今天移出（today -1）；A 北京今日 00:30 仍属 today。
+  // yesterday 端点按「北京日 >= 昨日」过滤（含今天），两任务均未离开该窗口，计数不变。
+  // 若按 UTC 文本日期直接截断（旧缺陷），A 会因文本日期在昨天而被漏出 today。
+  assert.equal(afterT, bT - 1, '北京今日 00:30 的任务必须计入 today');
+  assert.equal(afterY, bY, '北京昨日 23:59 的任务保持在北京日期窗口内');
 });
 
 test('task API rejects completion before pickup starts and then completes through valid transitions', async () => {

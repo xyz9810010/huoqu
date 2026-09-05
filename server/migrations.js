@@ -69,8 +69,8 @@ function createSchema(db) {
       amount_receivable REAL DEFAULT 0,
       amount_payable REAL DEFAULT 0,
       settled TEXT DEFAULT '未结算',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_pickup_tasks_status ON pickup_tasks(status);
     CREATE INDEX IF NOT EXISTS idx_pickup_tasks_customer ON pickup_tasks(customer_id);
@@ -89,8 +89,8 @@ function createSchema(db) {
       final_weight REAL DEFAULT 0,
       weight_source TEXT DEFAULT '',
       match_status TEXT NOT NULL DEFAULT 'pending',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_pickup_items_task ON pickup_items(task_id);
@@ -103,7 +103,7 @@ function createSchema(db) {
       photo_type TEXT NOT NULL,
       filename TEXT NOT NULL,
       uploaded_by TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_pickup_photos_task ON pickup_photos(task_id);
@@ -117,7 +117,7 @@ function createSchema(db) {
       note TEXT DEFAULT '',
       actor_id TEXT DEFAULT '',
       actor_name TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
@@ -127,7 +127,7 @@ function createSchema(db) {
       task_id TEXT NOT NULL,
       worker_id TEXT NOT NULL,
       added_by TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(task_id, worker_id),
       FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
     );
@@ -143,7 +143,7 @@ function createSchema(db) {
       resolved INTEGER NOT NULL DEFAULT 0,
       resolved_by TEXT DEFAULT '',
       resolution TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       resolved_at TEXT DEFAULT '',
       FOREIGN KEY(task_id) REFERENCES pickup_tasks(id) ON DELETE CASCADE
     );
@@ -164,7 +164,7 @@ function createSchema(db) {
       body TEXT DEFAULT '',
       data TEXT DEFAULT '',
       is_read INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS notification_deliveries (
@@ -248,14 +248,14 @@ function createSchema(db) {
       target_type TEXT DEFAULT '',
       target_id TEXT DEFAULT '',
       detail TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS areas (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       code TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS area_workers (
@@ -277,7 +277,7 @@ function createSchema(db) {
       is_common INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1,
       remark TEXT DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id);
@@ -390,11 +390,90 @@ function migrateLegacyRecords(db) {
   }
 }
 
+
+// 时间口径统一（2026-09-05，P1）：
+// 任务域机器时刻（pickup_tasks/pickup_items/task_events/pickup_photos 等）统一为
+// UTC 空格文本。历史数据含两类错源：
+//   1) records / record_status_log 迁移导入的 legacy 行：源表为北京时间文本。
+//      这里每次启动按源表幂等对齐为 UTC（以源值为准，不依赖行现值，天然可重复）。
+//   2) 任务模型上线后 v1 接口补录明细/照片时曾按北京时间写入的少数现代行：
+//      属于一次性数据修正，用 schema_migrations version=5 门控，只执行一次，
+//      避免将来把真正的 UTC 行误判（启发式只适用于当前存量数据）。
+// 录入型计划时刻 scheduled_time/rush_ship_time 保持北京时间钟面文本，不参与转换。
+function migrateTaskTimestamps(db) {
+  const hasVersion = (v) => Boolean(db.prepare('SELECT 1 FROM schema_migrations WHERE version=?').get(v));
+
+  const taskSrcCreated = "(SELECT r.created_at FROM records r WHERE r.id=pickup_tasks.id)";
+  const taskSrcCompleted = "(SELECT r.completed_at FROM records r WHERE r.id=pickup_tasks.id)";
+  const taskSrcUpdated = "(SELECT CASE WHEN r.completed_at IS NOT NULL AND r.completed_at<>'' THEN r.completed_at ELSE r.created_at END FROM records r WHERE r.id=pickup_tasks.id)";
+
+  const hasLegacyRecords = tableExists(db, 'records');
+  const hasLegacyLogs = tableExists(db, 'record_status_log');
+  if (hasLegacyRecords) {
+    // 1) legacy 任务行：由 records（北京时间文本）幂等对齐为 UTC
+    db.prepare(`UPDATE pickup_tasks SET
+      created_at = COALESCE(datetime(${taskSrcCreated}, '-8 hours'), pickup_tasks.created_at),
+      dispatch_at = COALESCE(datetime(${taskSrcCreated}, '-8 hours'), pickup_tasks.dispatch_at),
+      completed_at = CASE WHEN COALESCE(${taskSrcCompleted},'')='' THEN pickup_tasks.completed_at
+        ELSE COALESCE(datetime(${taskSrcCompleted}, '-8 hours'), pickup_tasks.completed_at) END,
+      updated_at = COALESCE(datetime(${taskSrcUpdated}, '-8 hours'), pickup_tasks.updated_at)
+    WHERE id IN (SELECT id FROM records)`).run();
+
+  }
+  // 2) legacy 明细行（id = legacy-item:<records.id>）
+  if (hasLegacyRecords) db.prepare(`UPDATE pickup_items SET
+      created_at = COALESCE(datetime((SELECT r.created_at FROM records r WHERE r.id=substr(pickup_items.id,13)), '-8 hours'), pickup_items.created_at),
+      updated_at = COALESCE(datetime((SELECT CASE WHEN r.completed_at IS NOT NULL AND r.completed_at<>'' THEN r.completed_at ELSE r.created_at END FROM records r WHERE r.id=substr(pickup_items.id,13)), '-8 hours'), pickup_items.updated_at)
+    WHERE id LIKE 'legacy-item:%'`).run();
+  // 3) legacy 照片行：货品照片对齐任务 created_at；取件照片对齐任务 completed_at/created_at
+  if (hasLegacyRecords) {
+    db.prepare(`UPDATE pickup_photos SET created_at = COALESCE(
+        (SELECT t.created_at FROM pickup_tasks t WHERE t.id=pickup_photos.task_id), pickup_photos.created_at)
+      WHERE id LIKE 'legacy:goods:%'`).run();
+    db.prepare(`UPDATE pickup_photos SET created_at = COALESCE(
+        (SELECT CASE WHEN t.completed_at IS NOT NULL AND t.completed_at<>'' THEN t.completed_at ELSE t.created_at END
+         FROM pickup_tasks t WHERE t.id=pickup_photos.task_id), pickup_photos.created_at)
+      WHERE id LIKE 'legacy:pickup:%'`).run();
+  }
+  // 4) legacy 事件行：由 record_status_log（北京时间文本）幂等对齐为 UTC
+  if (hasLegacyLogs) {
+    db.prepare(`UPDATE task_events SET created_at = COALESCE(
+        datetime((SELECT created_at FROM record_status_log WHERE id=task_events.id), '-8 hours'),
+        task_events.created_at)
+      WHERE id IN (SELECT id FROM record_status_log)`).run();
+  }
+
+  // 5) 一次性修正：任务模型上线初期 v1 补录明细/照片产生的北京时间错写行。
+  //    判定：created_at 比同任务 created_at 晚约 8~12 小时（真实北京文本的固有 +8 特征）。
+  if (!hasVersion(5)) {
+    const legacyLogExclusion = hasLegacyLogs ? "AND id NOT IN (SELECT id FROM record_status_log) " : "";
+    // 先修事件（依赖尚未修正的明细行做同刻配对），再修明细，最后修照片
+    db.prepare(`UPDATE task_events SET created_at = datetime(created_at, '-8 hours')
+      WHERE event_type='item_added' AND created_at<>'' ${legacyLogExclusion}
+        AND (julianday(created_at)-julianday((SELECT t.created_at FROM pickup_tasks t WHERE t.id=task_events.task_id)))*24 BETWEEN 7.9 AND 12.1
+        AND EXISTS (SELECT 1 FROM pickup_items i
+          WHERE i.task_id=task_events.task_id AND i.created_at=task_events.created_at)`).run();
+    db.prepare(`UPDATE pickup_items SET
+        created_at = datetime(created_at, '-8 hours'),
+        updated_at = CASE
+          WHEN updated_at IS NULL OR updated_at='' THEN ''
+          WHEN updated_at = created_at THEN datetime(created_at, '-8 hours')
+          ELSE COALESCE(datetime(updated_at, '-8 hours'), updated_at) END
+      WHERE id NOT LIKE 'legacy-item:%' AND created_at<>''
+        AND (julianday(created_at)-julianday((SELECT t.created_at FROM pickup_tasks t WHERE t.id=pickup_items.task_id)))*24 BETWEEN 7.9 AND 12.1`).run();
+    db.prepare(`UPDATE pickup_photos SET created_at = datetime(created_at, '-8 hours')
+      WHERE id NOT LIKE 'legacy:%' AND created_at<>''
+        AND (julianday(created_at)-julianday((SELECT t.created_at FROM pickup_tasks t WHERE t.id=pickup_photos.task_id)))*24 BETWEEN 7.9 AND 12.5`).run();
+    db.prepare("INSERT INTO schema_migrations (version,applied_at) VALUES (5,datetime('now'))").run();
+  }
+}
+
 function migrate(db) {
   const migration = db.transaction(() => {
     db.pragma('foreign_keys = ON');
     createSchema(db);
     migrateLegacyRecords(db);
+    migrateTaskTimestamps(db);
   });
   migration();
   return db;

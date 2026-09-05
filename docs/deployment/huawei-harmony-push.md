@@ -89,7 +89,7 @@
 | 连接测试 `HUAWEI_CONFIG_INVALID` | Project ID 是否填成 `cp_id`；服务账号 JSON 是否是 AGC 服务账号 JSON（含 `key_id/sub_account/private_key`），而不是 `agconnect-services.json` |
 | 配置 healthy 但投递 `PROVIDER_NOT_ACTIVE` | 通道未“启用”；在消息推送页点启用 |
 | 投递一直 `pending` | 通道停用期间积累，启用后按重试计划自动补发；若最终 `failed` 可在管理端手动重试 |
-| 投递 `sent` 但手机不弹 | ① 手机未授权通知（设置→通知）② 鸿蒙端未调 `requestEnableNotification()` ③ 通知分类被折叠/关闭（服务端 category 为 `EXPRESS`，留意“货运/快递”类分组）④ 系统“通知智能管理/免打扰” ⑤ 应用被卸载重装导致 token 失效（旧订阅残留） |
+| 投递 `sent` 但手机不弹 | ① 手机未授权通知（设置→通知）② 鸿蒙端未调 `requestEnableNotification()` ③ 服务端 category 与 AGC 自分类权益不匹配会被降级（本项目应恒为 `WORK`=工作事项提醒；若改成 `EXPRESS` 等未获批分类，通知只进栏、息屏不响不振）④ 系统“通知智能管理/免打扰” ⑤ 应用被卸载重装导致 token 失效（旧订阅残留） |
 | 鸿蒙端 `getToken()` 失败 | AGC 是否开通 Push Kit；`agconnect-services.json` 是否与工程包名匹配；`module.json5` 的 `client_id`；自动签名/证书；抓 hilog 错误码后对照 AGC 文档 |
 | 服务端根本没生成 huawei 投递 | 通知接收人与订阅用户不一致；用户通知偏好里 `vendor_push` 被关闭（`notification_preferences`）；订阅 `status=invalid` |
 | 一批投递整体 `failed`（非 80000000） | 该批中可能混入失效 token；服务端当前对整批结果处理，建议清理失效订阅后再试 |

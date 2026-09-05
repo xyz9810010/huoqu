@@ -57,6 +57,36 @@ test('Huawei provider maps a successful gateway response to each target', async 
   ]);
 });
 
+test('Huawei provider sends a reproducible payload with WORK category and click/data fields', async () => {
+  let capturedBody = null;
+  const provider = createHuaweiProvider({
+    getAccessToken: async () => 'access-token',
+    fetch: async (_url, request) => {
+      capturedBody = JSON.parse(request.body);
+      return { ok: true, status: 200, json: async () => ({ code: '80000000', requestId: 'request-9' }) };
+    }
+  });
+  await provider.send({
+    id: 'n1', title: '新的取件任务', body: '杨梅 · 二区3栋',
+    type: 'pickupTask.assigned',
+    data: { resourceType: 'pickupTask', resourceId: 'task-1' }
+  }, [{ id: 's1', secret: { token: 'device-1' } }], {
+    projectId: 'project-1', serviceAccount: '{}'
+  });
+
+  // category 必须与 AGC 获批自分类权益一致（工作事项提醒 → WORK），否则华为降级为资讯营销提醒
+  assert.equal(capturedBody.payload.notification.category, 'WORK');
+  assert.deepEqual(capturedBody.payload.notification.clickAction, { actionType: 0 });
+  assert.equal(capturedBody.payload.notification.title, '新的取件任务');
+  const data = JSON.parse(capturedBody.payload.data);
+  assert.deepEqual(data, {
+    notificationId: 'n1', type: 'pickupTask.assigned',
+    title: '新的取件任务', body: '杨梅 · 二区3栋',
+    resourceType: 'pickupTask', resourceId: 'task-1'
+  });
+  assert.deepEqual(capturedBody.target.token, ['device-1']);
+});
+
 test('Huawei provider classifies rate limiting as retryable', () => {
   const provider = createHuaweiProvider({ fetch: async () => {} });
   assert.deepEqual(provider.normalizeError({ statusCode: 429, code: 'HTTP_429' }), {

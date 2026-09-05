@@ -10,6 +10,7 @@ const { randomUUID } = require('node:crypto');
 const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
 const { createUploader } = require('./uploads');
 const { utcText } = require('../time');
+const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 
 const TIME_TEXT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -52,38 +53,9 @@ function fail(res, status, message, code = '') {
   return res.status(status).json({ error: message, ...(code ? { code } : {}) });
 }
 
-function taskVisibleTo(user, task) {
-  if (user.role === 'admin' || user.role === 'cs') return true;
-  return Boolean(user.courier_id && (
-    task.defaultWorkerId === user.courier_id ||
-    (Array.isArray(task.assistWorkerIds) && task.assistWorkerIds.includes(user.courier_id))
-  ));
-}
-
+// v2 详情视图复用共享富化，并保持原语义输出 ISO8601（外层再次 isoTask 幂等无害）
 function taskDetailV2(db, tasks, taskId) {
-  const task = tasks.getTask(taskId);
-  if (!task) return null;
-  const worker = task.defaultWorkerId ? db.prepare('SELECT name FROM couriers WHERE id=?').get(task.defaultWorkerId) : null;
-  const mainCs = task.mainCsId ? db.prepare('SELECT name FROM users WHERE id=?').get(task.mainCsId) : null;
-  task.defaultWorkerName = task.defaultWorkerName || (worker ? worker.name : '');
-  task.mainCsName = mainCs ? mainCs.name : '';
-  task.addressPointName = task.areaName || '默认地址';
-  task.photos = db.prepare('SELECT * FROM pickup_photos WHERE task_id=? ORDER BY created_at,id').all(taskId).map(photo => ({
-    id: photo.id, type: photo.photo_type, filename: photo.filename,
-    filePath: '/uploads/' + photo.filename, createdAt: photo.created_at
-  }));
-  task.exceptions = db.prepare('SELECT * FROM task_exceptions WHERE task_id=? ORDER BY created_at DESC').all(taskId).map(row => ({
-    id: row.id, type: row.exception_type, description: row.description, resolved: Boolean(row.resolved),
-    resolution: row.resolution, createdAt: row.created_at, resolvedAt: row.resolved_at
-  }));
-  task.workers = [];
-  if (task.defaultWorkerId) task.workers.push({ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' });
-  for (const assistantId of task.assistWorkerIds || []) {
-    const assistant = db.prepare('SELECT name FROM couriers WHERE id=?').get(assistantId);
-    const assistantName = task.assistWorkerNames[assistantId] || (assistant ? assistant.name : '');
-    if (assistantName) task.workers.push({ userId: assistantId, name: assistantName, role: 'assist' });
-  }
-  return isoTask(task);
+  return isoTask(enrichTaskDetail(db, tasks, taskId));
 }
 
 function customerView(db, row, addressCount) {
@@ -539,18 +511,10 @@ function mountApiV2Routes(app, deps) {
     ok(res, { courier: rowCourier(db.prepare('SELECT * FROM couriers WHERE id=?').get(cur.id)) });
   });
 
-  function courierActiveTaskCount(courierId) {
-    // 主取件员、协助名单或明细归属在任一进行中任务中，都视为档案被占用
-    return db.prepare(`SELECT COUNT(*) AS n FROM pickup_tasks WHERE status IN ('pending','in_progress')
-      AND (default_worker_id=? OR id IN (SELECT task_id FROM task_assistants WHERE worker_id=?)
-        OR id IN (SELECT task_id FROM pickup_items WHERE worker_id=?))`)
-      .get(courierId, courierId, courierId).n;
-  }
-
   app.delete('/api/v2/couriers/:id', requireAuth, requireAdmin, (req, res) => {
     const cur = db.prepare('SELECT * FROM couriers WHERE id=?').get(req.params.id);
     if (!cur) return fail(res, 404, '取件员不存在');
-    if (courierActiveTaskCount(cur.id) > 0) {
+    if (courierActiveTaskCount(db, cur.id) > 0) {
       return fail(res, 400, '该取件员有进行中的任务，请先转派或完成后再删除');
     }
     if (db.prepare('SELECT 1 FROM users WHERE courier_id=?').get(cur.id)) {
@@ -578,25 +542,6 @@ function mountApiV2Routes(app, deps) {
     ok(res, listSlice(rows, page, pageSize));
   });
 
-  // ============ 看板 ============
-  // 与 v1 /api/dashboard/me 同构：总数 + 今日/本月完成口径（主取件完成、协助次数）。
-  // completed_at/updated_at 存 UTC，按 '+8 hours' 归北京日与日期窗口比较。
-  function workerStatsWindow(courierId, start, end) {
-    const counts = db.prepare(`SELECT COUNT(*) AS pickupCount,
-        COUNT(DISTINCT t.customer_id || '|' || t.customer_name_snap) AS customerCount
-      FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
-        AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`)
-      .get(courierId, start, end);
-    const sums = db.prepare(`SELECT COALESCE(SUM(i.pieces),0) AS pieces,
-        COALESCE(SUM(CASE WHEN i.match_status='matched' THEN i.final_weight ELSE 0 END),0) AS matchedWeight
-      FROM pickup_tasks t JOIN pickup_items i ON i.task_id=t.id
-      WHERE t.status='completed' AND t.default_worker_id=? AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`)
-      .get(courierId, start, end);
-    return {
-      pickupCount: counts.pickupCount, customerCount: counts.customerCount,
-      pieces: sums.pieces, matchedWeight: Math.round(sums.matchedWeight * 100) / 100
-    };
-  }
   app.get('/api/v2/dashboard/me', requireAuth, (req, res) => {
     const courierId = req.user.courier_id || '__none__';
     const list = tasks.listTasks({ workerId: courierId });
@@ -610,8 +555,8 @@ function mountApiV2Routes(app, deps) {
       completed: list.filter(t => t.status === 'completed').length,
       pieces: list.flatMap(t => t.items).reduce((sum, item) => sum + Number(item.pieces || 0), 0),
       assistCount,
-      today: workerStatsWindow(courierId, today, today),
-      month: workerStatsWindow(courierId, monthStart, today)
+      today: workerStatsWindow(db, courierId, today, today),
+      month: workerStatsWindow(db, courierId, monthStart, today)
     });
   });
 

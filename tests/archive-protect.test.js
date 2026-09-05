@@ -127,6 +127,20 @@ test('进行中任务（主/协助/明细归属）阻止删除档案，任务结
   assert.match(customerBlocked.data.error, /进行中的任务/);
 
   await finishTask(taskId);
+  // dashboard/workers 聚合口径（原逐人查询语义）：主取件完成 1 单、件数/客户数一致
+  const workers = await request('GET', '/api/dashboard/workers', undefined, adminToken);
+  assert.equal(workers.status, 200, workers.text);
+  const rowA = workers.data.find(row => row.id === courierA);
+  const rowB = workers.data.find(row => row.id === courierB);
+  assert.ok(rowA && rowB, '聚合看板应包含两位取件员');
+  assert.equal(rowA.pickupCount, 1);
+  assert.equal(rowA.pieces, 1);
+  assert.equal(rowA.customerCount, 1);
+  assert.equal(rowA.pending, 0);
+  assert.equal(rowB.pickupCount, 0, '明细归属不计入默认取件员的取件数');
+  for (const key of ['pickupCount', 'customerCount', 'pieces', 'weight', 'assistCount', 'pending']) {
+    assert.equal(typeof rowA[key], 'number', key);
+  }
   const customerRemoved = await request('DELETE', `/api/customers/${customer}`, undefined, adminToken);
   assert.equal(customerRemoved.status, 200, customerRemoved.text);
 

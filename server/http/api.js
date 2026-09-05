@@ -7,6 +7,7 @@ const XLSX = require('xlsx');
 
 const { mountNotificationRoutes } = require('../modules/notifications/routes');
 const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
+const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const { createUploader } = require('./uploads');
 const { utcText, utcTextToBjText } = require('../time');
 
@@ -155,41 +156,9 @@ app.post('/api/password', requireAuth, (req, res) => {
 });
 
 // ================= 统一取件任务 =================
-function taskVisibleTo(user, task) {
-  if (user.role === 'admin' || user.role === 'cs') return true;
-  return Boolean(user.courier_id && (
-    task.defaultWorkerId === user.courier_id ||
-    (Array.isArray(task.assistWorkerIds) && task.assistWorkerIds.includes(user.courier_id))
-  ));
-}
-
+// 权限/详情富化/删除占用判定收敛到 server/http/task-views.js；此处仅做 v1 时间本地化
 function taskDetail(taskId) {
-  const task = tasks.getTask(taskId);
-  if (!task) return null;
-  const worker = task.defaultWorkerId ? db.prepare('SELECT name FROM couriers WHERE id=?').get(task.defaultWorkerId) : null;
-  const mainCs = task.mainCsId ? db.prepare('SELECT name FROM users WHERE id=?').get(task.mainCsId) : null;
-  task.defaultWorkerName = task.defaultWorkerName || (worker ? worker.name : '');
-  task.mainCsName = mainCs ? mainCs.name : '';
-  task.addressPointName = task.areaName || '默认地址';
-  task.items = task.items.map(item => {
-    const itemWorker = item.workerId ? db.prepare('SELECT name FROM couriers WHERE id=?').get(item.workerId) : null;
-    return Object.assign(item, { workerName: item.workerNameSnap || (itemWorker ? itemWorker.name : '') || task.defaultWorkerName });
-  });
-  task.photos = db.prepare('SELECT * FROM pickup_photos WHERE task_id=? ORDER BY created_at,id').all(taskId).map(photo => ({
-    id: photo.id, type: photo.photo_type, filename: photo.filename, filePath: '/uploads/' + photo.filename, createdAt: photo.created_at
-  }));
-  task.exceptions = db.prepare('SELECT * FROM task_exceptions WHERE task_id=? ORDER BY created_at DESC').all(taskId).map(row => ({
-    id: row.id, type: row.exception_type, description: row.description, resolved: Boolean(row.resolved),
-    resolution: row.resolution, createdAt: row.created_at, resolvedAt: row.resolved_at
-  }));
-  task.workers = [];
-  if (task.defaultWorkerId) task.workers.push({ userId: task.defaultWorkerId, name: task.defaultWorkerName, role: 'primary' });
-  for (const assistantId of task.assistWorkerIds || []) {
-    const assistant = db.prepare('SELECT name FROM couriers WHERE id=?').get(assistantId);
-    const assistantName = task.assistWorkerNames[assistantId] || (assistant ? assistant.name : '');
-    if (assistantName) task.workers.push({ userId: assistantId, name: assistantName, role: 'assist' });
-  }
-  return localizeTaskForWeb(task);
+  return localizeTaskForWeb(enrichTaskDetail(db, tasks, taskId));
 }
 
 function logOperation(user, action, targetType = '', targetId = '', detail = '') {
@@ -476,19 +445,34 @@ app.get('/api/dashboard/board', requireAuth, (req, res) => {
 });
 
 app.get('/api/dashboard/workers', requireAuth, (req, res) => {
-  const workers = db.prepare('SELECT * FROM couriers ORDER BY name').all();
-  res.json(workers.map(worker => {
-    const taskRows = db.prepare('SELECT * FROM pickup_tasks WHERE default_worker_id=?').all(worker.id);
-    const ids = taskRows.map(row => row.id);
-    const itemRows = ids.length ? db.prepare(`SELECT * FROM pickup_items WHERE task_id IN (${ids.map(() => '?').join(',')})`).all(...ids) : [];
-    const assistCount = db.prepare(`SELECT COUNT(DISTINCT t.id) AS n FROM pickup_tasks t
-      JOIN task_assistants a ON a.task_id=t.id WHERE a.worker_id=? AND t.status='completed'`).get(worker.id).n;
+  // 聚合 SQL 替代按人逐查（任务数/件数/重量按 default_worker 归组，协助次数按 task_assistants 归组）
+  const taskAgg = db.prepare(`SELECT default_worker_id AS cid,
+      COUNT(*) AS taskCount,
+      SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completedCount,
+      SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS activeCount,
+      COUNT(DISTINCT customer_id || '|' || customer_name_snap) AS customerCount
+    FROM pickup_tasks WHERE default_worker_id<>'' GROUP BY default_worker_id`).all();
+  const itemAgg = db.prepare(`SELECT t.default_worker_id AS cid,
+      COALESCE(SUM(i.pieces),0) AS pieces, COALESCE(SUM(i.final_weight),0) AS weight
+    FROM pickup_items i JOIN pickup_tasks t ON t.id=i.task_id
+    WHERE t.default_worker_id<>'' GROUP BY t.default_worker_id`).all();
+  const assistAgg = db.prepare(`SELECT a.worker_id AS cid, COUNT(DISTINCT t.id) AS n
+    FROM task_assistants a JOIN pickup_tasks t ON t.id=a.task_id
+    WHERE t.status='completed' GROUP BY a.worker_id`).all();
+  const taskMap = new Map(taskAgg.map(row => [row.cid, row]));
+  const itemMap = new Map(itemAgg.map(row => [row.cid, row]));
+  const assistMap = new Map(assistAgg.map(row => [row.cid, row.n]));
+  res.json(db.prepare('SELECT * FROM couriers ORDER BY name').all().map(worker => {
+    const tasks = taskMap.get(worker.id) || {};
+    const items = itemMap.get(worker.id) || {};
     return {
-      id: worker.id, name: worker.name, pickupCount: taskRows.filter(row => row.status === 'completed').length,
-      customerCount: new Set(taskRows.map(row => row.customer_id || row.customer_name_snap)).size,
-      pieces: itemRows.reduce((sum, row) => sum + Number(row.pieces || 0), 0),
-      weight: itemRows.reduce((sum, row) => sum + num(row.final_weight), 0), assistCount,
-      pending: taskRows.filter(row => row.status === 'pending' || row.status === 'in_progress').length
+      id: worker.id, name: worker.name,
+      pickupCount: Number(tasks.completedCount || 0),
+      customerCount: Number(tasks.customerCount || 0),
+      pieces: Number(items.pieces || 0),
+      weight: num(items.weight || 0),
+      assistCount: assistMap.get(worker.id) || 0,
+      pending: Number(tasks.activeCount || 0)
     };
   }));
 });
@@ -522,19 +506,6 @@ app.get('/api/dashboard/attention', requireAuth, (req, res) => {
     syncFailed: 0
   });
 });
-
-function workerStatsWindow(db, courierId, start, end) {
-  const base = `SELECT COALESCE(SUM(i.pieces),0) AS pieces,
-      COALESCE(SUM(CASE WHEN i.match_status='matched' THEN i.final_weight ELSE 0 END),0) AS matchedWeight
-    FROM pickup_tasks t JOIN pickup_items i ON i.task_id=t.id
-    WHERE t.status='completed' AND t.default_worker_id=? AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`;
-  const counts = db.prepare(`SELECT COUNT(*) AS pickupCount,
-      COUNT(DISTINCT t.customer_id || '|' || t.customer_name_snap) AS customerCount
-    FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
-      AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`).get(courierId, start, end);
-  const sums = db.prepare(base).get(courierId, start, end);
-  return { pickupCount: counts.pickupCount, customerCount: counts.customerCount, pieces: sums.pieces, matchedWeight: Math.round(sums.matchedWeight * 100) / 100 };
-}
 
 app.get('/api/dashboard/me', requireAuth, (req, res) => {
   const courierId = req.user.courier_id || '__none__';
@@ -763,18 +734,10 @@ app.put('/api/couriers/:id', requireAuth, requireAdmin, (req, res) => {
   res.json(rowCourier(db.prepare('SELECT * FROM couriers WHERE id = ?').get(req.params.id)));
 });
 
-function courierActiveTaskCount(courierId) {
-  // 主取件员、协助名单或明细归属在任一进行中任务中，都视为档案被占用
-  return db.prepare(`SELECT COUNT(*) AS n FROM pickup_tasks WHERE status IN ('pending','in_progress')
-    AND (default_worker_id=? OR id IN (SELECT task_id FROM task_assistants WHERE worker_id=?)
-      OR id IN (SELECT task_id FROM pickup_items WHERE worker_id=?))`)
-    .get(courierId, courierId, courierId).n;
-}
-
 app.delete('/api/couriers/:id', requireAuth, requireAdmin, (req, res) => {
   const cur = db.prepare('SELECT * FROM couriers WHERE id = ?').get(req.params.id);
   if (!cur) return res.status(404).json({ error: '取件员不存在' });
-  if (courierActiveTaskCount(cur.id) > 0)
+  if (courierActiveTaskCount(db, cur.id) > 0)
     return res.status(400).json({ error: '该取件员有进行中的任务，请先转派或完成后再删除' });
   if (db.prepare('SELECT 1 FROM users WHERE courier_id=?').get(cur.id))
     return res.status(400).json({ error: '该取件员绑定着登录账号，请先删除对应账号' });

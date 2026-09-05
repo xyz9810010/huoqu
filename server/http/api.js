@@ -140,10 +140,11 @@ app.get('/api/tasks', requireAuth, (req, res) => {
     keyword: String(req.query.keyword || ''),
     workerId: req.user.role === 'courier' ? (req.user.courier_id || '__none__') : String(req.query.workerId || '')
   };
-  const all = tasks.listTasks(filters);
   const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
   const size = Math.min(200, Math.max(1, parseInt(req.query.size || '20', 10) || 20));
-  res.json({ list: all.slice(page * size, page * size + size), total: all.length, page, size });
+  const total = tasks.countTasks(filters);
+  const list = tasks.listTasks(filters, { limit: size, offset: page * size });
+  res.json({ list, total, page, size });
 });
 
 app.get('/api/tasks/:id', requireAuth, (req, res) => {

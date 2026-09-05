@@ -74,14 +74,16 @@ function taskDetailV2(db, tasks, taskId) {
   return isoTask(task);
 }
 
-function customerView(db, row) {
-  const addressCount = db.prepare('SELECT COUNT(*) AS n FROM customer_addresses WHERE customer_id=?').get(row.id).n;
+function customerView(db, row, addressCount) {
+  const count = addressCount === undefined
+    ? db.prepare('SELECT COUNT(*) AS n FROM customer_addresses WHERE customer_id=?').get(row.id).n
+    : addressCount;
   return {
     id: row.id, customerNo: String(row.id || '').slice(0, 8), name: row.name,
     contact: row.contact || '', phone: row.phone || '',
     address: row.address || '', note: row.note || '', status: row.status || 'active',
     legacyCustomerId: row.legacy_customer_id || '', importantNote: row.important_note || '',
-    mainCsId: row.main_cs_id || '', addressCount
+    mainCsId: row.main_cs_id || '', addressCount: count
   };
 }
 
@@ -201,9 +203,10 @@ function mountApiV2Routes(app, deps) {
       keyword: String(req.query.keyword || ''),
       workerId: req.user.role === 'courier' ? (req.user.courier_id || '__none__') : String(req.query.workerId || '')
     };
-    const all = tasks.listTasks(filters).map(task => isoTask(task));
-    const items = all.slice((page - 1) * pageSize, page * pageSize);
-    ok(res, { items, total: all.length, page, pageSize });
+    const total = tasks.countTasks(filters);
+    const items = tasks.listTasks(filters, { limit: pageSize, offset: (page - 1) * pageSize })
+      .map(task => isoTask(task));
+    ok(res, { items, total, page, pageSize });
   });
 
   app.get('/api/v2/tasks/:id', requireAuth, (req, res) => {
@@ -383,12 +386,18 @@ function mountApiV2Routes(app, deps) {
   app.get('/api/v2/customers', requireAuth, (req, res) => {
     const { page, pageSize } = pageOf(req.query);
     const search = String(req.query.search || '').trim();
-    const rows = search
-      ? db.prepare('SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? OR legacy_customer_id LIKE ? ORDER BY name')
-        .all(`%${search}%`, `%${search}%`, `%${search}%`)
-      : db.prepare('SELECT * FROM customers ORDER BY name').all();
-    const items = rows.slice((page - 1) * pageSize, page * pageSize).map(row => customerView(db, row));
-    ok(res, { items, total: rows.length, page, pageSize });
+    const where = search ? 'WHERE name LIKE ? OR phone LIKE ? OR legacy_customer_id LIKE ?' : '';
+    const args = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM customers ${where}`).get(...args).n;
+    const rows = db.prepare(`SELECT * FROM customers ${where} ORDER BY name,id LIMIT ? OFFSET ?`)
+      .all(...args, pageSize, (page - 1) * pageSize);
+    const countMap = new Map(rows.length
+      ? db.prepare(`SELECT customer_id,COUNT(*) AS n FROM customer_addresses
+        WHERE customer_id IN (${rows.map(() => '?').join(',')}) GROUP BY customer_id`).all(...rows.map(row => row.id))
+        .map(count => [count.customer_id, count.n])
+      : []);
+    const items = rows.map(row => customerView(db, row, countMap.get(row.id) || 0));
+    ok(res, { items, total, page, pageSize });
   });
 
   app.get('/api/v2/customers/:id', requireAuth, (req, res) => {
@@ -555,16 +564,18 @@ function mountApiV2Routes(app, deps) {
       params.kw = `%${keyword}%`;
     }
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM records r ${where}`).get(params).n;
+    params.lim = pageSize;
+    params.off = (page - 1) * pageSize;
     const rows = db.prepare(`SELECT r.*, c.name AS cname, cu.name AS customer_name, cu.phone AS customer_phone
       FROM records r
       LEFT JOIN couriers c ON r.courier_id = c.id
       LEFT JOIN customers cu ON r.customer_id = cu.id
-      ${where} ORDER BY r.date DESC, r.id DESC`).all(params);
-    ok(res, {
-      ...listSlice(rows.map(r => Object.assign(rowRecord(r), {
-        customerName: r.customer_name || r.customer, customerPhone: r.customer_phone || ''
-      })), page, pageSize)
-    });
+      ${where} ORDER BY r.date DESC, r.id DESC LIMIT :lim OFFSET :off`).all(params);
+    const items = rows.map(r => Object.assign(rowRecord(r), {
+      customerName: r.customer_name || r.customer, customerPhone: r.customer_phone || ''
+    }));
+    ok(res, { items, total, page, pageSize });
   });
 
   // ============ 对账 / 提成 ============

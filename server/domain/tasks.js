@@ -294,7 +294,7 @@ function createTaskModule(db, options = {}) {
     return result;
   }
 
-  function listTasks(filters = {}) {
+  function taskWhere(filters = {}) {
     const clauses = [];
     const params = [];
     if (filters.status) { clauses.push('status = ?'); params.push(filters.status); }
@@ -306,10 +306,24 @@ function createTaskModule(db, options = {}) {
       params.push(q, q, q, q);
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    return db.prepare(`SELECT * FROM pickup_tasks ${where} ORDER BY created_at DESC, id DESC`).all(...params).map(row => taskFromRow(db, row));
+    return { where, params };
   }
 
-  return { createTask, getTask, listTasks, transitionTask, assignTask, updateTask, reportException, resolveException };
+  function countTasks(filters = {}) {
+    const { where, params } = taskWhere(filters);
+    return db.prepare(`SELECT COUNT(*) AS count FROM pickup_tasks ${where}`).get(...params).count;
+  }
+
+  function listTasks(filters = {}, options = {}) {
+    const { where, params } = taskWhere(filters);
+    let sql = `SELECT * FROM pickup_tasks ${where} ORDER BY created_at DESC, id DESC`;
+    const bound = [...params];
+    if (options.limit) { sql += ' LIMIT ?'; bound.push(Number(options.limit)); }
+    if (options.offset) { sql += ' OFFSET ?'; bound.push(Number(options.offset)); }
+    return db.prepare(sql).all(...bound).map(row => taskFromRow(db, row));
+  }
+
+  return { createTask, getTask, countTasks, listTasks, transitionTask, assignTask, updateTask, reportException, resolveException };
 }
 
 module.exports = { createTaskModule, STATUS_LABELS };

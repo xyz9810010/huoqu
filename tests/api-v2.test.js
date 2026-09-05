@@ -345,3 +345,62 @@ test('v2 基础资料/看板/历史记录：统一包装并按角色隔离', asy
   assert.equal(deleted.status, 200);
   assert.equal(deleted.body.data.ok, true);
 });
+
+test('v2 分页一致性 / 客户搜索 / 照片上传', async () => {
+  const first = await request('GET', '/api/v2/tasks?page=1&pageSize=2');
+  assert.equal(first.status, 200);
+  const total = first.body.data.total;
+  let collected = 0;
+  for (let p = 1; p <= Math.ceil(total / 2) + 1; p += 1) {
+    const page = await request('GET', `/api/v2/tasks?page=${p}&pageSize=2`);
+    assert.equal(page.status, 200);
+    assert.equal(page.body.data.page, p);
+    assert.equal(page.body.data.pageSize, 2);
+    collected += page.body.data.items.length;
+    if (page.body.data.items.length === 0) break;
+  }
+  assert.equal(collected, total);
+
+  const beyond = await request('GET', '/api/v2/tasks?page=9999&pageSize=2');
+  assert.equal(beyond.status, 200);
+  assert.equal(beyond.body.data.items.length, 0);
+  assert.equal(beyond.body.data.total, total);
+
+  const customers = await request('GET', `/api/v2/customers?search=${encodeURIComponent('v2 客户')}&page=1&pageSize=100`);
+  assert.equal(customers.status, 200);
+  assert.ok(customers.body.data.total >= 3);
+  assert.ok(customers.body.data.items.every(customer => customer.name.includes('v2 客户')));
+
+  const withAddress = customers.body.data.items.find(customer => customer.address);
+  assert.ok(withAddress);
+  const detail = await request('GET', `/api/v2/customers/${withAddress.id}`);
+  assert.equal(detail.status, 200);
+  assert.equal(withAddress.addressCount, detail.body.data.customer.addresses.length);
+
+  const created = await request('POST', '/api/v2/tasks', {
+    customerName: 'v2 照片客户', address: '义乌市照片地址', items: []
+  });
+  const taskId = created.body.data.task.id;
+  const form = new FormData();
+  form.append('file', new Blob([Buffer.from('89504e470d0a1a0a', 'hex')], { type: 'image/png' }), 'photo.png');
+  const uploaded = await fetch(baseUrl + `/api/v2/tasks/${taskId}/photos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form
+  });
+  const uploadedJson = await uploaded.json();
+  assert.equal(uploaded.status, 201, JSON.stringify(uploadedJson).slice(0, 200));
+  const photo = uploadedJson.data.task.photos[0];
+  assert.ok(photo);
+  assert.match(photo.filePath, /^\/uploads\/[0-9a-f-]+\.png$/);
+  assert.match(photo.createdAt, ISO_RE);
+
+  const fileResponse = await fetch(baseUrl + photo.filePath);
+  assert.equal(fileResponse.status, 200);
+  const filename = photo.filePath.split('/').pop();
+  try {
+    fs.rmSync(path.join(__dirname, '..', 'data', 'uploads', filename), { force: true });
+  } catch (error) {
+    // 清理失败不阻塞断言结果
+  }
+});

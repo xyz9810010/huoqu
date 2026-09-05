@@ -183,3 +183,29 @@ test('resolving an exception notifies the assigned worker', () => {
   assert.equal(notification.notification_type, 'pickupTask.exception');
   db.close();
 });
+
+test('countTasks and listTasks support SQL-level pagination with a stable order', () => {
+  const { db, tasks } = taskModule();
+  for (let i = 0; i < 5; i += 1) {
+    tasks.createTask({ customerName: `分页客户${i}`, address: `地址${i}`, items: [] }, { id: 'u1', name: '客服' });
+  }
+  assert.equal(tasks.countTasks({}), 5);
+  assert.equal(tasks.countTasks({ status: 'pending' }), 5);
+  assert.equal(tasks.countTasks({ status: 'completed' }), 0);
+
+  const full = tasks.listTasks({});
+  assert.equal(full.length, 5);
+  const pages = [
+    tasks.listTasks({}, { limit: 2, offset: 0 }),
+    tasks.listTasks({}, { limit: 2, offset: 2 }),
+    tasks.listTasks({}, { limit: 2, offset: 4 })
+  ];
+  assert.deepEqual(
+    pages.map(page => page.map(task => task.id)).flat(),
+    full.map(task => task.id)
+  );
+  assert.equal(pages[0].length, 2);
+  assert.equal(pages[1].length, 2);
+  assert.equal(pages[2].length, 1);
+  db.close();
+});

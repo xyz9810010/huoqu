@@ -1,21 +1,23 @@
 <template>
   <div>
-    <div class="time-tabs">
-      <button v-for="r in timeRanges" :key="r.key" type="button"
-              class="time-tab" :class="{ 'is-active': timeRange === r.key }"
-              @click="pickTimeRange(r.key)">
-        {{ r.label }}
-      </button>
-    </div>
+    <div class="tabs-sticky">
+      <div class="time-tabs">
+        <button v-for="r in timeRanges" :key="r.key" type="button"
+                class="time-tab" :class="{ 'is-active': timeRange === r.key }"
+                @click="pickTimeRange(r.key)">
+          {{ r.label }}
+        </button>
+      </div>
 
-    <div class="status-tabs">
-      <button v-for="tab in statusTabs" :key="tab.key" type="button"
-              class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
-              @click="pickTab(tab.key)">
-        <span class="status-tab__dot" />
-        {{ tab.label }}
-        <b>{{ tab.count }}</b>
-      </button>
+      <div class="status-tabs">
+        <button v-for="tab in statusTabs" :key="tab.key" type="button"
+                class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
+                @click="pickTab(tab.key)">
+          <span class="status-tab__dot" />
+          {{ tab.label }}
+          <b>{{ tab.count }}</b>
+        </button>
+      </div>
     </div>
 
     <div class="toolbar">
@@ -238,6 +240,14 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.tabs-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--qj-bg);
+  padding-top: 4px;
+  padding-bottom: 6px;
+}
 .slide-enter-active,
 .slide-leave-active {
   transition: opacity 0.22s ease, transform 0.22s ease;

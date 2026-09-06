@@ -1,15 +1,17 @@
 <template>
   <div @touchstart="onTouchStart" @touchend="onTouchEnd">
-    <div class="toolbar">
-      <h2 class="page-title" style="margin:0">我的任务</h2>
-      <span class="count">{{ activeLabel }} {{ shown.length }} 单</span>
-      <el-button :icon="Refresh" circle @click="load" />
-    </div>
+    <div class="header-sticky">
+      <div class="toolbar">
+        <h2 class="page-title" style="margin:0">我的任务</h2>
+        <span class="count">{{ activeLabel }} {{ shown.length }} 单</span>
+        <el-button :icon="Refresh" circle @click="load" />
+      </div>
 
-    <el-tabs v-model="active" class="status-tabs" @tab-change="onTab">
-      <el-tab-pane v-for="s in statuses" :key="s.value" :name="s.value"
-                   :label="`${s.label} ${counts[s.value]}`" />
-    </el-tabs>
+      <el-tabs v-model="active" class="status-tabs" @tab-change="onTab">
+        <el-tab-pane v-for="s in statuses" :key="s.value" :name="s.value"
+                     :label="`${s.label} ${counts[s.value]}`" />
+      </el-tabs>
+    </div>
 
     <Transition name="slide" mode="out-in">
       <div :key="active">
@@ -175,6 +177,14 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
+.header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--qj-bg);
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
 .slide-enter-active,
 .slide-leave-active {
   transition: opacity 0.22s ease, transform 0.22s ease;

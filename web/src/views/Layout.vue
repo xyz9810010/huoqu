@@ -129,10 +129,16 @@ const shortcutDefs: { key: string; label: string; path: string; roles: string[] 
   { key: 'd', label: '数据看板', path: '/dashboard', roles: ['admin', 'boss'] },
 ]
 function showShortcutHelp() {
-  const lines = shortcutDefs
+  const kbd = 'display:inline-block;min-width:24px;text-align:center;padding:2px 8px;border:1px solid #d0d5dd;border-bottom-width:2px;border-radius:6px;background:#f7f8fa;font-family:ui-monospace,monospace;font-weight:600;color:#182431'
+  const rows = shortcutDefs
     .filter((s) => s.roles.includes(auth.role))
-    .map((s) => s.key.toUpperCase() + ' — ' + s.label)
-  ElMessageBox.alert(lines.length ? lines.join('<br>') + '<br>? — 显示此帮助' : '? — 显示此帮助', '键盘快捷键', {
+    .map((s) => '<tr><td style="padding:6px 0"><kbd style="' + kbd + '">' + s.key.toUpperCase() + '</kbd></td><td style="padding:6px 8px">' + s.label + '</td></tr>')
+    .join('')
+  const html = '<div style="line-height:1.7">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:14px">' + rows + '</table>'
+    + '<div style="margin-top:12px;font-size:12px;color:#86909c;border-top:1px solid #f0f0f0;padding-top:10px">按 <kbd style="' + kbd + '">?</kbd> 查看帮助 · 输入框内输入时不触发快捷键</div>'
+    + '</div>'
+  ElMessageBox.alert(html, '键盘快捷键', {
     dangerouslyUseHTMLString: true,
     confirmButtonText: '知道了',
   }).catch(() => {})

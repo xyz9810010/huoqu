@@ -89,6 +89,30 @@ const notificationDispatcher = createDispatcher({
 // 通知/投递/失效订阅保留策略（默认 180/90/30 天，可环境变量覆盖，见 retention.js）
 const notificationRetention = createNotificationRetention(db);
 if (pushSecretBox.available) subscriptionStore.migrateLegacyTokens();
+
+// 初次部署自动生成浏览器 Web Push VAPID 密钥（免手动配置，幂等）
+async function autoProvisionWebPush() {
+  if (!pushSecretBox.available) return;
+  try {
+    if (providerConfigStore.getDecrypted('web_push')) return;
+    const adapter = providerRegistry.get('web_push');
+    if (!adapter) return;
+    const { generateVAPIDKeys } = require('web-push');
+    const keys = generateVAPIDKeys();
+    providerConfigStore.save('web_push', {
+      vapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT || 'mailto:notifications@localhost',
+      vapidPublicKey: keys.publicKey,
+      vapidPrivateKey: keys.privateKey,
+    }, adapter.credentialSchema);
+    const validation = await adapter.validateConfig(providerConfigStore.getDecrypted('web_push'));
+    providerConfigStore.recordHealth('web_push', validation);
+    if (validation.ok) providerConfigStore.setEnabled('web_push', true);
+    console.log('[push] 已自动生成并启用浏览器 Web Push');
+  } catch (e) {
+    console.error('[push] Web Push 自动配置失败：', e && e.message ? e.message : e);
+  }
+}
+autoProvisionWebPush();
 const MACHINE_API_KEY = process.env.MACHINE_API_KEY || '';
 
 // 统一注册全部 API 路由（server/http/api.js）

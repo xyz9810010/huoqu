@@ -111,12 +111,12 @@ export async function autoRepairBrowserPush(): Promise<boolean> {
   if (!('serviceWorker' in navigator)) return false
   try {
     const sw = await navigator.serviceWorker.ready
-    const subscription = await sw.pushManager.getSubscription()
-    if (!subscription) return false
+    const localSubscription = await sw.pushManager.getSubscription()
     const list = await http.get<any, NotificationSubscription[]>('/v1/notification-subscriptions')
     const active = list.find((item) => item.channel === 'web_push' && item.status === 'active')
-    if (active) return false
-    // 服务端已无有效订阅，但本地仍有 → 重新登记
+    // 只有「本地有订阅」且「服务端有 active 订阅」才视为正常；任一端缺失都重新登记。
+    // 覆盖两种失效：服务端订阅被标记 invalid（WEB_PUSH_ENDPOINT_GONE），或本地订阅被浏览器清掉。
+    if (active && localSubscription) return false
     await disableBrowserPush()
     await enableBrowserPush()
     return true

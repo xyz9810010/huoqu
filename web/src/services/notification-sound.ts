@@ -71,7 +71,11 @@ export function createNotificationSoundController(options: NotificationSoundOpti
       eventTarget.addEventListener('keydown', unlock, { capture: true })
     },
     play() {
-      if (!context || context.state !== 'running') return false
+      if (!context) return false
+      // 后台标签页可能被浏览器挂起 AudioContext，先尝试恢复再播放
+      if (context.state === 'suspended') {
+        void context.resume().catch(() => {})
+      }
       const now = context.currentTime
       tone(740, now)
       tone(988, now + 0.18)

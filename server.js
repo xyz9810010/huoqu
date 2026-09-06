@@ -122,8 +122,12 @@ async function autoProvisionWebPush() {
     }, adapter.credentialSchema);
     const validation = await adapter.validateConfig(providerConfigStore.getDecrypted('web_push'));
     providerConfigStore.recordHealth('web_push', validation);
-    if (validation.ok) providerConfigStore.setEnabled('web_push', true);
-    console.log('[push] 已自动生成并启用浏览器 Web Push');
+    if (validation.ok) {
+      providerConfigStore.setEnabled('web_push', true);
+      console.log('[push] 已自动生成并启用浏览器 Web Push');
+    } else {
+      console.warn('[push] 浏览器 Web Push 自动配置未通过校验：', validation.code || validation.message || '');
+    }
   } catch (e) {
     console.error('[push] Web Push 自动配置失败：', e && e.message ? e.message : e);
   }
@@ -147,8 +151,12 @@ async function autoProvisionHuawei() {
     providerConfigStore.save('huawei', { projectId: projectId, serviceAccount: serviceAccount }, adapter.credentialSchema);
     const validation = await adapter.validateConfig(providerConfigStore.getDecrypted('huawei'));
     providerConfigStore.recordHealth('huawei', validation);
-    if (validation.ok) providerConfigStore.setEnabled('huawei', true);
-    console.log('[push] 已从环境变量配置并启用华为 Push Kit');
+    if (validation.ok) {
+      providerConfigStore.setEnabled('huawei', true);
+      console.log('[push] 已从环境变量配置并启用华为 Push Kit');
+    } else {
+      console.warn('[push] 华为 Push Kit 自动配置未通过校验：', validation.code || validation.message || '');
+    }
   } catch (e) {
     console.error('[push] 华为 Push Kit 自动配置失败：', e && e.message ? e.message : e);
   }

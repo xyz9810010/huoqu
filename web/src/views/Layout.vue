@@ -82,11 +82,11 @@
       <div class="help-info">
         <div class="help-row">
           <span class="help-label">仓库地址</span>
-          <span class="help-copy" title="点击复制" @click="copyText('https://github.com/xyz9810010/huoqu')">github.com/xyz9810010/huoqu</span>
+          <span class="help-copy" title="点击打开新标签页" @click="openUrl('https://github.com/xyz9810010/huoqu')">github.com/xyz9810010/huoqu ↗</span>
         </div>
         <div class="help-row">
           <span class="help-label">实例地址</span>
-          <span class="help-copy" title="点击复制" @click="copyText('https://huoqu.onrender.com')">huoqu.onrender.com</span>
+          <span class="help-copy" title="点击打开新标签页" @click="openUrl('https://huoqu.onrender.com')">huoqu.onrender.com ↗</span>
         </div>
         <div class="help-row">
           <span class="help-label">实例账号</span>
@@ -177,6 +177,9 @@ async function copyText(text: string) {
     document.body.removeChild(ta)
   }
   ElMessage.success('已复制：' + text)
+}
+function openUrl(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 function onKeydown(e: KeyboardEvent) {
   const target = e.target as HTMLElement | null

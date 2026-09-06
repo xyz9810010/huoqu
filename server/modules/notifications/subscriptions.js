@@ -35,8 +35,10 @@ function createSubscriptionStore(db, secretBox, options = {}) {
       platform=excluded.platform,device_label=excluded.device_label,app_version=excluded.app_version,
       role=excluded.role,courier_id=excluded.courier_id,status='active',invalidated_at='',
       last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at`);
-  const activeVendorForUser = db.prepare(`SELECT id FROM notification_subscriptions
-    WHERE channel='vendor_push' AND status='active' AND user_id=? AND provider_code=? AND id<>?`);
+  // 单端接收策略：上报新订阅时清理该用户其他所有 active 推送订阅（跨通道/供应商），
+  // 确保消息只发到当前登录的端（web 登录会清掉鸿蒙 token，反之亦然）。
+  const activeForUser = db.prepare(`SELECT id FROM notification_subscriptions
+    WHERE channel IN ('vendor_push','web_push') AND status='active' AND user_id=? AND id<>?`);
   const supersedeActive = db.prepare(`UPDATE notification_subscriptions
     SET status='invalid', invalidated_at=?, updated_at=? WHERE id=?`);
   const failSupersededDeliveries = db.prepare(`UPDATE notification_deliveries
@@ -56,10 +58,10 @@ function createSubscriptionStore(db, secretBox, options = {}) {
       String(input.role || ''), String(input.courierId || ''), timestamp, timestamp, timestamp
     );
     const registered = findByTarget.get(providerCode, targetFingerprint);
-    if (channel === 'vendor_push') {
-      // 手机推送按“一个用户一台工作手机”策略：新登记取代该用户同供应商的旧登记，
-      // 避免旧 token 残留导致一次派单在鸿蒙/安卓端收到重复推送。
-      for (const stale of activeVendorForUser.all(userId, providerCode, registered.id)) {
+    if (channel === 'vendor_push' || channel === 'web_push') {
+      // 单端接收：新登记清理该用户其他所有 active 推送订阅，
+      // 避免旧端（鸿蒙/安卓/浏览器）残留导致消息发到已退出/被踢的设备。
+      for (const stale of activeForUser.all(userId, registered.id)) {
         supersedeActive.run(timestamp, timestamp, stale.id);
         failSupersededDeliveries.run(stale.id);
       }

@@ -172,6 +172,13 @@ app.post('/api/login', (req, res) => {
   }
   auth.clearLoginFailures(username, clientIp);
   const token = auth.createSession(u.id);
+  // 单端接收：登录即清理该用户旧的手机推送订阅（鸿蒙/安卓），当前端登录后再上报新 token。
+  // 这样在网页端登录后，鸿蒙端就不会再收到推送。
+  try {
+    subscriptionStore.removeProviderForUser(u.id, 'huawei');
+  } catch (e) {
+    // 清理失败忽略，不影响登录
+  }
   res.json({ token, user: auth.publicUser(u) });
 });
 app.post('/api/logout', requireAuth, (req, res) => {

@@ -57,7 +57,7 @@ test('Huawei provider maps a successful gateway response to each target', async 
   ]);
 });
 
-test('Huawei provider sends a reproducible payload with EXPRESS category, notifyId and click/data fields', async () => {
+test('Huawei provider sends a reproducible payload with WORK category, notifyId and click/data fields', async () => {
   let capturedBody = null;
   const provider = createHuaweiProvider({
     getAccessToken: async () => 'access-token',
@@ -74,8 +74,8 @@ test('Huawei provider sends a reproducible payload with EXPRESS category, notify
     projectId: 'project-1', serviceAccount: '{}'
   });
 
-  // category 必须与 AGC 获批自分类权益一致（代办事项提醒 → EXPRESS），否则华为降级为资讯营销提醒
-  assert.equal(capturedBody.payload.notification.category, 'EXPRESS');
+  // category 必须与 AGC 获批自分类权益一致（工作事项/代办事项提醒 → WORK），否则华为降级为资讯营销提醒
+  assert.equal(capturedBody.payload.notification.category, 'WORK');
   assert.deepEqual(capturedBody.payload.notification.clickAction, { actionType: 0 });
   assert.equal(capturedBody.payload.notification.title, '新的取件任务');
   // 每条通知有独立 notifyId，避免多条通知在通知栏互相覆盖

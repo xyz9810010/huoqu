@@ -36,11 +36,23 @@ function createBusinessNotificationPublisher(db, notifications) {
     if (!task || !task.defaultWorkerId || !workerUser) return null;
     const recipient = workerUser.get(task.defaultWorkerId);
     if (!recipient) return null;
+    const parts = [`${task.customerName} · ${task.address}`];
+    let title = '新的取件任务';
+    if (task.taskType === 'rush') {
+      title = '新的取件任务（加急）';
+      if (task.rushShipTime) parts.push('赶 ' + fmtClockTime(task.rushShipTime) + ' 出货');
+      if (task.rushReason) parts.push('原因：' + task.rushReason);
+      if (parts.length === 1) parts.push('请尽快取件');
+    } else if (task.taskType === 'scheduled' && task.scheduledTime) {
+      title = '新的取件任务（指定时间）';
+      const kind = task.scheduledKind === 'before' ? '前取' : task.scheduledKind === 'after' ? '后取' : task.scheduledKind === 'around' ? '左右取' : '';
+      parts.push('指定时间 ' + fmtClockTime(task.scheduledTime) + (kind ? ' ' + kind : ''));
+    }
     return notifications.publish({
       recipientUserId: recipient.id,
       type: 'pickupTask.assigned',
-      title: '新的取件任务',
-      body: `${task.customerName} · ${task.address}`.slice(0, 500),
+      title,
+      body: parts.join(' · ').slice(0, 500),
       data: taskData(task),
       priority: task.taskType === 'rush' ? 'high' : 'normal',
       dedupeKey: `${eventId}:${recipient.id}`
@@ -101,6 +113,7 @@ function createBusinessNotificationPublisher(db, notifications) {
     const parts = [task.customerName];
     if (task.rushShipTime) parts.push('赶 ' + fmtClockTime(task.rushShipTime) + ' 出货');
     if (task.rushReason) parts.push('原因：' + task.rushReason);
+    if (parts.length === 1) parts.push('请尽快取件');
     return notifications.publish({
       recipientUserId: recipient.id,
       type: 'pickupTask.overdue',

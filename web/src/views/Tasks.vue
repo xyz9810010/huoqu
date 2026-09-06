@@ -56,7 +56,7 @@
       </el-table-column>
     </el-table>
 
-    <div class="mobile-list">
+    <div class="mobile-list" @touchstart="onTouchStart" @touchend="onTouchEnd">
       <article v-for="row in list" :key="row.id" class="mobile-item mobile-item--clickable mobile-task"
                :class="'mobile-task--' + row.status" @click="router.push('/tasks/' + row.id)">
         <div class="mobile-item__head">
@@ -168,6 +168,27 @@ function pickTab(key: string) {
 function pickTimeRange(key: string) {
   timeRange.value = key
   onFilterChange()
+}
+
+// 移动端左右滑动切换状态 Tab（全部/待办/已完成/已取消）
+let touchStartX = 0
+let touchStartY = 0
+function onTouchStart(e: TouchEvent) {
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+}
+function onTouchEnd(e: TouchEvent) {
+  const dx = e.changedTouches[0].clientX - touchStartX
+  const dy = e.changedTouches[0].clientY - touchStartY
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return
+  const keys = statusTabs.value.map((t: any) => t.key)
+  const current = status.value === 'pending' || status.value === 'in_progress' ? 'open' : status.value
+  const idx = keys.indexOf(current)
+  if (dx < 0 && idx >= 0 && idx < keys.length - 1) {
+    pickTab(keys[idx + 1])
+  } else if (dx > 0 && idx > 0) {
+    pickTab(keys[idx - 1])
+  }
 }
 
 function isActiveTab(key: string) {

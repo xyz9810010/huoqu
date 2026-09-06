@@ -49,6 +49,8 @@ async function submit() {
     ElMessage.success('登录成功')
     const roleHome: Record<string, string> = { boss: '/dashboard', admin: '/dashboard', cs: '/tasks', worker: '/worker/tasks' }
     router.push(roleHome[auth.role] || '/')
+  } catch {
+    // 登录失败已由请求拦截器提示，这里不再重复弹错
   } finally {
     loading.value = false
   }

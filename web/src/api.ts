@@ -4,7 +4,7 @@ import 'element-plus/es/components/message/style/css'
 import router from './router'
 import { unwrapResponse } from './api-contract'
 
-const http = axios.create({ baseURL: '/api', timeout: 20000 })
+const http = axios.create({ baseURL: '/api', timeout: 60000 })
 
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')

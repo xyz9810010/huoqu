@@ -40,15 +40,15 @@
 
     <el-table class="desktop-table" :data="list" :row-class-name="rowClass"
               @row-click="(r: any) => router.push('/tasks/' + r.id)" style="cursor:pointer">
-      <el-table-column prop="taskNo" label="任务号" width="170" />
-      <el-table-column label="状态" width="112">
+      <el-table-column prop="taskNo" label="任务号" width="150" />
+      <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status) as any">
             {{ row.status === 'completed' ? '✓ 已完成' : statusLabel(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="类型" width="150">
+      <el-table-column label="类型" width="130">
         <template #default="{ row }">
           <el-tag v-if="row.taskType === 'rush'" type="danger">🔴 赶 {{ fmtTime(row.rushShipTime) }} 出货</el-tag>
           <el-tag v-else-if="row.taskType === 'scheduled'" type="warning">
@@ -57,12 +57,10 @@
           <el-tag v-else type="info">普通</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="customerName" label="客户" min-width="160" />
-      <el-table-column prop="addressPointName" label="取件点" width="110" />
-      <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="defaultWorkerName" label="取件员" width="100" />
-      <el-table-column prop="mainCsName" label="主客服" width="100" />
-      <el-table-column prop="dispatchAt" label="派单时间" width="170">
+      <el-table-column prop="customerName" label="客户" min-width="120" />
+      <el-table-column prop="address" label="地址" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="defaultWorkerName" label="取件员" width="90" />
+      <el-table-column prop="dispatchAt" label="派单时间" width="150">
         <template #default="{ row }">{{ fmtTime(row.dispatchAt) }}</template>
       </el-table-column>
     </el-table>
@@ -110,7 +108,7 @@ const list = ref<any[]>([])
 const status = ref('')
 const taskType = ref('')
 const keyword = ref('')
-const timeRange = ref('')
+const timeRange = ref('today')
 const timeRanges = [
   { key: '', label: '全部' },
   { key: 'today', label: '今天' },

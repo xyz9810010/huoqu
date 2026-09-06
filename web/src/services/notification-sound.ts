@@ -11,8 +11,27 @@ export function createNotificationSoundController(options: NotificationSoundOpti
     return new AudioContextClass()
   })
   const visibilityState = options.visibilityState || (() => document.visibilityState)
+  const VOLUME_KEY = 'cargo:notification-volume'
   let context: AudioContext | null = null
   let installed = false
+  let volume = 1
+  try {
+    const saved = localStorage.getItem(VOLUME_KEY)
+    if (saved !== null) {
+      const parsed = parseFloat(saved)
+      if (!Number.isNaN(parsed)) volume = Math.min(1, Math.max(0, parsed))
+    }
+  } catch {
+    // localStorage 不可用时使用默认音量
+  }
+
+  function setVolume(value: number) {
+    volume = Math.min(1, Math.max(0, value))
+    try { localStorage.setItem(VOLUME_KEY, String(volume)) } catch {}
+  }
+  function getVolume() {
+    return volume
+  }
 
   function removeUnlockListeners() {
     if (!eventTarget || !installed) return
@@ -36,8 +55,9 @@ export function createNotificationSoundController(options: NotificationSoundOpti
     const gain = context.createGain()
     oscillator.type = 'sine'
     oscillator.frequency.setValueAtTime(frequency, startAt)
+    const peak = 0.12 * volume
     gain.gain.setValueAtTime(0.0001, startAt)
-    gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.015)
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), startAt + 0.015)
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14)
     oscillator.connect(gain)
     gain.connect(context.destination)
@@ -64,6 +84,8 @@ export function createNotificationSoundController(options: NotificationSoundOpti
       if (context) void Promise.resolve(context.close()).catch(() => {})
       context = null
     },
+    setVolume,
+    getVolume,
   }
 }
 

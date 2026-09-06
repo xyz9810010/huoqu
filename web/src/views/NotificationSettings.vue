@@ -35,6 +35,16 @@
             <el-button type="primary" :loading="busy" @click="repairBrowserPush">重新登记系统通知</el-button>
           </template>
         </div>
+        <div class="volume-row">
+          <div class="volume-head">
+            <span>提示音音量</span>
+            <b>{{ volume }}%</b>
+          </div>
+          <div class="volume-control">
+            <el-slider v-model="volume" :min="0" :max="100" :step="5" @change="onVolumeChange" />
+            <el-button size="small" @click="playPreview">试听</el-button>
+          </div>
+        </div>
       </el-card>
 
       <el-card>
@@ -116,6 +126,7 @@ import { ElMessage } from 'element-plus'
 import http from '../api'
 import { currentBrowserSubscriptionId, disableBrowserPush, enableBrowserPush,
   getBrowserPushState } from '../services/browser-push'
+import { notificationSound } from '../services/notification-sound'
 import type { BrowserPushState } from '../services/browser-push'
 import type { NotificationPreference, NotificationSubscription } from '../types/notifications'
 
@@ -128,6 +139,14 @@ const testing = ref(false)
 const testingId = ref('')
 const devices = ref<NotificationSubscription[]>([])
 const pushState = ref<BrowserPushState>(getBrowserPushState())
+const volume = ref(Math.round(notificationSound.getVolume() * 100))
+
+function onVolumeChange(value: number) {
+  notificationSound.setVolume(value / 100)
+}
+function playPreview() {
+  notificationSound.play()
+}
 const preferenceRows = reactive<PreferenceRow[]>([
   { type: 'pickupTask.assigned', label: '新任务与改派', description: '有新的取件任务分配给我时提醒', enabled: true, saving: false },
   { type: 'pickupTask.assistInvited', label: '协助取件邀请', description: '被邀请协助取件任务时提醒', enabled: true, saving: false },
@@ -271,6 +290,12 @@ onMounted(load)
 .status-dot.denied, .status-dot.insecure { background: var(--el-color-warning); }
 .status-help { color: var(--qj-muted); font-size: 12px; margin-top: 4px; line-height: 1.5; }
 .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.volume-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--qj-border); }
+.volume-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.volume-head span { font-size: 13px; color: var(--qj-text-2); }
+.volume-head b { font-size: 13px; color: var(--el-color-primary); }
+.volume-control { display: flex; align-items: center; gap: 12px; }
+.volume-control .el-slider { flex: 1; }
 .stale-help { width: 100%; margin: 0 0 2px; color: var(--qj-muted); font-size: 12px; line-height: 1.5; }
 .preference-list { display: grid; }
 .preference-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--qj-border); }

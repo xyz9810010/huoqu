@@ -24,6 +24,7 @@
     "better-sqlite3": "^12.11.1",
     "express": "^5.2.1",
     "multer": "^2.3.0",
+    "pinyin-pro": "3.29.3",
     "web-push": "^3.6.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }

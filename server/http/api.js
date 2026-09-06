@@ -10,6 +10,8 @@ const { requireAuth, requireAdmin, requireStaff } = require('./auth-guard');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const { createUploader } = require('./uploads');
 const { withIdempotency } = require('./idempotency');
+const { workerTaskInput } = require('./worker-task-input');
+const { workerCustomerOptions } = require('./worker-customer-options');
 const { utcText, utcTextToBjText } = require('../time');
 
 // v1（Web）展示口径：任务域存储为 UTC 空格文本，输出前统一转为北京时间文本。
@@ -200,9 +202,11 @@ app.get('/api/tasks/:id', requireAuth, (req, res) => {
   res.json(task);
 });
 
-app.post('/api/tasks', requireAuth, requireStaff, withIdempotency((req, res) => {
+app.post('/api/tasks', requireAuth, withIdempotency((req, res) => {
   try {
-    const input = { ...(req.body || {}) };
+    if (!['admin', 'cs', 'courier'].includes(req.user.role)) return res.status(403).json({ error: '无权创建取件订单' });
+    const input = req.user.role === 'courier'
+      ? workerTaskInput(db, req.user, req.body || {}) : { ...(req.body || {}) };
     if (input.customerId) {
       const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(String(input.customerId));
       if (!customer) return res.status(400).json({ error: '客户不存在' });
@@ -225,7 +229,7 @@ app.post('/api/tasks', requireAuth, requireStaff, withIdempotency((req, res) => 
     broadcast({ type: 'task.created', taskId: task.id, status: task.status });
     res.status(201).json(localizeTaskForWeb(task));
   } catch (error) {
-    res.status(400).json({ error: error.message || '创建任务失败' });
+    res.status(error.status || 400).json({ error: error.message || '创建任务失败' });
   }
 }));
 
@@ -274,15 +278,64 @@ app.post('/api/tasks/:id/items', requireAuth, (req, res) => {
   res.status(201).json(taskDetail(task.id));
 });
 
+app.put('/api/tasks/:id/items/:itemId', requireAuth, (req, res) => {
+  const task = tasks.getTask(req.params.id);
+  if (!task) return res.status(404).json({ error: '取件任务不存在' });
+  if (!taskVisibleTo(req.user, task)) return res.status(403).json({ error: '无权操作该任务' });
+  if (task.status === 'cancelled') return res.status(409).json({ error: '已取消任务不能修改明细' });
+  const item = db.prepare('SELECT * FROM pickup_items WHERE id=? AND task_id=?').get(req.params.itemId, task.id);
+  if (!item) return res.status(404).json({ error: '货物明细不存在' });
+  const body = req.body || {};
+  if (typeof body.pieces !== 'number' || !Number.isSafeInteger(body.pieces) || body.pieces <= 0) {
+    return res.status(400).json({ error: '件数必须为正整数' });
+  }
+  const goodsName = body.goodsName === undefined ? item.goods_name : body.goodsName;
+  const waybillInput = body.waybillNo === undefined ? item.waybill_no : body.waybillNo;
+  if (typeof goodsName !== 'string' || goodsName.length > 200 ||
+      typeof waybillInput !== 'string' || waybillInput.length > 128) {
+    return res.status(400).json({ error: '品名或面单号格式不正确' });
+  }
+  const waybillNo = waybillInput.trim();
+  const changedWaybill = waybillNo !== item.waybill_no;
+  const before = { goodsName: item.goods_name, waybillNo: item.waybill_no, pieces: item.pieces };
+  const after = { goodsName: goodsName.trim(), waybillNo, pieces: body.pieces };
+  if (JSON.stringify(before) === JSON.stringify(after)) return res.json(taskDetail(task.id));
+  const updatedAt = utcText();
+  try {
+    db.transaction(() => {
+      // Keep ownership and financial fields untouched. A different waybill must
+      // not inherit the old shipment's matched weight; it will be matched again.
+      db.prepare(`UPDATE pickup_items SET goods_name=?,waybill_no=?,pieces=?,entry_method=?,
+        final_weight=?,weight_source=?,match_status=?,updated_at=? WHERE id=? AND task_id=?`).run(
+        after.goodsName, waybillNo, after.pieces,
+        changedWaybill ? (waybillNo ? 'manual' : 'no_waybill') : item.entry_method,
+        changedWaybill ? 0 : item.final_weight, changedWaybill ? '' : item.weight_source,
+        changedWaybill ? (waybillNo ? 'pending' : 'no_waybill') : item.match_status,
+        updatedAt, item.id, task.id
+      );
+      db.prepare('UPDATE pickup_tasks SET updated_at=? WHERE id=?').run(updatedAt, task.id);
+      db.prepare(`INSERT INTO task_events (id,task_id,event_type,note,actor_id,actor_name,created_at)
+        VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), task.id, 'item_updated',
+        JSON.stringify({ itemId: item.id, before, after }), req.user.id, req.user.name || req.user.username, updatedAt);
+    })();
+    broadcast({ type: 'task.updated', taskId: task.id, status: task.status });
+    res.json(taskDetail(task.id));
+  } catch (error) {
+    res.status(500).json({ error: '保存货物明细失败' });
+  }
+});
+
 function transitionAlias(status) {
   return (req, res) => {
     try {
       const task = tasks.getTask(req.params.id);
       if (!task) return res.status(404).json({ error: '取件任务不存在' });
       if (!taskVisibleTo(req.user, task)) return res.status(403).json({ error: '无权操作该任务' });
-      res.json(taskDetail(tasks.transitionTask(task.id, status, {
+      const updated = tasks.transitionTask(task.id, status, {
         id: req.user.id, name: req.user.name || req.user.username
-      }, String((req.body && req.body.note) || '')).id));
+      }, String((req.body && req.body.note) || ''));
+      broadcast({ type: 'task.updated', taskId: updated.id, status: updated.status });
+      res.json(taskDetail(updated.id));
     } catch (error) {
       res.status(400).json({ error: error.message || '更新任务失败' });
     }
@@ -1088,6 +1141,11 @@ app.get('/api/logs', requireAuth, requireAdmin, (req, res) => {
   const list=db.prepare(`SELECT user_name AS userName,action,target_type AS targetType,target_id AS targetId,detail,created_at AS createdAt
     FROM operation_logs ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`).all(size,page*size);
   res.json({list,total,page,size});
+});
+
+app.get('/api/worker/customer-options', requireAuth, (req, res) => {
+  if (req.user.role !== 'courier') return res.status(403).json({ error: '仅取件员可用' });
+  res.json(workerCustomerOptions(db, req.user.courier_id, req.query.search));
 });
 
 app.get('/api/customers', requireAuth, (req, res) => {

@@ -279,6 +279,295 @@ test('task list status=open combines pending and in_progress only', async () => 
   assert.equal(cancelled.data.total, 0);
 });
 
+test('Harmony completion notifies the dispatcher and broadcasts the task update', async () => {
+  token = adminToken;
+  const courier = await request('POST', '/api/couriers', { name: '完成通知测试员', region: '测试', commissionRate: 3 });
+  const username = `completion_${Date.now()}`;
+  const user = await request('POST', '/api/users', {
+    username, password: 'worker123', role: 'courier', courierId: courier.data.id, name: '完成通知测试员'
+  });
+  assert.equal(user.status, 200);
+  const created = await request('POST', '/api/tasks', {
+    customerName: '完成通知回归', address: '测试地址', defaultWorkerId: courier.data.id, items: []
+  });
+  assert.equal(created.status, 201);
+  const login = await request('POST', '/api/login', { username, password: 'worker123' }, false);
+  assert.equal(login.status, 200);
+  const controller = new AbortController();
+  const stream = await fetch(`${baseUrl}/api/v1/events`, {
+    headers: { Authorization: `Bearer ${adminToken}` }, signal: controller.signal
+  });
+  let received = '';
+  const reading = (async () => {
+    try {
+      for await (const chunk of stream.body) received += Buffer.from(chunk).toString('utf8');
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    }
+  })();
+  try {
+    token = login.data.token;
+    assert.equal((await request('POST', `/api/tasks/${created.data.id}/start`)).status, 200);
+    const completed = await request('POST', `/api/tasks/${created.data.id}/complete`);
+    assert.equal(completed.status, 200);
+    assert.equal(completed.data.status, 'completed');
+    token = adminToken;
+    const inbox = await request('GET', '/api/notifications');
+    const completion = inbox.data.filter(n => {
+      const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+      return data.resourceId === created.data.id && data.status === 'completed';
+    });
+    assert.equal(completion.length, 1, 'dispatcher must receive exactly one completion notification');
+    const readEvents = () => received.split('\n\n').slice(0, -1).flatMap(packet =>
+      packet.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6))));
+    const completedUpdate = e => e.type === 'task.updated' && e.taskId === created.data.id && e.status === 'completed';
+    for (let i = 0; i < 20 && !readEvents().some(completedUpdate); i++) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const events = readEvents();
+    assert.ok(events.some(e => e.type === 'notification.created' &&
+      e.data.notification.data.resourceId === created.data.id && e.data.notification.data.status === 'completed'),
+    'dispatcher must receive a completion SSE notification');
+    assert.ok(events.some(completedUpdate),
+      'Harmony completion must broadcast the updated task to open task pages');
+  } finally {
+    token = adminToken;
+    controller.abort();
+    await reading;
+  }
+});
+
+async function editCargoItem(taskId, itemId, fields, authToken = token) {
+  const response = await fetch(`${baseUrl}/api/tasks/${taskId}/items/${itemId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(fields)
+  });
+  const text = await response.text();
+  return { status: response.status, data: response.headers.get('content-type')?.includes('application/json') ? JSON.parse(text) : null };
+}
+
+async function createWorkerCreator(suffix) {
+  token = adminToken;
+  const courier = await request('POST', '/api/couriers', { name: `自建${suffix}`, region: '测试', commissionRate: 3 });
+  const username = `selfcreate_${suffix}_${Date.now()}`;
+  const account = await request('POST', '/api/users', { username, password: 'worker123', role: 'courier', courierId: courier.data.id, name: '自建取件员' });
+  assert.equal(account.status, 200);
+  const login = await request('POST', '/api/login', { username, password: 'worker123' }, false);
+  return { courierId: courier.data.id, token: login.data.token, userId: login.data.user.id };
+}
+
+test('worker customer suggestions match Chinese, pinyin and initials with digits within assigned areas', async () => {
+  const worker = await createWorkerCreator('suggest');
+  const db = new Database(path.join(tempDir, 'app.db'));
+  const names = ['杨梅', '杨3', '杨4', '阳5', '林12'];
+  try {
+    db.prepare('INSERT INTO areas (id,name) VALUES (?,?)').run('suggest-area', '预览区域');
+    db.prepare('INSERT INTO area_workers (area_id,worker_id,worker_role) VALUES (?,?,?)').run('suggest-area', worker.courierId, 'backup');
+    for (let i = 0; i < names.length; i++) {
+      db.prepare('INSERT INTO customers (id,name) VALUES (?,?)').run(`suggest-c${i}`, names[i]);
+      db.prepare('UPDATE customers SET main_cs_id=? WHERE id=?').run(adminUser.id, `suggest-c${i}`);
+      db.prepare('INSERT INTO customer_addresses (id,customer_id,address,area_id) VALUES (?,?,?,?)')
+        .run(`suggest-a${i}`, `suggest-c${i}`, `地址${i}`, 'suggest-area');
+    }
+    db.prepare('INSERT INTO customer_addresses (id,customer_id,address,area_id) VALUES (?,?,?,?)').run('suggest-a-extra', 'suggest-c1', '第二地址', 'suggest-area');
+    db.prepare('INSERT INTO customers (id,name) VALUES (?,?)').run('suggest-out', '杨外区');
+    db.prepare('INSERT INTO customer_addresses (id,customer_id,address) VALUES (?,?,?)').run('suggest-out-a', 'suggest-out', '外区地址');
+    db.prepare('INSERT INTO customers (id,name,status) VALUES (?,?,?)').run('suggest-disabled', '杨停用', 'disabled');
+    db.prepare('INSERT INTO customer_addresses (id,customer_id,address,area_id) VALUES (?,?,?,?)').run('suggest-disabled-a', 'suggest-disabled', '停用地址', 'suggest-area');
+  } finally { db.close(); }
+  token = worker.token;
+  for (const [q, want] of [['杨', ['杨3','杨4','杨梅']], ['y', ['杨3','杨4','杨梅','阳5']], ['yang', ['杨3','杨4','杨梅','阳5']],
+    [' YANG3 ', ['杨3']], ['y3', ['杨3']], ['yang4', ['杨4']], ['y5', ['阳5']], ['l12', ['林12']], ['lin12', ['林12']], ['zzzz', []], ['', []]]) {
+    const result = await request('GET', '/api/worker/customer-options?search=' + encodeURIComponent(q));
+    assert.equal(result.status, 200);
+    assert.deepEqual([...new Set(result.data.map(c => c.customerName))].sort(), want.sort(), q);
+    if (q === 'y3') {
+      assert.equal(result.data.length, 2, 'each address is a distinct selectable option');
+      assert.deepEqual(result.data.map(c => c.address).sort(), ['地址1','第二地址'].sort());
+    }
+  }
+  const minimal = { customerId: 'suggest-c1', addressId: 'suggest-a1' };
+  const created = await request('POST', '/api/tasks', minimal);
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal(created.data.status, 'pending');
+  assert.equal(created.data.defaultWorkerId, worker.courierId);
+  assert.equal(created.data.customerName, '杨3');
+  assert.equal(created.data.address, '地址1');
+  assert.equal(created.data.items.length, 0, 'unknown pieces must not create a fake cargo item');
+  assert.equal((await request('POST', `/api/tasks/${created.data.id}/start`)).status, 200);
+  const cargo = await request('POST', `/api/tasks/${created.data.id}/items`, { pieces: 3, waybillNo: '', entryMethod: 'no_waybill' });
+  assert.equal(cargo.data.items[0].pieces, 3);
+  const editedCargo = await editCargoItem(created.data.id, cargo.data.items[0].id, { pieces: 4 });
+  assert.equal(editedCargo.data.items.length, 1);
+  assert.equal(editedCargo.data.items[0].pieces, 4);
+  assert.equal((await request('POST', `/api/tasks/${created.data.id}/complete`)).status, 200);
+  token = adminToken;
+  const inbox = await request('GET', '/api/notifications');
+  assert.ok(inbox.data.some(n => {
+    const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+    return data.resourceId === created.data.id && data.status === 'completed';
+  }), 'self-created customer order completion must notify responsible customer service');
+  assert.equal((await request('GET', '/api/worker/customer-options?search=y')).status, 403);
+  token = worker.token;
+  for (const fields of [{ customerId: 'suggest-out', addressId: 'suggest-out-a' },
+    { customerId: 'suggest-disabled', addressId: 'suggest-disabled-a' }, { ...minimal, addressId: 'suggest-a2' }]) {
+    assert.equal((await request('POST', '/api/tasks', fields)).status, 400);
+  }
+  const changed = new Database(path.join(tempDir, 'app.db'));
+  changed.prepare('UPDATE customer_addresses SET is_active=0 WHERE id=?').run('suggest-a1');
+  assert.equal((await request('POST', '/api/tasks', minimal)).status, 400, 'disabled address cannot be submitted from stale preview');
+  assert.equal((await request('GET', '/api/worker/customer-options?search=y3')).data.length, 1);
+  changed.prepare('DELETE FROM area_workers WHERE worker_id=?').run(worker.courierId); changed.close();
+  assert.deepEqual((await request('GET', '/api/worker/customer-options?search=y')).data, []);
+  assert.equal((await request('POST', '/api/tasks', minimal)).status, 400, 'revoked region must be rechecked on submit');
+  token = adminToken;
+});
+
+test('worker self-created manual orders belong to self, remain pending and are visible to staff', async () => {
+  const worker = await createWorkerCreator('manual');
+  token = worker.token;
+  const created = await request('POST', '/api/tasks', {
+    customerName: ' 自填客户 ', address: ' 手填地址 ', contact: ' 张三 ', phone: ' 13800000000 ',
+    status: 'completed', amountPayable: 999, settled: '已结算', mainCsId: 'spoof-cs', dispatchCsId: 'spoof-cs',
+    items: [{ pieces: 3, workerId: 'another-worker', finalWeight: 999, matchStatus: 'matched' }]
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal(created.data.status, 'pending');
+  assert.equal(created.data.defaultWorkerId, worker.courierId);
+  assert.equal(created.data.dispatchCsId, worker.userId);
+  assert.equal(created.data.mainCsId, '');
+  assert.equal(created.data.customerName, '自填客户');
+  assert.equal(created.data.address, '手填地址');
+  assert.equal(created.data.items[0].pieces, 3);
+  assert.equal(created.data.items[0].workerId, worker.courierId);
+  assert.equal(created.data.items[0].finalWeight, 0);
+  assert.equal(created.data.amountPayable, 0);
+  assert.equal(created.data.settled, '未结算');
+  assert.ok((await request('GET', '/api/worker/tasks')).data.some(t => t.id === created.data.id));
+  token = adminToken;
+  assert.equal((await request('GET', `/api/tasks/${created.data.id}`)).status, 200);
+  const db = new Database(path.join(tempDir, 'app.db'), { readonly: true });
+  try { assert.equal(db.prepare('SELECT COUNT(*) AS n FROM customers WHERE name=?').get('自填客户').n, 0); }
+  finally { db.close(); }
+});
+
+test('worker self-created existing-customer orders use trusted customer/address records', async () => {
+  const worker = await createWorkerCreator('existing');
+  token = adminToken;
+  const customer = await request('POST', '/api/customers', { name: '自建选客户', address: '真实地址', contact: '真实联系人', phone: '13900000000' });
+  const detail = await request('GET', `/api/customers/${customer.data.id}`);
+  const other = await request('POST', '/api/customers', { name: '其他客户自建', address: '其他地址' });
+  const otherDetail = await request('GET', `/api/customers/${other.data.id}`);
+  const db = new Database(path.join(tempDir, 'app.db'));
+  db.prepare('UPDATE customers SET main_cs_id=? WHERE id=?').run(adminUser.id, customer.data.id);
+  db.prepare('INSERT INTO areas (id,name) VALUES (?,?)').run('existing-area', '已有客户测试区域');
+  db.prepare('INSERT INTO area_workers (area_id,worker_id) VALUES (?,?)').run('existing-area', worker.courierId);
+  db.prepare('UPDATE customer_addresses SET area_id=? WHERE id=?').run('existing-area', detail.data.addresses[0].id);
+  db.close();
+  token = worker.token;
+  const fields = { customerId: customer.data.id, addressId: detail.data.addresses[0].id, items: [{ pieces: 2 }],
+    customerName: '伪造名称', address: '伪造地址', mainCsId: 'spoof' };
+  const created = await request('POST', '/api/tasks', fields);
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.equal(created.data.customerName, '自建选客户');
+  assert.equal(created.data.address, '真实地址');
+  assert.equal(created.data.mainCsId, adminUser.id);
+  assert.equal(created.data.defaultWorkerId, worker.courierId);
+  const invalid = await request('POST', '/api/tasks', { ...fields, addressId: otherDetail.data.addresses[0].id });
+  assert.equal(invalid.status, 400);
+  token = adminToken;
+});
+
+test('worker self-creation rejects other assignees, invalid quantities and incomplete manual data', async () => {
+  const worker = await createWorkerCreator('validation');
+  token = worker.token;
+  const fields = { customerName: '校验', address: '地址', contact: '联系人', phone: '123456', items: [{ pieces: 1 }] };
+  assert.equal((await request('POST', '/api/tasks', { ...fields, workerId: 'another-worker' })).status, 403);
+  assert.equal((await request('POST', '/api/tasks', { ...fields, defaultWorkerId: 'another-worker' })).status, 403);
+  for (const pieces of [0, -1, 1.5, '2x', null]) {
+    assert.equal((await request('POST', '/api/tasks', { ...fields, items: [{ pieces }] })).status, 400);
+  }
+  for (const key of ['customerName', 'address', 'contact', 'phone']) {
+    assert.equal((await request('POST', '/api/tasks', { ...fields, [key]: '' })).status, 400);
+  }
+  assert.equal((await request('GET', '/api/worker/tasks')).data.length, 0);
+  token = adminToken;
+  const username = `unbound_${Date.now()}`;
+  await request('POST', '/api/users', { username, password: 'worker123', role: 'courier', name: '未绑定取件员' });
+  const login = await request('POST', '/api/login', { username, password: 'worker123' }, false);
+  token = login.data.token;
+  assert.equal((await request('POST', '/api/tasks', fields)).status, 403);
+  token = adminToken;
+});
+
+test('cargo editing updates the same item, keeps weight for the same waybill and audits changes after completion', async () => {
+  token = adminToken;
+  const created = await request('POST', '/api/tasks', { customerName: '编辑回归', address: '测试', items: [] });
+  const added = await request('POST', `/api/tasks/${created.data.id}/items`, {
+    goodsName: '原品名', waybillNo: 'EDIT-OLD', pieces: 2, finalWeight: 12
+  });
+  const item = added.data.items[0];
+  const edited = await editCargoItem(created.data.id, item.id, { goodsName: '新名称', waybillNo: 'EDIT-OLD', pieces: 5 });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.items.length, 1);
+  assert.equal(edited.data.items[0].id, item.id);
+  assert.equal(edited.data.items[0].goodsName, '新名称');
+  assert.equal(edited.data.items[0].pieces, 5);
+  assert.equal(edited.data.items[0].finalWeight, 12);
+  await request('POST', `/api/tasks/${created.data.id}/start`);
+  const completed = await request('POST', `/api/tasks/${created.data.id}/complete`);
+  const corrected = await editCargoItem(created.data.id, item.id, { goodsName: '新名称', waybillNo: ' EDIT-NEW ', pieces: 7 });
+  assert.equal(corrected.status, 200);
+  assert.equal(corrected.data.status, 'completed');
+  assert.equal(corrected.data.completedAt, completed.data.completedAt);
+  assert.equal(corrected.data.items.length, 1);
+  assert.equal(corrected.data.items[0].pieces, 7);
+  assert.equal(corrected.data.items[0].waybillNo, 'EDIT-NEW');
+  assert.equal(corrected.data.items[0].finalWeight, 0, 'changed waybill must not retain another shipment weight');
+  assert.equal(corrected.data.items[0].matchStatus, 'pending');
+  const db = new Database(path.join(tempDir, 'app.db'), { readonly: true });
+  try {
+    const events = db.prepare("SELECT actor_id,note FROM task_events WHERE task_id=? AND event_type='item_updated'").all(created.data.id);
+    assert.equal(events.length, 2);
+    assert.equal(events[0].actor_id, adminUser.id);
+    const notes = events.map(e => JSON.parse(e.note));
+    assert.ok(notes.some(n => n.itemId === item.id && n.before.pieces === 5 && n.after.pieces === 7));
+  } finally { db.close(); }
+});
+
+test('cargo editing rejects invalid quantities and cancelled tasks without partial writes', async () => {
+  token = adminToken;
+  const created = await request('POST', '/api/tasks', { customerName: '校验回归', address: '测试', items: [{ pieces: 2 }] });
+  const itemId = created.data.items[0].id;
+  for (const pieces of [0, -1, 1.5, '2x', null, [], {}, 1e20]) {
+    const edited = await editCargoItem(created.data.id, itemId, { pieces, goodsName: '不能写入', waybillNo: '' });
+    assert.equal(edited.status, 400, `invalid pieces: ${JSON.stringify(pieces)}`);
+  }
+  assert.equal((await request('GET', `/api/tasks/${created.data.id}`)).data.items[0].pieces, 2);
+  await request('POST', `/api/tasks/${created.data.id}/cancel`);
+  assert.equal((await editCargoItem(created.data.id, itemId, { pieces: 3, goodsName: '', waybillNo: '' })).status, 409);
+});
+
+test('cargo editing enforces task and item ownership, while the assigned worker can correct completed items', async () => {
+  token = adminToken;
+  const courier = await request('POST', '/api/couriers', { name: '编辑权限员', region: '测试', commissionRate: 3 });
+  const username = `item_editor_${Date.now()}`;
+  await request('POST', '/api/users', { username, password: 'worker123', role: 'courier', courierId: courier.data.id, name: '编辑权限员' });
+  const owned = await request('POST', '/api/tasks', { customerName: '本人任务', address: '测试', defaultWorkerId: courier.data.id, items: [{ pieces: 1 }] });
+  const other = await request('POST', '/api/tasks', { customerName: '其他任务', address: '测试', items: [{ pieces: 1 }] });
+  const login = await request('POST', '/api/login', { username, password: 'worker123' }, false);
+  const fields = { pieces: 4, goodsName: '', waybillNo: '' };
+  assert.equal((await editCargoItem(other.data.id, other.data.items[0].id, fields, login.data.token)).status, 403);
+  assert.equal((await editCargoItem(owned.data.id, other.data.items[0].id, fields, login.data.token)).status, 404);
+  await request('POST', `/api/tasks/${owned.data.id}/start`);
+  await request('POST', `/api/tasks/${owned.data.id}/complete`);
+  const edited = await editCargoItem(owned.data.id, owned.data.items[0].id, fields, login.data.token);
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.items[0].pieces, 4);
+  assert.equal(edited.data.items[0].workerId, owned.data.items[0].workerId);
+  assert.equal(edited.data.items[0].matchStatus, 'no_waybill');
+});
+
 test('dashboard and attention endpoints summarize the canonical task model', async () => {
   token = adminToken;
   const board = await request('GET', '/api/dashboard/board?range=month');

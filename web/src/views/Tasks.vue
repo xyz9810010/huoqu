@@ -92,8 +92,6 @@
       <el-empty v-if="!list.length" description="暂无取件任务" />
     </div>
 
-    <el-pagination background layout="total, prev, pager, next" :total="total" :page-size="size"
-                   :current-page="page + 1" @current-change="(p: number) => { page = p - 1; load() }" />
   </div>
 </template>
 
@@ -116,7 +114,7 @@ const timeRanges = [
   { key: 'month', label: '本月' },
 ]
 const page = ref(0)
-const size = 20
+const size = 500
 const total = ref(0)
 const counts = ref({ all: 0, open: 0, completed: 0, cancelled: 0 })
 let countSeq = 0

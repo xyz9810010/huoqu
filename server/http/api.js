@@ -217,7 +217,7 @@ app.get('/api/tasks', requireAuth, (req, res) => {
     filters.timeEnd = bounds.end;
   }
   const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
-  const size = Math.min(200, Math.max(1, parseInt(req.query.size || '20', 10) || 20));
+  const size = Math.min(1000, Math.max(1, parseInt(req.query.size || '50', 10) || 50));
   const total = tasks.countTasks(filters);
   const list = tasks.listTasks(filters, { limit: size, offset: page * size }).map(localizeTaskForWeb);
   res.json({ list, total, page, size });

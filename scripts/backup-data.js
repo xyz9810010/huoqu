@@ -10,6 +10,7 @@ createDataBackup({ dataDir, dbPath, backupRoot, stamp })
   .then(manifest => {
     console.log(JSON.stringify({
       backup: manifest.stamp,
+      encrypted: manifest.encrypted,
       integrity: manifest.database.integrity,
       databaseSha256: manifest.database.sha256,
       uploadFiles: manifest.uploads.length

@@ -70,7 +70,7 @@
         <div class="mobile-item__head">
           <div>
             <div class="mobile-item__title">{{ row.customerName || '未命名客户' }}</div>
-            <div class="mobile-item__sub">{{ row.taskNo }}</div>
+            <div class="mobile-item__sub">{{ row.taskNo }} · {{ fmtTime(row.dispatchAt) }}</div>
           </div>
           <el-tag :type="statusType(row.status) as any" size="small">
             {{ row.status === 'completed' ? '✓ 已完成' : statusLabel(row.status) }}
@@ -85,8 +85,6 @@
         </div>
         <div class="mobile-field"><span class="mobile-field__label">取件地址</span><span class="mobile-field__value">{{ row.addressPointName || row.address || '—' }}</span></div>
         <div class="mobile-field"><span class="mobile-field__label">取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未分配' }}</span></div>
-        <div class="mobile-field"><span class="mobile-field__label">主客服</span><span class="mobile-field__value">{{ row.mainCsName || '—' }}</span></div>
-        <div class="mobile-field"><span class="mobile-field__label">派单时间</span><span class="mobile-field__value">{{ fmtTime(row.dispatchAt) || '—' }}</span></div>
       </article>
       <el-empty v-if="!list.length" description="暂无取件任务" />
     </div>

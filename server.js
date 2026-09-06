@@ -129,6 +129,31 @@ async function autoProvisionWebPush() {
   }
 }
 autoProvisionWebPush();
+
+// 初次部署从环境变量配置华为 Push Kit（HUAWEI_PUSH_PROJECT_ID + HUAWEI_PUSH_SERVICE_ACCOUNT[_FILE]），幂等
+async function autoProvisionHuawei() {
+  if (!pushSecretBox.available) return;
+  try {
+    if (providerConfigStore.getDecrypted('huawei')) return;
+    const adapter = providerRegistry.get('huawei');
+    if (!adapter) return;
+    const projectId = String(process.env.HUAWEI_PUSH_PROJECT_ID || '').trim();
+    let serviceAccount = String(process.env.HUAWEI_PUSH_SERVICE_ACCOUNT || '').trim();
+    const saFile = process.env.HUAWEI_PUSH_SERVICE_ACCOUNT_FILE;
+    if (saFile) {
+      try { const v = fs.readFileSync(saFile, 'utf8').trim(); if (v) serviceAccount = v; } catch (e) { console.error('[push] HUAWEI_PUSH_SERVICE_ACCOUNT_FILE 读取失败: ' + e.message); }
+    }
+    if (!projectId || !serviceAccount) return; // 未配置环境变量，跳过（可继续在页面手动配置）
+    providerConfigStore.save('huawei', { projectId: projectId, serviceAccount: serviceAccount }, adapter.credentialSchema);
+    const validation = await adapter.validateConfig(providerConfigStore.getDecrypted('huawei'));
+    providerConfigStore.recordHealth('huawei', validation);
+    if (validation.ok) providerConfigStore.setEnabled('huawei', true);
+    console.log('[push] 已从环境变量配置并启用华为 Push Kit');
+  } catch (e) {
+    console.error('[push] 华为 Push Kit 自动配置失败：', e && e.message ? e.message : e);
+  }
+}
+autoProvisionHuawei();
 const MACHINE_API_KEY = process.env.MACHINE_API_KEY || '';
 
 // 统一注册全部 API 路由（server/http/api.js）

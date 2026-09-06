@@ -19,6 +19,8 @@ services:
       DATA_ENCRYPTION_KEY_FILE: /run/secrets/data.key
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       MACHINE_API_KEY: ${MACHINE_API_KEY:-}
+      HUAWEI_PUSH_PROJECT_ID: ${HUAWEI_PUSH_PROJECT_ID:-}
+      HUAWEI_PUSH_SERVICE_ACCOUNT: ${HUAWEI_PUSH_SERVICE_ACCOUNT:-}
     volumes:
       # 数据库持久化到宿主机的 ./data 目录（重装容器数据不丢）
       - ${CARGO_DATA_DIR:-./data}:/app/data

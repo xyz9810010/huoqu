@@ -4,7 +4,6 @@ const path = require('node:path');
 const projectRoot = path.resolve(__dirname, '..');
 const forbiddenRootEntries = [
   'android',
-  'harmony',
   '_h3',
   '_h4',
   '_h5',

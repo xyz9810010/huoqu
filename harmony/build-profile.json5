@@ -1,0 +1,57 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\Administrator\\.ohos\\config\\default_huoqu-harmony_-_im_AI8H2WxPYcbHxRNx9EIXiUpAbYBSUCBKMpkZVc=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B4278923A5AC91A3152BA65C6B9BDF4CAD191E3DA7B45B4B745CED36C13B11D5CF99B2943FE6BB2",
+          "profile": "C:\\Users\\Administrator\\.ohos\\config\\default_huoqu-harmony_-_im_AI8H2WxPYcbHxRNx9EIXiUpAbYBSUCBKMpkZVc=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\Administrator\\.ohos\\config\\default_huoqu-harmony_-_im_AI8H2WxPYcbHxRNx9EIXiUpAbYBSUCBKMpkZVc=.p12",
+          "storePassword": "0000001B0CEF694C6BF03202AD170D4B1E6539E819DD70263E6FAE3682BDBCD92C98BC1CDC98DFD5B84EB3"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "targetSdkVersion": "6.1.1(24)",
+        "compileSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

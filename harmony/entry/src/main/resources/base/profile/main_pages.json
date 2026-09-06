@@ -1,0 +1,23 @@
+{
+  "src": [
+    "pages/LoginPage",
+    "pages/WorkerTasksPage",
+    "pages/TaskDetailPage",
+    "pages/DispatchPage",
+    "pages/TasksPage",
+    "pages/DashboardPage",
+    "pages/CustomersPage",
+    "pages/CustomerDetailPage",
+    "pages/AreasPage",
+    "pages/EmployeesPage",
+    "pages/LogsPage",
+    "pages/NotificationsPage",
+    "pages/NotificationSettingsPage",
+    "pages/MyDataPage",
+    "pages/TrackPage",
+    "pages/MatchCenterPage",
+    "pages/SettingsPage",
+    "pages/WorkerTabPage",
+    "pages/PushProvidersPage"
+  ]
+}

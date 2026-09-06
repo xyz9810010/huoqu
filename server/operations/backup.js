@@ -84,6 +84,12 @@ async function createDataBackup(options) {
   backup.close();
   if (integrity !== 'ok') throw new Error(`backup integrity check failed: ${integrity}`);
 
+  // 清理 SQLite 打开备份时遗留的 -shm/-wal 附属文件（备份是单文件一致快照）
+  for (const suffix of ['-shm', '-wal']) {
+    const companion = backupDbPath + suffix;
+    if (fs.existsSync(companion)) fs.unlinkSync(companion);
+  }
+
   // 备份加密：配置了 BACKUP_ENCRYPTION_KEY 则对数据库文件做 AES-256-GCM 加密
   const encKey = backupEncryptionKey();
   const plainSha256 = sha256(backupDbPath);

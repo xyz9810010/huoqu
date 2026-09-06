@@ -118,11 +118,9 @@ test('foreground notification sound unlocks on user interaction and stays silent
     }
     close() { calls.push('close'); }
   }
-  const visibility = { value: 'visible' };
   const sound = createNotificationSoundController({
     eventTarget: target,
     audioContextFactory: () => new FakeAudioContext(),
-    visibilityState: () => visibility.value,
   });
 
   sound.install();
@@ -130,8 +128,6 @@ test('foreground notification sound unlocks on user interaction and stays silent
   await listeners.get('pointerdown')();
   assert.equal(sound.play(), true);
   assert.equal(calls.filter(call => call === 'start').length, 2);
-  visibility.value = 'hidden';
-  assert.equal(sound.play(), false);
   sound.dispose();
   assert.equal(calls.includes('close'), true);
 });

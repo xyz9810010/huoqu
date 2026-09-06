@@ -1,7 +1,6 @@
 interface NotificationSoundOptions {
   eventTarget?: EventTarget
   audioContextFactory?: () => AudioContext
-  visibilityState?: () => DocumentVisibilityState
 }
 
 export function createNotificationSoundController(options: NotificationSoundOptions = {}) {
@@ -10,7 +9,6 @@ export function createNotificationSoundController(options: NotificationSoundOpti
     const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     return new AudioContextClass()
   })
-  const visibilityState = options.visibilityState || (() => document.visibilityState)
   const VOLUME_KEY = 'cargo:notification-volume'
   let context: AudioContext | null = null
   let installed = false
@@ -73,7 +71,7 @@ export function createNotificationSoundController(options: NotificationSoundOpti
       eventTarget.addEventListener('keydown', unlock, { capture: true })
     },
     play() {
-      if (!context || context.state !== 'running' || visibilityState() !== 'visible') return false
+      if (!context || context.state !== 'running') return false
       const now = context.currentTime
       tone(740, now)
       tone(988, now + 0.18)

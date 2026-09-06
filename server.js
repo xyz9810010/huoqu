@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('node:crypto');
 
 const db = require('./db');
 const auth = require('./auth');
@@ -63,16 +64,31 @@ const notificationService = createNotificationService({
 });
 const businessNotificationPublisher = createBusinessNotificationPublisher(db, notificationService);
 const tasks = createTaskModule(db, { publisher: businessNotificationPublisher });
-// 从权限受限的密钥文件读取密钥（Docker secret / *_FILE 模式），优先于同名环境变量
-function secretFromFile(envFileVar, envValue) {
-  const p = process.env[envFileVar];
-  if (p) {
-    try { return fs.readFileSync(p, 'utf8').trim(); }
-    catch (e) { console.error(`[secret] ${envFileVar} 读取失败: ${e.message}`); }
+// 解析推送主密钥：文件 → 环境变量 → 未配置则自动生成并持久化到数据目录（与数据库同卷，随库持久化）
+function resolvePushMasterKey() {
+  const file = process.env.PUSH_CONFIG_MASTER_KEY_FILE;
+  if (file) {
+    try { const v = fs.readFileSync(file, 'utf8').trim(); if (v) return v; } catch (e) { console.error('[secret] PUSH_CONFIG_MASTER_KEY_FILE 读取失败: ' + e.message); }
   }
-  return envValue || '';
+  if (process.env.PUSH_CONFIG_MASTER_KEY) return process.env.PUSH_CONFIG_MASTER_KEY;
+  const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+  const keyPath = path.join(dataDir, 'push-master.key');
+  try {
+    if (fs.existsSync(keyPath)) {
+      const v = fs.readFileSync(keyPath, 'utf8').trim();
+      if (v) return v;
+    }
+    const key = crypto.randomBytes(32).toString('base64');
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(keyPath, key, { mode: 0o600 });
+    console.log('[secret] 已自动生成推送主密钥并持久化到 ' + keyPath);
+    return key;
+  } catch (e) {
+    console.error('[secret] 推送主密钥自动生成/读取失败：' + (e && e.message ? e.message : e));
+    return '';
+  }
 }
-const pushSecretBox = createSecretBox(secretFromFile('PUSH_CONFIG_MASTER_KEY_FILE', process.env.PUSH_CONFIG_MASTER_KEY));
+const pushSecretBox = createSecretBox(resolvePushMasterKey());
 const subscriptionStore = createSubscriptionStore(db, pushSecretBox);
 const preferenceStore = createPreferenceStore(db);
 const providerConfigStore = createProviderConfigStore(db, pushSecretBox);

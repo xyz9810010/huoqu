@@ -29,6 +29,10 @@
               <el-icon><Bell /></el-icon>
             </el-button>
           </el-badge>
+          <div class="latency" :class="{ 'is-online': connected }">
+            <span class="latency-dot" />
+            <span class="latency-text">{{ latency >= 0 ? latency + ' ms' : '连接中…' }}</span>
+          </div>
           <el-dropdown trigger="click" @command="onCommand">
             <div class="user-box">
               <div class="avatar">{{ (auth.user?.name || '?').slice(0, 1) }}</div>
@@ -84,6 +88,9 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const mobileMenuOpen = ref(false)
+const latency = ref<number>(-1)
+const connected = ref(false)
+let heartbeatTimer: number | undefined
 
 const allMenus: any[] = [
   { path: '/dashboard', label: '数据看板', icon: 'DataBoard', roles: ['boss', 'admin'] },
@@ -112,6 +119,20 @@ function onCommand(cmd: string) {
 
 async function loadUnread() {
   await refreshUnread()
+}
+
+// 实时心跳：探测服务端延迟（用原生 fetch 绕过 axios 拦截器，避免离线时反复弹错）
+async function heartbeat() {
+  const start = performance.now()
+  try {
+    const resp = await fetch('/api/health')
+    if (!resp.ok) throw new Error('bad status')
+    latency.value = Math.max(0, Math.round(performance.now() - start))
+    connected.value = true
+  } catch {
+    latency.value = -1
+    connected.value = false
+  }
 }
 
 function handleRealtimeEvent(message: unknown) {
@@ -159,10 +180,13 @@ onMounted(() => {
   realtime.start().catch(() => {
     /* API 层已经展示连接错误，页面其余功能保持可用 */
   })
+  heartbeat()
+  heartbeatTimer = window.setInterval(heartbeat, 5000)
 })
 onUnmounted(() => {
   navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage)
   realtime.stop()
+  window.clearInterval(heartbeatTimer)
 })
 </script>
 
@@ -255,6 +279,26 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+.latency {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--qj-muted);
+  white-space: nowrap;
+}
+.latency-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9cdd4;
+}
+.latency.is-online .latency-dot {
+  background: #00b42a;
+}
+.latency.is-online .latency-text {
+  color: #00b42a;
 }
 .bell {
   border: 1px solid var(--qj-border);

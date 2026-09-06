@@ -204,6 +204,9 @@ onUnmounted(() => liveRefresh.dispose())
 .status-tabs :deep(.el-tabs__header) {
   margin-bottom: 12px;
 }
+.status-tabs :deep(.el-tabs__active-bar) {
+  transition: transform 0.22s ease, width 0.22s ease;
+}
 .task-card {
   margin-bottom: 12px;
 }

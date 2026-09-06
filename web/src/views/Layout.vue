@@ -123,10 +123,10 @@ function onCommand(cmd: string) {
 
 // 键盘快捷键（桌面端高频操作）
 const shortcutDefs: { key: string; label: string; path: string; roles: string[] }[] = [
-  { key: 'n', label: '新建取件', path: '/dispatch', roles: ['cs', 'admin'] },
-  { key: 't', label: '取件任务', path: '/tasks', roles: ['cs', 'admin', 'boss'] },
-  { key: 'c', label: '客户管理', path: '/customers', roles: ['cs', 'admin', 'boss'] },
-  { key: 'd', label: '数据看板', path: '/dashboard', roles: ['admin', 'boss'] },
+  { key: 'x', label: '新建取件', path: '/dispatch', roles: ['cs', 'admin'] },
+  { key: 'q', label: '取件任务', path: '/tasks', roles: ['cs', 'admin', 'boss'] },
+  { key: 'k', label: '客户管理', path: '/customers', roles: ['cs', 'admin', 'boss'] },
+  { key: 's', label: '数据看板', path: '/dashboard', roles: ['admin', 'boss'] },
 ]
 function showShortcutHelp() {
   const kbd = 'display:inline-block;min-width:24px;text-align:center;padding:2px 8px;border:1px solid #d0d5dd;border-bottom-width:2px;border-radius:6px;background:#f7f8fa;font-family:ui-monospace,monospace;font-weight:600;color:#182431'
@@ -134,11 +134,15 @@ function showShortcutHelp() {
     .filter((s) => s.roles.includes(auth.role))
     .map((s) => '<tr><td style="padding:6px 0"><kbd style="' + kbd + '">' + s.key.toUpperCase() + '</kbd></td><td style="padding:6px 8px">' + s.label + '</td></tr>')
     .join('')
-  const html = '<div style="line-height:1.7">'
+  const html = '<div style="line-height:1.8">'
     + '<table style="width:100%;border-collapse:collapse;font-size:14px">' + rows + '</table>'
-    + '<div style="margin-top:12px;font-size:12px;color:#86909c;border-top:1px solid #f0f0f0;padding-top:10px">按 <kbd style="' + kbd + '">?</kbd> 查看帮助 · 输入框内输入时不触发快捷键</div>'
+    + '<div style="margin-top:12px;font-size:12px;color:#86909c;border-top:1px solid #f0f0f0;padding-top:10px">'
+    + '<div>仓库地址：<a href="https://github.com/xyz9810010/huoqu" target="_blank" style="color:#0a59f7;text-decoration:none">github.com/xyz9810010/huoqu</a></div>'
+    + '<div>实例地址：<a href="https://huoqu.onrender.com" target="_blank" style="color:#0a59f7;text-decoration:none">huoqu.onrender.com</a></div>'
+    + '<div style="margin-top:8px">按 <kbd style="' + kbd + '">?</kbd> 查看帮助 · 输入框内输入时不触发快捷键</div>'
     + '</div>'
-  ElMessageBox.alert(html, '键盘快捷键', {
+    + '</div>'
+  ElMessageBox.alert(html, '帮助', {
     dangerouslyUseHTMLString: true,
     confirmButtonText: '知道了',
   }).catch(() => {})

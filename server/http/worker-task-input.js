@@ -1,3 +1,5 @@
+const fc = require('../security/field-crypto');
+
 // Worker self-service accepts order details only, never assignment or billing authority.
 function workerTaskInput(db, user, body) {
   const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -42,8 +44,8 @@ function workerTaskInput(db, user, body) {
       LEFT JOIN areas r ON r.id=a.area_id WHERE a.id=? AND a.customer_id=? AND a.is_active=1
       AND EXISTS (SELECT 1 FROM area_workers aw WHERE aw.area_id=a.area_id AND aw.worker_id=?)`).get(addressId, customerId, workerId);
     if (!address) fail('请选择该客户的有效取件地址');
-    Object.assign(input, { customerId, addressId, customerName: customer.name, address: address.address,
-      contact: address.contact_name || customer.contact || '', phone: address.contact_phone || customer.phone || '',
+    Object.assign(input, { customerId, addressId, customerName: fc.decryptField(customer.name), address: fc.decryptField(address.address),
+      contact: fc.decryptField(address.contact_name) || fc.decryptField(customer.contact) || '', phone: fc.decryptField(address.contact_phone) || fc.decryptField(customer.phone) || '',
       areaName: address.area_name || '', mainCsId: customer.main_cs_id || '' });
   } else {
     if (addressId) fail('取件地址必须关联所选客户');

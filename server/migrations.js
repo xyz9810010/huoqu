@@ -513,6 +513,34 @@ function dedupeActiveVendorSubscriptions(db) {
   return superseded.length;
 }
 
+// 敏感字段落盘加密（AES-256-GCM，幂等）。未配置 DATA_ENCRYPTION_KEY(_FILE) 时透传明文。
+// 必须放在 migrateLegacyRecords 之后：先由旧表把明文快照复制到新表，再统一加密，避免二次加密。
+function encryptSensitiveFields(db) {
+  const fc = require('./security/field-crypto');
+  if (!fc.available) return;
+  const tables = {
+    customers: ['name', 'contact', 'phone', 'address', 'note', 'important_note'],
+    customer_addresses: ['name', 'address', 'contact_name', 'contact_phone', 'remark'],
+    pickup_tasks: ['customer_name_snap', 'address_snap', 'contact_snap', 'phone_snap', 'pickup_note', 'internal_note'],
+    records: ['customer', 'address', 'pickup_phone', 'note'],
+  };
+  for (const [table, cols] of Object.entries(tables)) {
+    if (!tableExists(db, table)) continue;
+    const rows = db.prepare(`SELECT id, ${cols.join(', ')} FROM ${table}`).all();
+    const upd = db.prepare(`UPDATE ${table} SET ${cols.map(c => c + '=?').join(',')} WHERE id=?`);
+    for (const row of rows) {
+      const needsEncrypt = cols.some(c => {
+        const v = row[c];
+        return v != null && v !== '' && !fc.isEncrypted(v);
+      });
+      if (!needsEncrypt) continue;
+      const args = cols.map(c => fc.encryptField(row[c]));
+      args.push(row.id);
+      upd.run(...args);
+    }
+  }
+}
+
 function migrate(db) {
   const migration = db.transaction(() => {
     db.pragma('foreign_keys = ON');
@@ -520,6 +548,7 @@ function migrate(db) {
     migrateLegacyRecords(db);
     migrateTaskTimestamps(db);
     dedupeActiveVendorSubscriptions(db);
+    encryptSensitiveFields(db);
   });
   migration();
   return db;

@@ -1,4 +1,5 @@
 const { pinyin } = require('pinyin-pro');
+const fc = require('../security/field-crypto');
 
 function normalize(value) {
   return String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
@@ -24,8 +25,15 @@ function workerCustomerOptions(db, workerId, search) {
     WHERE c.status<>'disabled' AND a.is_active=1 AND trim(a.address)<>''
       AND EXISTS (SELECT 1 FROM area_workers aw WHERE aw.area_id=a.area_id AND aw.worker_id=?)
     ORDER BY c.name,a.is_common DESC,a.id`).all(workerId);
+  // 敏感列已加密：内存解密后再匹配与排序
+  const dec = rows.map(row => ({
+    customerId: row.customerId, customerName: fc.decryptField(row.customerName),
+    addressId: row.addressId, address: fc.decryptField(row.address),
+    contact: fc.decryptField(row.contact), phone: fc.decryptField(row.phone), areaName: row.areaName
+  }));
+  dec.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '', 'zh') || (a.addressId < b.addressId ? -1 : 1));
   const matching = new Map();
-  return rows.filter(row => {
+  return dec.filter(row => {
     if (!matching.has(row.customerId)) matching.set(row.customerId, nameMatches(row.customerName, query));
     return matching.get(row.customerId);
   }).slice(0, 50);

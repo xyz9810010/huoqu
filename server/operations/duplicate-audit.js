@@ -2,6 +2,7 @@
 // 背景：新任务模型 business_order_no 未设唯一约束（再次取件是合法业务），
 // 客户端幂等键已上线；本模块用于在数据层发现漏网重复，辅助人工处置。
 'use strict';
+const fc = require('../security/field-crypto');
 
 function auditDuplicates(db) {
   const findings = [];
@@ -29,7 +30,7 @@ function auditDuplicates(db) {
       activeCount: Number(group.activeCount || 0),
       detail: tasks.map(row => ({
         id: row.id, taskNo: row.task_no, status: row.status,
-        customerName: row.customerName, workerName: row.workerName, createdAt: row.createdAt
+        customerName: fc.decryptField(row.customerName), workerName: row.workerName, createdAt: row.createdAt
       }))
     });
   }
@@ -65,34 +66,34 @@ function auditDuplicates(db) {
   }
 
   // 孪生任务：同一客户+同一地址在“同一秒”创建两条，多半是客户端双击/重试未带幂等键
-  const twinGroups = db.prepare(`
-    SELECT customer_id AS customerId, customer_name_snap AS customerName,
-           address_snap AS address, created_at AS createdAt,
-           COUNT(*) AS taskCount,
-           SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS activeCount
-    FROM pickup_tasks
-    WHERE customer_name_snap <> ''
-    GROUP BY customer_id, customer_name_snap, address_snap, created_at
-    HAVING COUNT(*) > 1
-    ORDER BY activeCount DESC, taskCount DESC, createdAt DESC`).all();
-
-  for (const group of twinGroups) {
-    const tasks = db.prepare(`
-      SELECT id, task_no, status, business_order_no AS orderNo, customer_name_snap AS customerName,
-             default_worker_name_snap AS workerName, created_at AS createdAt
-      FROM pickup_tasks
-      WHERE customer_id = ? AND customer_name_snap = ? AND address_snap = ? AND created_at = ?
-      ORDER BY id`).all(group.customerId, group.customerName, group.address, group.createdAt);
+  // customer_name_snap/address_snap 已加密：改为内存解密后分组
+  const twinRows = db.prepare(`
+    SELECT id, task_no, status, business_order_no, customer_id, customer_name_snap, address_snap,
+           default_worker_name_snap, created_at
+    FROM pickup_tasks WHERE customer_name_snap <> '' ORDER BY created_at DESC, id`).all();
+  const twinMap = new Map();
+  for (const row of twinRows) {
+    const name = fc.decryptField(row.customer_name_snap);
+    const addr = fc.decryptField(row.address_snap);
+    const key = `${row.customer_id}|${name}|${addr}|${row.created_at}`;
+    if (!twinMap.has(key)) twinMap.set(key, { customerName: name, address: addr, createdAt: row.created_at, taskCount: 0, activeCount: 0, tasks: [] });
+    const g = twinMap.get(key);
+    g.taskCount++;
+    if (row.status === 'pending' || row.status === 'in_progress') g.activeCount++;
+    g.tasks.push(row);
+  }
+  for (const g of twinMap.values()) {
+    if (g.taskCount <= 1) continue;
     findings.push({
       kind: 'twin_tasks_same_second',
-      key: `${group.customerName} | ${group.address} | ${group.createdAt}`,
-      severity: group.activeCount > 0 ? 'medium' : 'low',
-      count: group.taskCount,
-      activeCount: Number(group.activeCount || 0),
-      detail: tasks.map(row => ({
+      key: `${g.customerName} | ${g.address} | ${g.createdAt}`,
+      severity: g.activeCount > 0 ? 'medium' : 'low',
+      count: g.taskCount,
+      activeCount: g.activeCount,
+      detail: g.tasks.map(row => ({
         id: row.id, taskNo: row.task_no, status: row.status,
-        orderNo: row.orderNo, customerName: row.customerName,
-        workerName: row.workerName, createdAt: row.createdAt
+        orderNo: row.business_order_no, customerName: fc.decryptField(row.customer_name_snap),
+        workerName: row.default_worker_name_snap, createdAt: row.created_at
       }))
     });
   }

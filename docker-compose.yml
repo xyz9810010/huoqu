@@ -16,6 +16,7 @@ services:
       BACKUP_ROOT: /app/backups
       PUSH_CONFIG_MASTER_KEY_FILE: /run/secrets/push_master.key
       BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup.key
+      DATA_ENCRYPTION_KEY_FILE: /run/secrets/data.key
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       MACHINE_API_KEY: ${MACHINE_API_KEY:-}
     volumes:

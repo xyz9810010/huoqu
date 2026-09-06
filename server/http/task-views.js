@@ -1,3 +1,5 @@
+const fc = require('../security/field-crypto');
+
 // v1/v2 共享的任务视图 helper（收敛镜像实现，避免双规范层漂移）。
 // 职责边界：只做“数据富化 + 权限判定”，时间字段的本地化/ISO 转换仍由各层负责
 // （v1 localizeTaskForWeb → 北京钟面文本；v2 isoTask → ISO8601 UTC）。
@@ -51,17 +53,21 @@ function courierActiveTaskCount(db, courierId) {
 
 function workerStatsWindow(db, courierId, start, end) {
   // 主取件完成口径：completed_at/updated_at 存 UTC，按 '+8 hours' 归北京日与窗口比较
-  const counts = db.prepare(`SELECT COUNT(*) AS pickupCount,
-      COUNT(DISTINCT t.customer_id || '|' || t.customer_name_snap) AS customerCount
+  const counts = db.prepare(`SELECT COUNT(*) AS pickupCount
     FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
       AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`).get(courierId, start, end);
+  // customer_name_snap 已加密：去重改内存解密后计算
+  const customerRows = db.prepare(`SELECT t.customer_id, t.customer_name_snap
+    FROM pickup_tasks t WHERE t.status='completed' AND t.default_worker_id=?
+      AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`).all(courierId, start, end);
+  const customerSet = new Set(customerRows.map(r => (r.customer_id || '') + '|' + fc.decryptField(r.customer_name_snap)));
   const sums = db.prepare(`SELECT COALESCE(SUM(i.pieces),0) AS pieces,
       COALESCE(SUM(CASE WHEN i.match_status='matched' THEN i.final_weight ELSE 0 END),0) AS matchedWeight
     FROM pickup_tasks t JOIN pickup_items i ON i.task_id=t.id
     WHERE t.status='completed' AND t.default_worker_id=? AND date(COALESCE(NULLIF(t.completed_at,''),t.updated_at),'+8 hours') BETWEEN ? AND ?`)
     .get(courierId, start, end);
   return {
-    pickupCount: counts.pickupCount, customerCount: counts.customerCount,
+    pickupCount: counts.pickupCount, customerCount: customerSet.size,
     pieces: sums.pieces, matchedWeight: Math.round(sums.matchedWeight * 100) / 100
   };
 }

@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { utcText, bjDateStamp } = require('../time');
+const fc = require('../security/field-crypto');
 
 const STATUS_LABELS = {
   pending: '待取',
@@ -51,10 +52,10 @@ function taskFromRow(db, row) {
     taskNo: row.task_no,
     businessOrderNo: row.business_order_no,
     customerId: row.customer_id,
-    customerName: row.customer_name_snap,
-    address: row.address_snap,
-    contact: row.contact_snap,
-    phone: row.phone_snap,
+    customerName: fc.decryptField(row.customer_name_snap),
+    address: fc.decryptField(row.address_snap),
+    contact: fc.decryptField(row.contact_snap),
+    phone: fc.decryptField(row.phone_snap),
     areaName: row.area_name_snap,
     mainCsId: row.main_cs_id,
     dispatchCsId: row.dispatch_cs_id,
@@ -70,8 +71,8 @@ function taskFromRow(db, row) {
     completedAt: row.completed_at,
     status: row.status,
     statusLabel: STATUS_LABELS[row.status] || row.status,
-    pickupNote: row.pickup_note,
-    internalNote: row.internal_note,
+    pickupNote: fc.decryptField(row.pickup_note),
+    internalNote: fc.decryptField(row.internal_note),
     volume: row.volume,
     dimensions: row.dimensions,
     amountReceivable: row.amount_receivable,
@@ -146,10 +147,10 @@ function createTaskModule(db, options = {}) {
         taskNo: taskNo(),
         businessOrderNo: input.businessOrderNo || '',
         customerId: input.customerId || '',
-        customerName: String(input.customerName).trim(),
-        address: String(input.address).trim(),
-        contact: input.contact || '',
-        phone: input.phone || '',
+        customerName: fc.encryptField(String(input.customerName).trim()),
+        address: fc.encryptField(String(input.address).trim()),
+        contact: fc.encryptField(input.contact || ''),
+        phone: fc.encryptField(input.phone || ''),
         areaName: input.areaName || '',
         mainCsId: input.mainCsId || '',
         dispatchCsId: actor.id || input.dispatchCsId || '',
@@ -163,8 +164,8 @@ function createTaskModule(db, options = {}) {
         rushShipTime: input.rushShipTime || '',
         rushReason: input.rushReason || '',
         dispatchAt: input.dispatchAt || createdAt,
-        pickupNote: input.pickupNote || '',
-        internalNote: input.internalNote || '',
+        pickupNote: fc.encryptField(input.pickupNote || ''),
+        internalNote: fc.encryptField(input.internalNote || ''),
         volume: volume,
         dimensions: input.dimensions || '',
         amountReceivable: Number(input.amountReceivable || 0),
@@ -294,7 +295,7 @@ function createTaskModule(db, options = {}) {
       db.prepare(`UPDATE pickup_tasks SET task_type=?,scheduled_kind=?,scheduled_time=?,rush_ship_time=?,rush_reason=?,
         pickup_note=?,internal_note=?,updated_at=? WHERE id=?`).run(
           next.taskType, next.scheduledKind, next.scheduledTime, next.rushShipTime, next.rushReason,
-          next.pickupNote, next.internalNote, changedAt, taskId
+          fc.encryptField(next.pickupNote), fc.encryptField(next.internalNote), changedAt, taskId
         );
       insertEvent.run({
         id: eventId, taskId, eventType: 'updated', fromStatus: task.status, toStatus: task.status,
@@ -373,11 +374,7 @@ function createTaskModule(db, options = {}) {
       params.push(filters.workerId, filters.workerId);
     }
     if (filters.customerId) { clauses.push('customer_id = ?'); params.push(filters.customerId); }
-    if (filters.keyword) {
-      clauses.push('(task_no LIKE ? OR business_order_no LIKE ? OR customer_name_snap LIKE ? OR address_snap LIKE ?)');
-      const q = `%${filters.keyword}%`;
-      params.push(q, q, q, q);
-    }
+    // keyword 不再下推 SQL：customer_name_snap/address_snap 已加密，统一内存匹配（见 taskMatchesKeyword）
     if (filters.timeStart && filters.timeEnd) {
       const timeExpr = "COALESCE(NULLIF(scheduled_time, ''), NULLIF(rush_ship_time, ''), dispatch_at, created_at)";
       clauses.push(`${timeExpr} >= ?`);
@@ -389,18 +386,40 @@ function createTaskModule(db, options = {}) {
     return { where, params };
   }
 
+  function taskMatchesKeyword(task, keyword) {
+    const q = String(keyword || '').trim().toLowerCase();
+    if (!q) return true;
+    return [task.taskNo, task.businessOrderNo, task.customerName, task.address]
+      .some(v => v && String(v).toLowerCase().includes(q));
+  }
+
   function countTasks(filters = {}) {
     const { where, params } = taskWhere(filters);
-    return db.prepare(`SELECT COUNT(*) AS count FROM pickup_tasks ${where}`).get(...params).count;
+    const keyword = String(filters.keyword || '').trim().toLowerCase();
+    if (!keyword) return db.prepare(`SELECT COUNT(*) AS count FROM pickup_tasks ${where}`).get(...params).count;
+    const rows = db.prepare(`SELECT task_no, business_order_no, customer_name_snap, address_snap FROM pickup_tasks ${where}`).all(...params);
+    return rows.filter(r => taskMatchesKeyword({
+      taskNo: r.task_no, businessOrderNo: r.business_order_no,
+      customerName: fc.decryptField(r.customer_name_snap), address: fc.decryptField(r.address_snap)
+    }, keyword)).length;
   }
 
   function listTasks(filters = {}, options = {}) {
     const { where, params } = taskWhere(filters);
+    const keyword = String(filters.keyword || '').trim().toLowerCase();
     let sql = `SELECT * FROM pickup_tasks ${where} ORDER BY created_at DESC, id DESC`;
     const bound = [...params];
-    if (options.limit) { sql += ' LIMIT ?'; bound.push(Number(options.limit)); }
-    if (options.offset) { sql += ' OFFSET ?'; bound.push(Number(options.offset)); }
-    return db.prepare(sql).all(...bound).map(row => taskFromRow(db, row));
+    // 无关键词时走 SQL 分页；有关键词时先全量取回，内存匹配后再切片分页
+    if (!keyword && options.limit) { sql += ' LIMIT ?'; bound.push(Number(options.limit)); }
+    if (!keyword && options.offset) { sql += ' OFFSET ?'; bound.push(Number(options.offset)); }
+    let tasks = db.prepare(sql).all(...bound).map(row => taskFromRow(db, row));
+    if (keyword) {
+      tasks = tasks.filter(t => taskMatchesKeyword(t, keyword));
+      const offset = Number(options.offset || 0);
+      const limit = Number(options.limit);
+      tasks = limit ? tasks.slice(offset, offset + limit) : tasks.slice(offset);
+    }
+    return tasks;
   }
 
   return { createTask, getTask, countTasks, listTasks, transitionTask, assignTask, updateTask, assistTask, reportException, resolveException };

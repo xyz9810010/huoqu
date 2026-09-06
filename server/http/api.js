@@ -13,6 +13,7 @@ const { withIdempotency } = require('./idempotency');
 const { workerTaskInput } = require('./worker-task-input');
 const { workerCustomerOptions } = require('./worker-customer-options');
 const { utcText, utcTextToBjText } = require('../time');
+const fc = require('../security/field-crypto');
 
 // v1（Web）展示口径：任务域存储为 UTC 空格文本，输出前统一转为北京时间文本。
 // 只转换机器时刻字段；scheduled_time/rush_ship_time 为录入型北京钟面文本，保持原样。
@@ -98,20 +99,20 @@ const startOfWeek = () => { const d = bjNow(); const day = d.getUTCDay() || 7; d
 const rowCourier = (c) => ({ id: c.id, name: c.name, region: c.region || '', commissionRate: c.commission_rate || 0 });
 const parseImages = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
 const rowRecord = (r) => ({
-  id: r.id, date: r.date, courierId: r.courier_id, customer: r.customer, customerId: r.customer_id || '', address: r.address || '',
-  pieces: r.pieces, region: r.region || '', note: r.note || '', status: r.status || '待取', orderNo: r.order_no || '',
+  id: r.id, date: r.date, courierId: r.courier_id, customer: fc.decryptField(r.customer), customerId: r.customer_id || '', address: fc.decryptField(r.address || ''),
+  pieces: r.pieces, region: r.region || '', note: fc.decryptField(r.note || ''), status: r.status || '待取', orderNo: r.order_no || '',
   goods: r.goods || '', weight: r.weight || 0, volume: r.volume || 0, trackingNo: r.tracking_no || '',
   amountReceivable: r.amount_receivable || 0, amountPayable: r.amount_payable || 0, settled: r.settled || '未结算',
-  pickupPhone: r.pickup_phone || '', createdAt: String(r.created_at || '').slice(0, 19),
+  pickupPhone: fc.decryptField(r.pickup_phone || ''), createdAt: String(r.created_at || '').slice(0, 19),
   appointmentTime: r.appointment_time || '', completedAt: r.completed_at || '', dimensions: r.dimensions || '',
   dispatcherId: r.dispatcher_id || '', dispatcherName: r.dispatcher_name || '',
   goodsImages: parseImages(r.goods_images), pickupImages: parseImages(r.pickup_images)
 });
 const rowCustomer = (c) => ({
-  id: c.id, customerNo: String(c.id || '').slice(0, 8), name: c.name,
-  contact: c.contact || '', contactName: c.contact || '', phone: c.phone || '', contactPhone: c.phone || '',
-  address: c.address || '', note: c.note || '', remark: c.note || '', status: c.status || 'active',
-  legacyCustomerId: c.legacy_customer_id || '', importantNote: c.important_note || '', mainCsId: c.main_cs_id || ''
+  id: c.id, customerNo: String(c.id || '').slice(0, 8), name: fc.decryptField(c.name),
+  contact: fc.decryptField(c.contact || ''), contactName: fc.decryptField(c.contact || ''), phone: fc.decryptField(c.phone || ''), contactPhone: fc.decryptField(c.phone || ''),
+  address: fc.decryptField(c.address || ''), note: fc.decryptField(c.note || ''), remark: fc.decryptField(c.note || ''), status: c.status || 'active',
+  legacyCustomerId: c.legacy_customer_id || '', importantNote: fc.decryptField(c.important_note || ''), mainCsId: c.main_cs_id || ''
 });
 const customerOrderStats = (db, ids) => {
   if (!ids.length) return new Map();
@@ -251,17 +252,17 @@ app.post('/api/tasks', requireAuth, withIdempotency((req, res) => {
     if (input.customerId) {
       const customer = db.prepare('SELECT * FROM customers WHERE id=?').get(String(input.customerId));
       if (!customer) return res.status(400).json({ error: '客户不存在' });
-      input.customerName = input.customerName || customer.name;
-      input.contact = input.contact || customer.contact || '';
-      input.phone = input.phone || customer.phone || '';
+      input.customerName = input.customerName || fc.decryptField(customer.name);
+      input.contact = input.contact || fc.decryptField(customer.contact) || '';
+      input.phone = input.phone || fc.decryptField(customer.phone) || '';
       input.mainCsId = input.mainCsId || customer.main_cs_id || '';
     }
     if (input.addressId) {
       const address = db.prepare('SELECT a.*,r.name AS area_name FROM customer_addresses a LEFT JOIN areas r ON r.id=a.area_id WHERE a.id=?').get(String(input.addressId));
       if (!address) return res.status(400).json({ error: '取件地址不存在' });
-      input.address = input.address || address.address;
-      input.contact = input.contact || address.contact_name || '';
-      input.phone = input.phone || address.contact_phone || '';
+      input.address = input.address || fc.decryptField(address.address);
+      input.contact = input.contact || fc.decryptField(address.contact_name) || '';
+      input.phone = input.phone || fc.decryptField(address.contact_phone) || '';
       input.areaName = input.areaName || address.area_name || '';
     }
     input.defaultWorkerId = input.defaultWorkerId || input.workerId || '';
@@ -515,7 +516,7 @@ app.get('/api/sync/match-center', requireAuth, requireStaff, (req, res) => {
   const rows = db.prepare(`SELECT i.*,t.task_no,t.customer_name_snap FROM pickup_items i
     JOIN pickup_tasks t ON t.id=i.task_id WHERE i.match_status IN ('pending','no_waybill') ORDER BY i.created_at DESC`).all();
   res.json(rows.map(row => ({
-    id: row.id, taskId: row.task_id, taskNo: row.task_no, customerName: row.customer_name_snap,
+    id: row.id, taskId: row.task_id, taskNo: row.task_no, customerName: fc.decryptField(row.customer_name_snap),
     waybillNo: row.waybill_no, pieces: row.pieces, entryMethod: row.entry_method, matchStatus: row.match_status
   })));
 });
@@ -555,9 +556,9 @@ app.get('/api/dashboard/board', requireAuth, (req, res) => {
   const itemRows = ids.length ? db.prepare(`SELECT * FROM pickup_items WHERE task_id IN (${ids.map(() => '?').join(',')})`).all(...ids) : [];
   const completed = taskRows.filter(row => row.status === 'completed');
   res.json({
-    shipCustomerCount: new Set(completed.map(row => row.customer_id || row.customer_name_snap)).size,
+    shipCustomerCount: new Set(completed.map(row => row.customer_id || fc.decryptField(row.customer_name_snap))).size,
     finalWeight: itemRows.reduce((sum, row) => sum + num(row.final_weight), 0),
-    pickupCustomerCount: new Set(completed.map(row => row.customer_id || row.customer_name_snap)).size,
+    pickupCustomerCount: new Set(completed.map(row => row.customer_id || fc.decryptField(row.customer_name_snap))).size,
     pickupCount: completed.length,
     pieces: itemRows.reduce((sum, row) => sum + Number(row.pieces || 0), 0),
     pendingCount: taskRows.filter(row => row.status === 'pending' || row.status === 'in_progress').length
@@ -569,9 +570,14 @@ app.get('/api/dashboard/workers', requireAuth, (req, res) => {
   const taskAgg = db.prepare(`SELECT default_worker_id AS cid,
       COUNT(*) AS taskCount,
       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completedCount,
-      SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS activeCount,
-      COUNT(DISTINCT customer_id || '|' || customer_name_snap) AS customerCount
+      SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS activeCount
     FROM pickup_tasks WHERE default_worker_id<>'' GROUP BY default_worker_id`).all();
+  // customer_name_snap 已加密：客户数按取件员内存解密去重
+  const custByWorker = new Map();
+  for (const r of db.prepare(`SELECT default_worker_id AS cid, customer_id, customer_name_snap FROM pickup_tasks WHERE default_worker_id<>''`).all()) {
+    if (!custByWorker.has(r.cid)) custByWorker.set(r.cid, new Set());
+    custByWorker.get(r.cid).add((r.customer_id || '') + '|' + fc.decryptField(r.customer_name_snap));
+  }
   const itemAgg = db.prepare(`SELECT t.default_worker_id AS cid,
       COALESCE(SUM(i.pieces),0) AS pieces, COALESCE(SUM(i.final_weight),0) AS weight
     FROM pickup_items i JOIN pickup_tasks t ON t.id=i.task_id
@@ -588,7 +594,7 @@ app.get('/api/dashboard/workers', requireAuth, (req, res) => {
     return {
       id: worker.id, name: worker.name,
       pickupCount: Number(tasks.completedCount || 0),
-      customerCount: Number(tasks.customerCount || 0),
+      customerCount: (custByWorker.get(worker.id) || new Set()).size,
       pieces: Number(items.pieces || 0),
       weight: num(items.weight || 0),
       assistCount: assistMap.get(worker.id) || 0,
@@ -606,8 +612,15 @@ app.get('/api/dashboard/cs', requireAuth, (req, res) => {
 });
 
 app.get('/api/dashboard/customers', requireAuth, (req, res) => {
-  res.json(db.prepare(`SELECT customer_id AS id,customer_name_snap AS name,COUNT(*) AS taskCount
-    FROM pickup_tasks GROUP BY customer_id,customer_name_snap ORDER BY taskCount DESC LIMIT 20`).all().map(row => ({ ...row, weight: 0 })));
+  const custRows = db.prepare('SELECT customer_id, customer_name_snap FROM pickup_tasks').all();
+  const agg = new Map();
+  for (const r of custRows) {
+    const name = fc.decryptField(r.customer_name_snap);
+    const key = r.customer_id + '|' + name;
+    if (!agg.has(key)) agg.set(key, { id: r.customer_id, name, taskCount: 0 });
+    agg.get(key).taskCount++;
+  }
+  res.json([...agg.values()].sort((a, b) => b.taskCount - a.taskCount).slice(0, 20).map(row => ({ ...row, weight: 0 })));
 });
 
 app.get('/api/dashboard/trends', requireAuth, (req, res) => {
@@ -868,28 +881,29 @@ app.get('/api/records', requireAuth, (req, res) => {
   if (end) { conds.push('r.date <= :end'); params.end = end; }
   if (status && status !== 'all' && STATUSES.includes(status)) { conds.push('r.status = :status'); params.status = status; }
   if (customerId && customerId !== 'all') { conds.push('r.customer_id = :custId'); params.custId = customerId; }
-  if (keyword) { conds.push('(r.customer LIKE :kw OR r.order_no LIKE :kw OR r.tracking_no LIKE :kw OR r.goods LIKE :kw)'); params.kw = '%' + keyword + '%'; }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  // 带 page/size 时走 SQL 分页（响应 {list,total,page,size}，与 /api/tasks 同约定）；不带时保持历史数组直出
+  // 带 page/size 时返回 {list,total,page,size}；不带时保持历史数组直出
   const wantPaged = req.query.page !== undefined || req.query.size !== undefined;
   const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
   const size = Math.min(200, Math.max(1, parseInt(req.query.size || '20', 10) || 20));
-  const total = wantPaged
-    ? db.prepare(`SELECT COUNT(*) AS n FROM records r ${where}`).get(params).n
-    : 0;
-  let sql = `SELECT r.*, c.name AS cname, cu.name AS customer_name, cu.phone AS customer_phone
+  const kw = String(keyword || '').trim().toLowerCase();
+  const sql = `SELECT r.*, c.name AS cname, cu.name AS customer_name, cu.phone AS customer_phone
     FROM records r
     LEFT JOIN couriers c ON r.courier_id = c.id
     LEFT JOIN customers cu ON r.customer_id = cu.id
     ${where} ORDER BY r.date DESC, r.id DESC`;
-  if (wantPaged) {
-    sql += ' LIMIT :lim OFFSET :off';
-    params.lim = size;
-    params.off = page * size;
+  let items = db.prepare(sql).all(params).map(r => Object.assign(rowRecord(r), { customerName: fc.decryptField(r.customer_name || r.customer), customerPhone: fc.decryptField(r.customer_phone || '') }));
+  // records.customer 已加密：关键词改内存匹配
+  if (kw) {
+    items = items.filter(it =>
+      (it.customer && it.customer.toLowerCase().includes(kw)) ||
+      (it.orderNo && it.orderNo.toLowerCase().includes(kw)) ||
+      (it.trackingNo && it.trackingNo.toLowerCase().includes(kw)) ||
+      (it.goods && it.goods.toLowerCase().includes(kw)));
   }
-  const rows = db.prepare(sql).all(params);
-  const items = rows.map(r => Object.assign(rowRecord(r), { customerName: r.customer_name || r.customer, customerPhone: r.customer_phone || '' }));
-  res.json(wantPaged ? { list: items, total, page, size } : items);
+  const total = items.length;
+  const list = wantPaged ? items.slice(page * size, page * size + size) : items;
+  res.json(wantPaged ? { list, total, page, size } : list);
 });
 app.post('/api/records', requireAuth, withIdempotency((req, res) => {
   const { date, courierId, customer, customerId, pieces, address = '', region = '', note = '', status = '待取', orderNo = '',
@@ -900,7 +914,7 @@ app.post('/api/records', requireAuth, withIdempotency((req, res) => {
   let custId = '', custFinal = '';
   if (customerId) {
     const cu = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
-    if (cu) { custId = cu.id; custFinal = cu.name; }
+    if (cu) { custId = cu.id; custFinal = fc.decryptField(cu.name); }
   }
   if (!custFinal) custFinal = normalizeCustomer(customer);
   if (!custFinal) return res.status(400).json({ error: '请输入客户名称' });
@@ -931,9 +945,9 @@ app.post('/api/records', requireAuth, withIdempotency((req, res) => {
     (() => { const c = cid ? db.prepare('SELECT region FROM couriers WHERE id=?').get(cid) : null; return c ? c.region : ''; })();
   db.prepare(`INSERT INTO records (id,date,courier_id,customer,customer_id,pieces,address,region,note,status,order_no,goods,weight,volume,tracking_no,amount_receivable,amount_payable,settled,pickup_phone,appointment_time,dispatcher_id,dispatcher_name)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, date, cid, custFinal, custId, p, addressFinal, regionFinal, String(note || ''), status, orderFinal,
+    .run(id, date, cid, fc.encryptField(custFinal), custId, p, fc.encryptField(addressFinal), regionFinal, fc.encryptField(String(note || '')), status, orderFinal,
          String(goods || '').trim(), weightFinal, volumeFinal, trackingFinal, num(amountReceivable), num(amountPayable), settledFinal,
-         String(pickupPhone || '').trim(), String(appointmentTime || '').trim(), req.user.id, req.user.name || req.user.username);
+         fc.encryptField(String(pickupPhone || '').trim()), String(appointmentTime || '').trim(), req.user.id, req.user.name || req.user.username);
   // 记录状态轨迹
   db.prepare('INSERT INTO record_status_log (id,record_id,status,note,user_name) VALUES (?,?,?,?,?)')
     .run(randomUUID(), id, status, String(note || ''), req.user.name || req.user.username);
@@ -1047,16 +1061,17 @@ app.put('/api/records/:id', requireAuth, (req, res) => {
   const pieces = parseInt(b.pieces, 10);
   if (!pieces || pieces <= 0) return res.status(400).json({ error: '请输入取件件数' });
   const trackingNo = b.trackingNo != null ? String(b.trackingNo).trim() : (r.tracking_no || '');
-  const address = b.address != null ? String(b.address).trim() : (r.address || '');
+  const decRec = { address: fc.decryptField(r.address), note: fc.decryptField(r.note), pickup_phone: fc.decryptField(r.pickup_phone) };
+  const address = b.address != null ? String(b.address).trim() : (decRec.address || '');
   const region = b.region != null ? String(b.region).trim() : (r.region || '');
   const goods = b.goods != null ? String(b.goods).trim() : (r.goods || '');
-  const note = b.note != null ? String(b.note).trim() : (r.note || '');
-  const pickupPhone = b.pickupPhone != null ? String(b.pickupPhone).trim() : (r.pickup_phone || '');
+  const note = b.note != null ? String(b.note).trim() : (decRec.note || '');
+  const pickupPhone = b.pickupPhone != null ? String(b.pickupPhone).trim() : (decRec.pickup_phone || '');
   const isStaff = req.user.role === 'admin' || req.user.role === 'cs';
   const amountReceivable = (isStaff && b.amountReceivable != null) ? num(b.amountReceivable) : (r.amount_receivable || 0);
   const amountPayable = (isStaff && b.amountPayable != null) ? num(b.amountPayable) : (r.amount_payable || 0);
   db.prepare('UPDATE records SET pieces=?, tracking_no=?, address=?, region=?, goods=?, note=?, pickup_phone=?, amount_receivable=?, amount_payable=? WHERE id=?')
-    .run(pieces, trackingNo, address, region, goods, note, pickupPhone, amountReceivable, amountPayable, r.id);
+    .run(pieces, trackingNo, fc.encryptField(address), region, goods, fc.encryptField(note), fc.encryptField(pickupPhone), amountReceivable, amountPayable, r.id);
   const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
   broadcast({ type: 'record.updated', record: updated, action: 'edit', actorId: req.user.id, actor: req.user.name || req.user.username });
   res.json(updated);
@@ -1194,10 +1209,17 @@ app.get('/api/worker/customer-options', requireAuth, (req, res) => {
 });
 
 app.get('/api/customers', requireAuth, (req, res) => {
-  const search = String(req.query.search || '').trim();
-  const rows = search
-    ? db.prepare("SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? OR legacy_customer_id LIKE ? ORDER BY name").all(`%${search}%`, `%${search}%`, `%${search}%`)
-    : db.prepare('SELECT * FROM customers ORDER BY name').all();
+  const search = String(req.query.search || '').trim().toLowerCase();
+  const all = db.prepare('SELECT * FROM customers').all();
+  const rows = all
+    .filter(c => {
+      if (!search) return true;
+      const name = fc.decryptField(c.name) || '';
+      const phone = fc.decryptField(c.phone) || '';
+      const legacy = c.legacy_customer_id || '';
+      return name.toLowerCase().includes(search) || phone.toLowerCase().includes(search) || legacy.toLowerCase().includes(search);
+    })
+    .sort((a, b) => (fc.decryptField(a.name) || '').localeCompare(fc.decryptField(b.name) || '', 'zh'));
   const stats = customerOrderStats(db, rows.map(row => row.id));
   res.json(rows.map(row => {
     const stat = stats.get(row.id) || { taskCount: 0, openTaskCount: 0, completedTaskCount: 0 };
@@ -1213,11 +1235,11 @@ app.post('/api/customers', requireAuth, (req, res) => {
   if (!n) return res.status(400).json({ error: '请输入客户名称' });
   const id = randomUUID();
   db.prepare(`INSERT INTO customers (id,name,contact,phone,address,note,legacy_customer_id,important_note,status)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, n, String(contact || '').trim(), String(phone || '').trim(), String(address || '').trim(),
-      String(note || '').trim(), String(req.body?.legacyCustomerId || ''), String(req.body?.importantNote || ''), 'active');
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, fc.encryptField(n), fc.encryptField(String(contact || '').trim()), fc.encryptField(String(phone || '').trim()), fc.encryptField(String(address || '').trim()),
+      fc.encryptField(String(note || '').trim()), String(req.body?.legacyCustomerId || ''), fc.encryptField(String(req.body?.importantNote || '')), 'active');
   if (String(address || '').trim()) db.prepare(`INSERT INTO customer_addresses
     (id,customer_id,name,address,contact_name,contact_phone,is_common,is_active,created_at) VALUES (?,?,?,?,?,?,1,1,?)`)
-    .run(randomUUID(), id, '默认地址', String(address).trim(), String(contact || '').trim(), String(phone || '').trim(), nowStr());
+    .run(randomUUID(), id, '默认地址', fc.encryptField(String(address).trim()), fc.encryptField(String(contact || '').trim()), fc.encryptField(String(phone || '').trim()), nowStr());
   logOperation(req.user, '创建客户', 'customer', id, n);
   broadcast({ type: 'customers.updated' });
   res.json(rowCustomer(db.prepare('SELECT * FROM customers WHERE id = ?').get(id)));
@@ -1225,15 +1247,19 @@ app.post('/api/customers', requireAuth, (req, res) => {
 app.put('/api/customers/:id', requireAuth, requireStaff, (req, res) => {
   const cur = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
   if (!cur) return res.status(404).json({ error: '客户不存在' });
-  const g = (k) => (req.body && req.body[k] != null) ? String(req.body[k]).trim() : (cur[k] || '');
+  const dec = {
+    name: fc.decryptField(cur.name), contact: fc.decryptField(cur.contact), phone: fc.decryptField(cur.phone),
+    address: fc.decryptField(cur.address), note: fc.decryptField(cur.note), important_note: fc.decryptField(cur.important_note)
+  };
+  const g = (k) => (req.body && req.body[k] != null) ? String(req.body[k]).trim() : (dec[k] || '');
   const name = normalizeCustomer(g('name'));
   if (!name) return res.status(400).json({ error: '客户名称不能为空' });
-  const contact = req.body?.contactName ?? req.body?.contact ?? cur.contact ?? '';
-  const phone = req.body?.contactPhone ?? req.body?.phone ?? cur.phone ?? '';
-  const note = req.body?.remark ?? req.body?.note ?? cur.note ?? '';
+  const contact = req.body?.contactName ?? req.body?.contact ?? dec.contact ?? '';
+  const phone = req.body?.contactPhone ?? req.body?.phone ?? dec.phone ?? '';
+  const note = req.body?.remark ?? req.body?.note ?? dec.note ?? '';
   db.prepare(`UPDATE customers SET name=?,contact=?,phone=?,address=?,note=?,legacy_customer_id=?,important_note=? WHERE id=?`)
-    .run(name, String(contact), String(phone), g('address'), String(note), req.body?.legacyCustomerId ?? cur.legacy_customer_id ?? '',
-      req.body?.importantNote ?? cur.important_note ?? '', req.params.id);
+    .run(fc.encryptField(name), fc.encryptField(String(contact)), fc.encryptField(String(phone)), fc.encryptField(g('address')), fc.encryptField(String(note)), req.body?.legacyCustomerId ?? cur.legacy_customer_id ?? '',
+      fc.encryptField(req.body?.importantNote ?? dec.important_note ?? ''), req.params.id);
   logOperation(req.user, '修改客户', 'customer', req.params.id, name);
   broadcast({ type: 'customers.updated' });
   res.json(rowCustomer(db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id)));
@@ -1257,8 +1283,8 @@ app.get('/api/customers/:id', requireAuth, (req, res) => {
   const row = db.prepare(`SELECT c.*,u.name AS main_cs_name FROM customers c LEFT JOIN users u ON u.id=c.main_cs_id WHERE c.id=?`).get(req.params.id);
   if (!row) return res.status(404).json({ error: '客户不存在' });
   const addresses = db.prepare('SELECT * FROM customer_addresses WHERE customer_id=? ORDER BY is_common DESC,created_at,id').all(row.id).map(a => ({
-    id: a.id, name: a.name, address: a.address, contactName: a.contact_name, contactPhone: a.contact_phone,
-    areaId: a.area_id || '', isCommon: Boolean(a.is_common), isActive: Boolean(a.is_active), remark: a.remark || ''
+    id: a.id, name: fc.decryptField(a.name), address: fc.decryptField(a.address), contactName: fc.decryptField(a.contact_name), contactPhone: fc.decryptField(a.contact_phone),
+    areaId: a.area_id || '', isCommon: Boolean(a.is_common), isActive: Boolean(a.is_active), remark: fc.decryptField(a.remark || '')
   }));
   const stat = customerOrderStats(db, [row.id]).get(row.id) || { taskCount: 0, openTaskCount: 0, completedTaskCount: 0 };
   res.json({ ...rowCustomer(row), mainCsName: row.main_cs_name || '', addresses, ...stat });
@@ -1277,8 +1303,8 @@ app.post('/api/customers/:id/addresses', requireAuth, requireStaff, (req, res) =
   if (!String(body.address || '').trim()) return res.status(400).json({ error: '地址不能为空' });
   const id = randomUUID();
   db.prepare(`INSERT INTO customer_addresses (id,customer_id,name,address,contact_name,contact_phone,area_id,is_common,is_active,remark,created_at)
-    VALUES (?,?,?,?,?,?,?,?,1,?,?)`).run(id, req.params.id, body.name || '', String(body.address).trim(), body.contactName || '', body.contactPhone || '',
-      body.areaId || '', body.isCommon ? 1 : 0, body.remark || '', nowStr());
+    VALUES (?,?,?,?,?,?,?,?,1,?,?)`).run(id, req.params.id, fc.encryptField(body.name || ''), fc.encryptField(String(body.address).trim()), fc.encryptField(body.contactName || ''), fc.encryptField(body.contactPhone || ''),
+      body.areaId || '', body.isCommon ? 1 : 0, fc.encryptField(body.remark || ''), nowStr());
   logOperation(req.user, '新增客户地址', 'customer', req.params.id, id);
   res.status(201).json({ id });
 });
@@ -1287,9 +1313,10 @@ app.put('/api/addresses/:id', requireAuth, requireStaff, (req, res) => {
   const body = req.body || {};
   const cur = db.prepare('SELECT * FROM customer_addresses WHERE id=?').get(req.params.id);
   if (!cur) return res.status(404).json({ error: '地址不存在' });
+  const dec = { name: fc.decryptField(cur.name), address: fc.decryptField(cur.address), contact_name: fc.decryptField(cur.contact_name), contact_phone: fc.decryptField(cur.contact_phone), remark: fc.decryptField(cur.remark) };
   db.prepare(`UPDATE customer_addresses SET name=?,address=?,contact_name=?,contact_phone=?,area_id=?,is_common=?,remark=? WHERE id=?`).run(
-    body.name ?? cur.name, body.address ?? cur.address, body.contactName ?? cur.contact_name, body.contactPhone ?? cur.contact_phone,
-    body.areaId ?? cur.area_id, body.isCommon == null ? cur.is_common : (body.isCommon ? 1 : 0), body.remark ?? cur.remark, cur.id);
+    fc.encryptField(body.name ?? dec.name), fc.encryptField(body.address ?? dec.address), fc.encryptField(body.contactName ?? dec.contact_name), fc.encryptField(body.contactPhone ?? dec.contact_phone),
+    body.areaId ?? cur.area_id, body.isCommon == null ? cur.is_common : (body.isCommon ? 1 : 0), fc.encryptField(body.remark ?? dec.remark), cur.id);
   res.json({ ok: true });
 });
 
@@ -1320,25 +1347,41 @@ app.get('/api/stats', requireAuth, (req, res) => {
   const where = 'WHERE ' + conds.join(' AND ');
   const params = Object.assign({}, scope.params, df.params);
 
-  const global = db.prepare(`SELECT COALESCE(SUM(pieces),0) AS pieces, COUNT(*) AS orders,
-     COUNT(DISTINCT customer) AS customers, COUNT(DISTINCT courier_id) AS couriers
-     FROM records r ${where}`).get(params);
-  const weightStat = db.prepare(`SELECT COALESCE(SUM(r.weight),0) AS totalWeight, COALESCE(AVG(r.weight),0) AS avgWeight, COALESCE(SUM(CASE WHEN r.weight > 0 THEN 1 ELSE 0 END),0) AS weighedCount FROM records r ${where}`).get(params);
-  global.totalWeight = Math.round(weightStat.totalWeight * 100) / 100;
-  global.avgWeight = Math.round(weightStat.avgWeight * 100) / 100;
-  global.weighedCount = weightStat.weighedCount;
+  // records.customer 已加密：原始行内存解密后统一聚合
+  const rawRows = db.prepare(`SELECT r.customer, r.pieces, r.courier_id, r.status, r.dispatcher_id, r.dispatcher_name, r.weight
+     FROM records r ${where}`).all(params);
+  const dec = rawRows.map(r => ({ ...r, customer: fc.decryptField(r.customer) }));
+  const global = {
+    pieces: dec.reduce((s, r) => s + Number(r.pieces || 0), 0),
+    orders: dec.length,
+    customers: new Set(dec.map(r => r.customer)).size,
+    couriers: 0
+  };
+  const totalWeight = dec.reduce((s, r) => s + Number(r.weight || 0), 0);
+  const weighedCount = dec.filter(r => Number(r.weight) > 0).length;
+  global.totalWeight = Math.round(totalWeight * 100) / 100;
+  global.avgWeight = weighedCount ? Math.round((totalWeight / weighedCount) * 100) / 100 : 0;
+  global.weighedCount = weighedCount;
   // 「取件员数」口径修正：显示团队总人数（含暂无记录的取件员），避免月初无单时误显示为 0
   const teamCount = db.prepare('SELECT COUNT(*) AS n FROM couriers').get().n;
   global.couriers = (req.user.role === 'admin' || req.user.role === 'cs') ? teamCount : (req.user.courier_id ? 1 : 0);
-  const byStatus = db.prepare(`SELECT r.status AS status, COUNT(*) AS orders, COALESCE(SUM(r.pieces),0) AS pieces
-     FROM records r ${where} GROUP BY r.status ORDER BY orders DESC`).all(params);
+  const byStatusMap = new Map();
+  for (const r of dec) {
+    const k = r.status || '待取';
+    if (!byStatusMap.has(k)) byStatusMap.set(k, { status: k, orders: 0, pieces: 0 });
+    const m = byStatusMap.get(k); m.orders++; m.pieces += Number(r.pieces || 0);
+  }
+  const byStatus = [...byStatusMap.values()].sort((a, b) => b.orders - a.orders);
   let perCourier;
   if (req.user.role === 'admin' || req.user.role === 'cs') {
-    perCourier = db.prepare(`SELECT r.courier_id AS courierId, COALESCE(MAX(c.name),'未分配') AS name,
-       COALESCE(MAX(c.region),'') AS region, COALESCE(SUM(r.pieces),0) AS pieces,
-       COUNT(*) AS orders, COUNT(DISTINCT r.customer) AS customers
-       FROM records r LEFT JOIN couriers c ON r.courier_id = c.id
-       ${where} GROUP BY r.courier_id ORDER BY pieces DESC`).all(params);
+    const names = new Map(db.prepare('SELECT id, name, region FROM couriers').all().map(c => [c.id, c]));
+    const byC = new Map();
+    for (const r of dec) {
+      const cid = r.courier_id || '__unassigned__';
+      if (!byC.has(cid)) byC.set(cid, { courierId: r.courier_id || '', name: (names.get(r.courier_id) || {}).name || '未分配', region: (names.get(r.courier_id) || {}).region || '', pieces: 0, orders: 0, _cust: new Set() });
+      const m = byC.get(cid); m.pieces += Number(r.pieces || 0); m.orders++; m._cust.add(r.customer);
+    }
+    perCourier = [...byC.values()].map(m => ({ courierId: m.courierId, name: m.name, region: m.region, pieces: m.pieces, orders: m.orders, customers: m._cust.size })).sort((a, b) => b.pieces - a.pieces);
   } else {
     const selfName = db.prepare('SELECT name FROM couriers WHERE id = ?').get(req.user.courier_id);
     perCourier = [{
@@ -1355,13 +1398,22 @@ app.get('/api/stats', requireAuth, (req, res) => {
   // 客服派单量（管理员 / 客服可见）
   let perDispatcher = [];
   if (req.user.role === 'admin' || req.user.role === 'cs') {
-    perDispatcher = db.prepare(`SELECT r.dispatcher_id AS dispatcherId, MAX(r.dispatcher_name) AS name,
-       COUNT(*) AS orders, COALESCE(SUM(r.pieces),0) AS pieces, COUNT(DISTINCT r.customer) AS customers
-       FROM records r ${where} GROUP BY r.dispatcher_id ORDER BY orders DESC`).all(params);
+    const byD = new Map();
+    for (const r of dec) {
+      const did = r.dispatcher_id || '__none__';
+      if (!byD.has(did)) byD.set(did, { dispatcherId: r.dispatcher_id || '', name: r.dispatcher_name || '', orders: 0, pieces: 0, _cust: new Set() });
+      const m = byD.get(did); m.orders++; m.pieces += Number(r.pieces || 0); m._cust.add(r.customer);
+      if (!m.name && r.dispatcher_name) m.name = r.dispatcher_name;
+    }
+    perDispatcher = [...byD.values()].map(m => ({ dispatcherId: m.dispatcherId, name: m.name, orders: m.orders, pieces: m.pieces, customers: m._cust.size })).sort((a, b) => b.orders - a.orders);
   }
   // 客户件数TOP10（取件员看自己的；客服/管理员看全部）
-  const topCustomers = db.prepare(`SELECT r.customer AS name, COALESCE(SUM(r.pieces),0) AS pieces, COUNT(*) AS orders
-    FROM records r ${where} GROUP BY r.customer ORDER BY pieces DESC LIMIT 10`).all(params);
+  const topCustMap = new Map();
+  for (const r of dec) {
+    if (!topCustMap.has(r.customer)) topCustMap.set(r.customer, { name: r.customer, pieces: 0, orders: 0 });
+    const m = topCustMap.get(r.customer); m.pieces += Number(r.pieces || 0); m.orders++;
+  }
+  const topCustomers = [...topCustMap.values()].sort((a, b) => b.pieces - a.pieces).slice(0, 10);
   res.json({ range: mode, label: mode, yesterdayPieces: yPieces, global, byStatus, perCourier, perDispatcher, topCustomers });
 });
 
@@ -1373,16 +1425,18 @@ app.get('/api/billing', requireAuth, requireStaff, (req, res) => {
   if (end) { conds.push('r.date <= :end'); params.end = end; }
   if (customerId && customerId !== 'all') { conds.push('r.customer_id = :cid'); params.cid = customerId; }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const byCustomer = db.prepare(`SELECT
-     CASE WHEN r.customer_id != '' THEN r.customer_id ELSE r.customer END AS customerId,
-     CASE WHEN r.customer_id != '' THEN COALESCE(MAX(cu.name),'') ELSE MAX(r.customer) END AS name,
-     COUNT(*) AS orders, COALESCE(SUM(r.pieces),0) AS pieces,
-     COALESCE(SUM(r.amount_receivable),0) AS receivable, COALESCE(SUM(r.amount_payable),0) AS payable,
-     COALESCE(SUM(CASE WHEN r.settled='未结算' THEN r.amount_receivable ELSE 0 END),0) AS unsettled
-     FROM records r LEFT JOIN customers cu ON r.customer_id = cu.id
-     ${where}
-     GROUP BY CASE WHEN r.customer_id != '' THEN r.customer_id ELSE r.customer END
-     ORDER BY receivable DESC`).all(params);
+  const rawBill = db.prepare(`SELECT r.customer, r.customer_id, cu.name AS customer_name, r.pieces, r.amount_receivable, r.amount_payable, r.settled
+     FROM records r LEFT JOIN customers cu ON r.customer_id = cu.id ${where}`).all(params);
+  const billMap = new Map();
+  for (const r of rawBill) {
+    const cid = r.customer_id ? r.customer_id : fc.decryptField(r.customer);
+    const name = r.customer_id ? (fc.decryptField(r.customer_name || '') || fc.decryptField(r.customer)) : fc.decryptField(r.customer);
+    if (!billMap.has(cid)) billMap.set(cid, { customerId: cid, name, orders: 0, pieces: 0, receivable: 0, payable: 0, unsettled: 0 });
+    const m = billMap.get(cid);
+    m.orders++; m.pieces += Number(r.pieces || 0); m.receivable += Number(r.amount_receivable || 0); m.payable += Number(r.amount_payable || 0);
+    if (r.settled === '未结算') m.unsettled += Number(r.amount_receivable || 0);
+  }
+  const byCustomer = [...billMap.values()].sort((a, b) => b.receivable - a.receivable);
   const total = db.prepare(`SELECT COALESCE(SUM(amount_receivable),0) AS receivable, COALESCE(SUM(amount_payable),0) AS payable,
      COALESCE(SUM(CASE WHEN settled='未结算' THEN amount_receivable ELSE 0 END),0) AS unsettled,
      COUNT(*) AS orders
@@ -1442,11 +1496,25 @@ app.get('/api/trend', requireAuth, (req, res) => {
     bucketStart = labels[0] + '-01';
   }
 
-  const rows = db.prepare(`SELECT ${keyExpr} AS k, COALESCE(SUM(pieces),0) AS pieces, COUNT(DISTINCT customer) AS customers
-     FROM records r WHERE date >= :bs ${extraCond} GROUP BY k`)
+  // records.customer 已加密：按桶内存解密去重
+  const rawTrend = db.prepare(`SELECT date, customer, pieces FROM records r WHERE date >= :bs ${extraCond}`)
     .all(Object.assign({ bs: bucketStart }, params));
   const map = {};
-  rows.forEach(r => { map[r.k] = { pieces: r.pieces, customers: r.customers }; });
+  for (const r of rawTrend) {
+    const d = String(r.date || '');
+    let k;
+    if (period === 'daily') k = d.slice(0, 10);
+    else if (period === 'weekly') {
+      const dt = new Date(d.slice(0, 10) + 'T00:00:00');
+      const day = dt.getDay() || 7;
+      dt.setDate(dt.getDate() - day + 1);
+      k = dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+    } else k = d.slice(0, 7);
+    if (!map[k]) map[k] = { pieces: 0, cust: new Set() };
+    map[k].pieces += Number(r.pieces || 0);
+    map[k].cust.add(fc.decryptField(r.customer));
+  }
+  for (const [k, v] of Object.entries(map)) map[k] = { pieces: v.pieces, customers: v.cust.size };
   res.json({
     period, labels,
     pieces: labels.map(l => map[l] ? map[l].pieces : 0),
@@ -1472,8 +1540,8 @@ app.post('/api/import', requireAuth, requireAdmin, (req, res) => {
   const insLog = db.prepare('INSERT OR REPLACE INTO record_status_log (id,record_id,status,note,user_name,created_at) VALUES (?,?,?,?,?,?)');
   const tx = db.transaction(() => {
     couriers.forEach(c => insC.run(c.id || randomUUID(), c.name || '', c.region || ''));
-    customers.forEach(c => insCust.run(c.id || randomUUID(), c.name || '', c.contact || '', c.phone || '', c.address || '', c.note || ''));
-    records.forEach(r => insR.run(r.id || randomUUID(), r.date || '', r.courierId || null, r.customer || '', r.customerId || '', parseInt(r.pieces, 10) || 0, r.address || '', r.region || '', r.note || '', STATUSES.includes(r.status) ? r.status : '待取', r.orderNo || '', r.goods || '', num(r.weight), num(r.volume), r.trackingNo || '', num(r.amountReceivable), num(r.amountPayable), ['未结算', '已结算'].includes(r.settled) ? r.settled : '未结算', r.dispatcherId || '', r.dispatcherName || '', JSON.stringify(r.goodsImages || []), JSON.stringify(r.pickupImages || [])));
+    customers.forEach(c => insCust.run(c.id || randomUUID(), fc.encryptField(c.name || ''), fc.encryptField(c.contact || ''), fc.encryptField(c.phone || ''), fc.encryptField(c.address || ''), fc.encryptField(c.note || '')));
+    records.forEach(r => insR.run(r.id || randomUUID(), r.date || '', r.courierId || null, fc.encryptField(r.customer || ''), r.customerId || '', parseInt(r.pieces, 10) || 0, fc.encryptField(r.address || ''), r.region || '', fc.encryptField(r.note || ''), STATUSES.includes(r.status) ? r.status : '待取', r.orderNo || '', r.goods || '', num(r.weight), num(r.volume), r.trackingNo || '', num(r.amountReceivable), num(r.amountPayable), ['未结算', '已结算'].includes(r.settled) ? r.settled : '未结算', r.dispatcherId || '', r.dispatcherName || '', JSON.stringify(r.goodsImages || []), JSON.stringify(r.pickupImages || [])));
     (statusLogs || []).forEach(l => insLog.run(l.id || randomUUID(), l.record_id || '', l.status || '', l.note || '', l.user_name || '', l.created_at || ''));
   });
   tx();
@@ -1482,23 +1550,35 @@ app.post('/api/import', requireAuth, requireAdmin, (req, res) => {
 
 // Excel 导出
 app.get('/api/export.xlsx', requireAuth, requireStaff, (req, res) => {
-  const records = db.prepare(`SELECT r.date, COALESCE(c.name,'未分配') AS 取件员,
-     COALESCE(r.region,'') AS 区域, r.customer AS 客户名称, COALESCE(cu.phone,'') AS 客户电话, r.address AS 取件地址,
-     r.order_no AS 订单号, r.tracking_no AS 面单号, r.goods AS 品名, r.weight AS 重量kg, r.volume AS 体积m3,
-     r.pieces AS 件数, r.status AS 状态, r.amount_receivable AS 应收, r.amount_payable AS 应付, r.settled AS 结算, r.note AS 备注
+  // 敏感列已加密：先取原始行内存解密，统计在 JS 完成
+  const rawRows = db.prepare(`SELECT r.date, COALESCE(c.name,'未分配') AS courier_name, r.region,
+     r.customer, r.customer_id, cu.phone AS customer_phone, r.address, r.order_no, r.tracking_no, r.goods,
+     r.weight, r.volume, r.pieces, r.status, r.amount_receivable, r.amount_payable, r.settled, r.note, cu.name AS customer_name
      FROM records r LEFT JOIN couriers c ON r.courier_id = c.id LEFT JOIN customers cu ON r.customer_id = cu.id
      ORDER BY r.date DESC`).all();
-  const perC = db.prepare(`SELECT COALESCE(c.name,'未分配') AS 取件员, COALESCE(SUM(r.pieces),0) AS 总件数,
-     COUNT(*) AS 订单数, COUNT(DISTINCT r.customer) AS 客户数
-     FROM records r LEFT JOIN couriers c ON r.courier_id = c.id
-     GROUP BY r.courier_id ORDER BY 总件数 DESC`).all();
-  const billing = db.prepare(`SELECT
-     CASE WHEN r.customer_id != '' THEN COALESCE(MAX(cu.name),'') ELSE MAX(r.customer) END AS 客户,
-     COUNT(*) AS 订单数, COALESCE(SUM(r.amount_receivable),0) AS 应收, COALESCE(SUM(r.amount_payable),0) AS 应付,
-     COALESCE(SUM(CASE WHEN r.settled='未结算' THEN r.amount_receivable ELSE 0 END),0) AS 未结算应收
-     FROM records r LEFT JOIN customers cu ON r.customer_id = cu.id
-     GROUP BY CASE WHEN r.customer_id != '' THEN r.customer_id ELSE r.customer END
-     ORDER BY 应收 DESC`).all();
+  const records = rawRows.map(r => ({
+    日期: r.date, 取件员: r.courier_name, 区域: r.region || '',
+    客户名称: fc.decryptField(r.customer), 客户电话: fc.decryptField(r.customer_phone || ''), 取件地址: fc.decryptField(r.address),
+    订单号: r.order_no, 面单号: r.tracking_no, 品名: r.goods, '重量kg': r.weight, '体积m3': r.volume,
+    件数: r.pieces, 状态: r.status, 应收: r.amount_receivable, 应付: r.amount_payable, 结算: r.settled, 备注: fc.decryptField(r.note)
+  }));
+  const perCMap = new Map();
+  for (const r of rawRows) {
+    if (!perCMap.has(r.courier_name)) perCMap.set(r.courier_name, { 取件员: r.courier_name, 总件数: 0, 订单数: 0, _cust: new Set() });
+    const m = perCMap.get(r.courier_name);
+    m.总件数 += Number(r.pieces || 0); m.订单数 += 1; m._cust.add(fc.decryptField(r.customer));
+  }
+  const perC = [...perCMap.values()].map(m => ({ 取件员: m.取件员, 总件数: m.总件数, 订单数: m.订单数, 客户数: m._cust.size })).sort((a, b) => b.总件数 - a.总件数);
+  const billingMap = new Map();
+  for (const r of rawRows) {
+    const key = r.customer_id ? r.customer_id : fc.decryptField(r.customer);
+    const name = r.customer_id ? (fc.decryptField(r.customer_name || '') || fc.decryptField(r.customer)) : fc.decryptField(r.customer);
+    if (!billingMap.has(key)) billingMap.set(key, { 客户: name, 订单数: 0, 应收: 0, 应付: 0, 未结算应收: 0 });
+    const m = billingMap.get(key);
+    m.订单数 += 1; m.应收 += Number(r.amount_receivable || 0); m.应付 += Number(r.amount_payable || 0);
+    if (r.settled === '未结算') m.未结算应收 += Number(r.amount_receivable || 0);
+  }
+  const billing = [...billingMap.values()].sort((a, b) => b.应收 - a.应收);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Huoqu 取件统计报表'], ['导出时间', new Date().toLocaleString('zh-CN')], ['']]),
     '汇总'); // 说明sheet
@@ -1538,7 +1618,7 @@ app.post('/api/import.file', requireAuth, requireAdmin, upload.single('file'), (
     const insR = db.prepare('INSERT INTO records (id,date,courier_id,customer,customer_id,pieces,address,region,note,status,order_no,goods,weight,volume,tracking_no,amount_receivable,amount_payable,settled,dispatcher_id,dispatcher_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     const findC = db.prepare('SELECT id FROM couriers WHERE name = ?');
     const findOrder = db.prepare('SELECT id FROM records WHERE order_no = ?');
-    const findCustomer = db.prepare('SELECT id FROM customers WHERE name = ?');
+    const customerByName = new Map(db.prepare('SELECT id, name FROM customers').all().map(c => [fc.decryptField(c.name), c.id]));
     const insC = db.prepare('INSERT INTO couriers (id,name,region) VALUES (?,?,?)');
     const insCust = db.prepare('INSERT INTO customers (id,name) VALUES (?,?)');
     let ok = 0, skip = 0;
@@ -1571,10 +1651,10 @@ app.post('/api/import.file', requireAuth, requireAdmin, upload.single('file'), (
         }
         // 客户档案自动匹配/创建
         let custId = '';
-        let cc = findCustomer.get(customer);
-        if (cc) custId = cc.id;
-        else { const cid2 = randomUUID(); insCust.run(cid2, customer); custId = cid2; }
-        insR.run(randomUUID(), dateNorm, cid, customer, custId, pieces, address, region, note, status, orderNo, goods, weight, volume, trackingNo, amountReceivable, amountPayable, settled, '', '');
+        let cc = customerByName.get(customer);
+        if (cc) custId = cc;
+        else { const cid2 = randomUUID(); insCust.run(cid2, fc.encryptField(customer)); customerByName.set(customer, cid2); custId = cid2; }
+        insR.run(randomUUID(), dateNorm, cid, fc.encryptField(customer), custId, pieces, fc.encryptField(address), region, fc.encryptField(note), status, orderNo, goods, weight, volume, trackingNo, amountReceivable, amountPayable, settled, '', '');
         if (trackingNo && weight > 0) upsertWaybillWeight.run(trackingNo, custId, weight, dateNorm, nowStr());
         ok++;
       });
@@ -1627,17 +1707,18 @@ function trackTaskRecord(q, phone, surname) {
     return { legacy };
   }
   if (phone) {
-    const custIds = db.prepare('SELECT id,name,contact FROM customers WHERE phone = ?').all(phone)
-      .filter(c => String(c.name || '').startsWith(surname) || String(c.contact || '').startsWith(surname))
+    const allCust = db.prepare('SELECT id,name,contact,phone FROM customers').all();
+    const custIds = allCust
+      .filter(c => fc.decryptField(c.phone) === phone && (fc.decryptField(c.name).startsWith(surname) || fc.decryptField(c.contact).startsWith(surname)))
       .map(c => c.id);
     const task = custIds.length
       ? db.prepare(`SELECT * FROM pickup_tasks WHERE customer_id IN (${custIds.map(() => '?').join(',')})
           ORDER BY created_at DESC LIMIT 1`).get(...custIds)
       : null;
     if (!task) {
-      const bySnap = db.prepare(`SELECT * FROM pickup_tasks
-        WHERE phone_snap = ? AND (customer_name_snap LIKE ? OR contact_snap LIKE ?)
-        ORDER BY created_at DESC LIMIT 1`).get(phone, surname + '%', surname + '%');
+      const bySnap = db.prepare(`SELECT * FROM pickup_tasks WHERE phone_snap <> '' ORDER BY created_at DESC`).all()
+        .find(t => fc.decryptField(t.phone_snap) === phone &&
+          (fc.decryptField(t.customer_name_snap).startsWith(surname) || fc.decryptField(t.contact_snap).startsWith(surname)));
       if (bySnap) return { task: bySnap };
     } else {
       return { task };
@@ -1672,9 +1753,9 @@ app.get('/api/track', (req, res) => {
       taskNo: task.task_no || '',
       orderNo: task.business_order_no || '',
       trackingNo: waybills.join('、'),
-      customer: maskName(task.customer_name_snap || ''),
+      customer: maskName(fc.decryptField(task.customer_name_snap || '')),
       pieces: totalPieces,
-      goods: task.pickup_note || '',
+      goods: fc.decryptField(task.pickup_note || ''),
       status: label,
       timeline
     });
@@ -1682,7 +1763,7 @@ app.get('/api/track', (req, res) => {
   if (legacy) {
     const timeline = db.prepare('SELECT status, note, user_name AS by, created_at AS at FROM record_status_log WHERE record_id = ? ORDER BY rowid ASC').all(legacy.id);
     return res.json({
-      orderNo: legacy.order_no || '', trackingNo: legacy.tracking_no || '', customer: maskName(legacy.customer),
+      orderNo: legacy.order_no || '', trackingNo: legacy.tracking_no || '', customer: maskName(fc.decryptField(legacy.customer)),
       pieces: legacy.pieces, goods: legacy.goods || '', status: legacy.status || '待取', timeline
     });
   }

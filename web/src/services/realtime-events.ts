@@ -81,6 +81,17 @@ export function createRealtimeEventHub() {
       }
       return true
     },
+    // 把已存在的通知标记为已见（不触发监听），用于建立基线，避免刷新后重复弹历史通知
+    markSeen(ids: Iterable<string>) {
+      for (const id of ids) {
+        if (!id || seenNotificationIds.has(id)) continue
+        seenNotificationIds.add(id)
+        notificationOrder.push(id)
+        if (notificationOrder.length > 200) {
+          seenNotificationIds.delete(notificationOrder.shift() as string)
+        }
+      }
+    },
   }
 }
 

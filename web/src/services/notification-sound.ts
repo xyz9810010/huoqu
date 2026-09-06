@@ -71,14 +71,25 @@ export function createNotificationSoundController(options: NotificationSoundOpti
       eventTarget.addEventListener('keydown', unlock, { capture: true })
     },
     play() {
-      if (!context) return false
-      // 后台标签页可能被浏览器挂起 AudioContext，先尝试恢复再播放
-      if (context.state === 'suspended') {
-        void context.resume().catch(() => {})
+      if (!context) {
+        try {
+          context = audioContextFactory()
+        } catch {
+          return false
+        }
       }
-      const now = context.currentTime
-      tone(740, now)
-      tone(988, now + 0.18)
+      const run = () => {
+        if (!context) return
+        const now = context.currentTime
+        tone(740, now)
+        tone(988, now + 0.18)
+      }
+      if (context.state === 'running') {
+        run()
+      } else {
+        // 后台标签页常见：AudioContext 被挂起，先恢复，恢复后再调度发声（避免在冻结的 currentTime 上调度）
+        void context.resume().then(run).catch(() => {})
+      }
       return true
     },
     dispose() {

@@ -129,6 +129,7 @@ const helpVisible = ref(false)
 const latency = ref<number>(-1)
 const connected = ref(false)
 let heartbeatTimer: number | undefined
+let syncTimer: number | undefined
 
 const allMenus: any[] = [
   { path: '/dashboard', label: '数据看板', icon: 'DataBoard', roles: ['boss', 'admin'] },
@@ -236,6 +237,19 @@ function handleRealtimeEvent(message: unknown) {
   void refreshUnread()
 }
 
+// 兜底同步：SSE 断开期间错过的通知，定时拉取未读补弹（去重由 realtimeEventHub 保证）
+async function syncNotifications() {
+  try {
+    const result = await http.get<any, { items: any[] }>('/v1/notifications', { params: { unread: 'true', pageSize: 30 } })
+    const items = Array.isArray(result?.items) ? result.items : []
+    for (const item of items) {
+      handleRealtimeEvent({ type: 'notification.created', data: { notification: item } })
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function onServiceWorkerMessage(event: MessageEvent) {
   handleRealtimeEvent(event.data)
 }
@@ -264,6 +278,16 @@ onMounted(() => {
   realtime.start().catch(() => {
     /* API 层已经展示连接错误，页面其余功能保持可用 */
   })
+  // 基线：把当前未读标记为已见（避免刷新后补弹历史通知），随后开启兜底轮询补发错过的通知
+  void (async () => {
+    try {
+      const result = await http.get<any, { items: any[] }>('/v1/notifications', { params: { unread: 'true', pageSize: 30 } })
+      realtimeEventHub.markSeen((Array.isArray(result?.items) ? result.items : []).map((i: any) => i.id))
+    } catch {
+      /* ignore */
+    }
+    syncTimer = window.setInterval(syncNotifications, 15000)
+  })()
   heartbeat()
   heartbeatTimer = window.setInterval(heartbeat, 5000)
   window.addEventListener('keydown', onKeydown)
@@ -272,6 +296,7 @@ onUnmounted(() => {
   navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage)
   realtime.stop()
   window.clearInterval(heartbeatTimer)
+  if (syncTimer !== undefined) window.clearInterval(syncTimer)
   window.removeEventListener('keydown', onKeydown)
 })
 </script>

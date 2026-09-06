@@ -87,7 +87,7 @@ test('realtime refresh subscription coalesces related events and stops after dis
   assert.equal(scheduled.length, 2);
 });
 
-test('foreground notification sound unlocks on user interaction and stays silent in background', async () => {
+test('notification sound resumes a suspended context and schedules tones (background-friendly)', async () => {
   const listeners = new Map();
   const target = {
     addEventListener(type, listener) { listeners.set(type, listener); },
@@ -124,10 +124,15 @@ test('foreground notification sound unlocks on user interaction and stays silent
   });
 
   sound.install();
-  assert.equal(sound.play(), false);
-  await listeners.get('pointerdown')();
+  // 未交互时也尽力尝试播放：创建上下文、resume 后再调度（后台标签页可用）
   assert.equal(sound.play(), true);
-  assert.equal(calls.filter(call => call === 'start').length, 2);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.includes('resume'), true);
+  assert.equal(calls.filter((call) => call === 'start').length, 2);
+  // 用户交互解锁（幂等），再次播放继续调度
+  await listeners.get('pointerdown')();
+  sound.play();
+  assert.equal(calls.filter((call) => call === 'start').length, 4);
   sound.dispose();
   assert.equal(calls.includes('close'), true);
 });

@@ -36,6 +36,29 @@ function localizeExceptionForWeb(exception) {
   return localizeTimeFields(exception, ['createdAt', 'resolvedAt']);
 }
 
+// 时间范围（今天/本周/本月）转 UTC 起止文本（北京时间口径，用于 SQL 过滤）
+function timeRangeBounds(range) {
+  if (!range || range === 'all') return null;
+  const bj = new Date(Date.now() + 8 * 3600 * 1000); // 当前北京时间
+  let startBj;
+  let endBj;
+  if (range === 'today') {
+    startBj = new Date(bj.getFullYear(), bj.getMonth(), bj.getDate());
+    endBj = new Date(startBj.getTime() + 86400000);
+  } else if (range === 'week') {
+    const daysSinceMonday = (bj.getDay() + 6) % 7;
+    startBj = new Date(bj.getFullYear(), bj.getMonth(), bj.getDate() - daysSinceMonday);
+    endBj = new Date(startBj.getTime() + 7 * 86400000);
+  } else if (range === 'month') {
+    startBj = new Date(bj.getFullYear(), bj.getMonth(), 1);
+    endBj = new Date(bj.getFullYear(), bj.getMonth() + 1, 1);
+  } else {
+    return null;
+  }
+  const toUtc = (d) => new Date(d.getTime() - 8 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  return { start: toUtc(startBj), end: toUtc(endBj) };
+}
+
 function mountApiRoutes(app, deps) {
   const {
     db, auth, tasks, businessNotificationPublisher, notificationService, notificationRepository,
@@ -188,6 +211,11 @@ app.get('/api/tasks', requireAuth, (req, res) => {
     keyword: String(req.query.keyword || ''),
     workerId: req.user.role === 'courier' ? (req.user.courier_id || '__none__') : String(req.query.workerId || '')
   };
+  const bounds = timeRangeBounds(String(req.query.timeRange || ''));
+  if (bounds) {
+    filters.timeStart = bounds.start;
+    filters.timeEnd = bounds.end;
+  }
   const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
   const size = Math.min(200, Math.max(1, parseInt(req.query.size || '20', 10) || 20));
   const total = tasks.countTasks(filters);

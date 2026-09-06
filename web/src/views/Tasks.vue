@@ -2,6 +2,14 @@
   <div>
     <h2 class="page-title" style="margin-bottom:12px">取件任务</h2>
 
+    <div class="time-tabs">
+      <button v-for="r in timeRanges" :key="r.key" type="button"
+              class="time-tab" :class="{ 'is-active': timeRange === r.key }"
+              @click="pickTimeRange(r.key)">
+        {{ r.label }}
+      </button>
+    </div>
+
     <div class="status-tabs">
       <button v-for="tab in statusTabs" :key="tab.key" type="button"
               class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
@@ -102,6 +110,13 @@ const list = ref<any[]>([])
 const status = ref('')
 const taskType = ref('')
 const keyword = ref('')
+const timeRange = ref('')
+const timeRanges = [
+  { key: '', label: '全部' },
+  { key: 'today', label: '今天' },
+  { key: 'week', label: '本周' },
+  { key: 'month', label: '本月' },
+]
 const page = ref(0)
 const size = 20
 const total = ref(0)
@@ -117,7 +132,7 @@ const statusTabs = computed(() => [
 
 async function load() {
   const data: any = await http.get('/tasks', {
-    params: { status: status.value, taskType: taskType.value, keyword: keyword.value, page: page.value, size },
+    params: { status: status.value, taskType: taskType.value, keyword: keyword.value, timeRange: timeRange.value, page: page.value, size },
   })
   list.value = data.list
   total.value = data.total
@@ -126,7 +141,7 @@ async function load() {
 
 async function loadCounts() {
   const seq = ++countSeq
-  const base = { taskType: taskType.value, keyword: keyword.value, page: 0, size: 1 }
+  const base = { taskType: taskType.value, keyword: keyword.value, timeRange: timeRange.value, page: 0, size: 1 }
   const grab = async (statusValue: string) => {
     const data: any = await http.get('/tasks', { params: { ...base, status: statusValue } })
     return data.total
@@ -145,6 +160,11 @@ function onFilterChange() {
 
 function pickTab(key: string) {
   status.value = key
+  onFilterChange()
+}
+
+function pickTimeRange(key: string) {
+  timeRange.value = key
   onFilterChange()
 }
 
@@ -182,6 +202,28 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
+.time-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.time-tab {
+  padding: 6px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--el-border-color);
+  background: #fff;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.time-tab.is-active {
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
 .status-tabs {
   display: flex;
   flex-wrap: wrap;

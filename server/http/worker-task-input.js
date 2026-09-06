@@ -23,7 +23,16 @@ function workerTaskInput(db, user, body) {
     return { pieces: item.pieces, goodsName: text(item.goodsName, 200, '品名'), waybillNo,
       workerId, entryMethod: waybillNo ? 'manual' : 'no_waybill' };
   });
-  const input = { defaultWorkerId: workerId, items, taskType: 'normal', pickupNote: text(body.pickupNote, 2000, '备注') };
+  const scheduledTime = text(body.scheduledTime, 64, '预约时间');
+  const scheduledKind = ['before', 'after', 'around'].includes(body.scheduledKind) ? body.scheduledKind : '';
+  const input = {
+    defaultWorkerId: workerId,
+    items,
+    taskType: scheduledTime ? 'scheduled' : 'normal',
+    scheduledKind,
+    scheduledTime,
+    pickupNote: text(body.pickupNote, 2000, '备注')
+  };
   const customerId = text(body.customerId, 128, '客户');
   const addressId = text(body.addressId, 128, '地址');
   if (customerId) {

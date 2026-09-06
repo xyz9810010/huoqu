@@ -378,6 +378,13 @@ function createTaskModule(db, options = {}) {
       const q = `%${filters.keyword}%`;
       params.push(q, q, q, q);
     }
+    if (filters.timeStart && filters.timeEnd) {
+      const timeExpr = "COALESCE(NULLIF(scheduled_time, ''), NULLIF(rush_ship_time, ''), dispatch_at, created_at)";
+      clauses.push(`${timeExpr} >= ?`);
+      params.push(filters.timeStart);
+      clauses.push(`${timeExpr} < ?`);
+      params.push(filters.timeEnd);
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     return { where, params };
   }

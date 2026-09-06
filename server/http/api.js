@@ -176,6 +176,12 @@ app.post('/api/login', (req, res) => {
 });
 app.post('/api/logout', requireAuth, (req, res) => {
   auth.destroySession(req.token);
+  // 退出登录后清理该用户的手机推送订阅，避免已退出设备仍收到推送
+  try {
+    subscriptionStore.removeProviderForUser(req.user.id, 'huawei');
+  } catch (e) {
+    // 清理失败忽略
+  }
   res.json({ ok: true });
 });
 app.get('/api/me', requireAuth, (req, res) => {

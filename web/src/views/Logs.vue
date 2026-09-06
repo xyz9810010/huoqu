@@ -2,14 +2,13 @@
   <div>
     <h2 class="page-title" style="margin-bottom:16px">操作日志</h2>
     <el-table class="desktop-table" :data="list">
-      <el-table-column prop="createdAt" label="时间" width="170">
+      <el-table-column prop="createdAt" label="时间" width="160">
         <template #default="{ row }">{{ (row.createdAt || '').replace('T', ' ').slice(0, 19) }}</template>
       </el-table-column>
-      <el-table-column prop="userName" label="操作人" width="110" />
-      <el-table-column prop="action" label="操作" width="200" />
-      <el-table-column prop="targetType" label="对象类型" width="150" />
-      <el-table-column prop="targetId" label="对象ID" width="100" />
-      <el-table-column prop="detail" label="详情" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="userName" label="操作人" width="100" />
+      <el-table-column prop="action" label="操作" width="180" />
+      <el-table-column prop="targetType" label="对象类型" width="120" />
+      <el-table-column prop="detail" label="详情" min-width="180" show-overflow-tooltip />
     </el-table>
     <div class="mobile-list">
       <article v-for="row in list" :key="row.id" class="mobile-item log-item">

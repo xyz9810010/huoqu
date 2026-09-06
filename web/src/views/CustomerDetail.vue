@@ -61,24 +61,19 @@
         </div>
       </template>
       <el-table class="desktop-table" :data="customer.addresses || []">
-        <el-table-column prop="name" label="取件点名称" width="140" />
-        <el-table-column prop="address" label="完整地址" min-width="220" />
-        <el-table-column prop="contactName" label="联系人" width="100" />
-        <el-table-column prop="contactPhone" label="电话" width="130" />
-        <el-table-column prop="areaId" label="区域" width="100">
+        <el-table-column prop="name" label="取件点名称" width="120" />
+        <el-table-column prop="address" label="完整地址" min-width="180" />
+        <el-table-column prop="contactName" label="联系人" width="90" />
+        <el-table-column prop="contactPhone" label="电话" width="120" />
+        <el-table-column prop="areaId" label="区域" width="90">
           <template #default="{ row }">{{ areaName(row.areaId) }}</template>
         </el-table-column>
-        <el-table-column label="常用" width="80">
-          <template #default="{ row }">
-            <el-tag v-if="row.isCommon" size="small" type="warning">常用</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="80">
+        <el-table-column label="状态" width="70">
           <template #default="{ row }">
             <el-tag :type="row.isActive ? 'success' : 'info'" size="small">{{ row.isActive ? '启用' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <el-button size="small" @click="openEditAddr(row)">编辑</el-button>
             <el-button size="small" @click="toggleAddr(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>

@@ -5,16 +5,15 @@
       <el-button type="success" @click="openCreate">新增区域</el-button>
     </div>
     <el-table class="desktop-table" :data="list">
-      <el-table-column prop="name" label="区域名称" width="140" />
-      <el-table-column prop="code" label="编码" width="100" />
-      <el-table-column prop="defaultWorkerName" label="默认主取件员" width="130" />
-      <el-table-column label="主取件员" min-width="160">
+      <el-table-column prop="name" label="区域名称" width="120" />
+      <el-table-column prop="code" label="编码" width="90" />
+      <el-table-column label="主取件员" min-width="150">
         <template #default="{ row }">{{ (row.defaultWorkers || []).map((w: any) => w.name).join('、') }}</template>
       </el-table-column>
-      <el-table-column label="备用取件员" min-width="160">
+      <el-table-column label="备用取件员" min-width="150">
         <template #default="{ row }">{{ (row.backupWorkers || []).map((w: any) => w.name).join('、') }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180">
+      <el-table-column label="操作" width="150">
         <template #default="{ row }">
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" type="primary" @click="openAssign(row)">设置取件员</el-button>

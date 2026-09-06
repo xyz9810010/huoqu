@@ -13,14 +13,12 @@
     </div>
 
     <el-table class="desktop-table" :data="list" @row-click="(r: any) => router.push('/customers/' + r.id)" style="cursor:pointer">
-      <el-table-column prop="customerNo" label="编号" width="100" />
-      <el-table-column prop="name" label="客户名称" min-width="180" />
-      <el-table-column prop="mainCsName" label="主客服" width="100" />
-      <el-table-column prop="contactName" label="联系人" width="100" />
-      <el-table-column prop="contactPhone" label="电话" width="130" />
-      <el-table-column prop="legacyCustomerId" label="原系统ID" width="120" />
-      <el-table-column prop="addressCount" label="地址数" width="80" />
-      <el-table-column label="取件订单" width="170">
+      <el-table-column prop="customerNo" label="编号" width="90" />
+      <el-table-column prop="name" label="客户名称" min-width="150" />
+      <el-table-column prop="contactName" label="联系人" width="90" />
+      <el-table-column prop="contactPhone" label="电话" width="120" />
+      <el-table-column prop="legacyCustomerId" label="原系统ID" width="110" />
+      <el-table-column label="取件订单" width="150">
         <template #default="{ row }">
           <div v-if="row.taskCount" class="order-cell">
             <el-tag v-if="row.openTaskCount" type="warning" size="small">待办 {{ row.openTaskCount }}</el-tag>
@@ -30,14 +28,14 @@
           <span v-else class="order-none">无订单</span>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="80">
+      <el-table-column prop="status" label="状态" width="70">
         <template #default="{ row }">
           <el-tag :type="row.status === 'active' ? 'success' : 'info'">
             {{ row.status === 'active' ? '正常' : '停用' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column label="操作" width="150">
         <template #default="{ row }">
           <el-button size="small" @click.stop="goDispatch(row)">派单</el-button>
           <el-button size="small" @click.stop="router.push('/customers/' + row.id)">详情</el-button>

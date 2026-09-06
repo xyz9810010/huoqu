@@ -188,6 +188,14 @@ body {
 }
 
 @media (max-width: 768px) {
+  /* 防止 iOS Safari 聚焦输入框时自动放大页面（字号≥16px 不会触发自动缩放） */
+  .el-input__inner,
+  .el-textarea__inner,
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
   .page-head {
     align-items: flex-start;
   }

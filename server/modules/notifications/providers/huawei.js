@@ -40,6 +40,16 @@ function serviceAccountProblem(raw) {
   return '';
 }
 
+// 每条通知使用独立的 notifyId，避免多条华为通知在通知栏互相覆盖（默认同 id 只显示最新一条）
+function notifyIdFor(messageId) {
+  let hash = 0;
+  const s = String(messageId || '');
+  for (let i = 0; i < s.length; i++) {
+    hash = (hash * 31 + s.charCodeAt(i)) % 2147483647;
+  }
+  return hash || 1;
+}
+
 function createHuaweiProvider(options = {}) {
   const request = options.fetch || fetch;
   const customAccessToken = options.getAccessToken;
@@ -121,9 +131,10 @@ function createHuaweiProvider(options = {}) {
         body: JSON.stringify({
           payload: {
             notification: {
-              // category 必须与 AGC「自分类权益」获批分类一致（本项目为“工作事项提醒”→ WORK）。
+              // category 必须与 AGC「自分类权益」获批分类一致（本项目为“代办事项提醒”→ EXPRESS：接单提醒/发货配送/订单异常/交易完成）。
               // 分类不匹配时华为会把通知降级为资讯营销提醒方式（只进通知栏、息屏不响不振）。
-              category: 'WORK', title: message.title, body: message.body,
+              category: 'EXPRESS', title: message.title, body: message.body,
+              notifyId: notifyIdFor(message.id),
               clickAction: { actionType: 0 }
             },
             data: JSON.stringify({

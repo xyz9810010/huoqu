@@ -1,32 +1,24 @@
 <template>
   <div>
-    <div class="tabs-bar">
-      <div class="time-tabs">
-        <button v-for="r in timeRanges" :key="r.key" type="button"
-                class="time-tab" :class="{ 'is-active': timeRange === r.key }"
-                @click="pickTimeRange(r.key)">
-          {{ r.label }}
-        </button>
-      </div>
-      <div class="status-tabs">
-        <button v-for="tab in statusTabs" :key="tab.key" type="button"
-                class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
-                @click="pickTab(tab.key)">
-          <span class="status-tab__dot" />
-          {{ tab.label }}
-          <b>{{ tab.count }}</b>
-        </button>
-      </div>
+    <div class="time-tabs">
+      <button v-for="r in timeRanges" :key="r.key" type="button"
+              class="time-tab" :class="{ 'is-active': timeRange === r.key }"
+              @click="pickTimeRange(r.key)">
+        {{ r.label }}
+      </button>
+    </div>
+
+    <div class="status-tabs">
+      <button v-for="tab in statusTabs" :key="tab.key" type="button"
+              class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
+              @click="pickTab(tab.key)">
+        <span class="status-tab__dot" />
+        {{ tab.label }}
+        <b>{{ tab.count }}</b>
+      </button>
     </div>
 
     <div class="toolbar">
-      <el-select v-model="status" class="status-filter" placeholder="状态" clearable style="width:150px" @change="onFilterChange">
-        <el-option label="待办（待取/取件中）" value="open" />
-        <el-option label="待取" value="pending" />
-        <el-option label="取件中" value="in_progress" />
-        <el-option label="已完成" value="completed" />
-        <el-option label="已取消" value="cancelled" />
-      </el-select>
       <el-select v-model="taskType" class="type-filter" placeholder="类型" clearable style="width:140px" @change="onFilterChange">
         <el-option label="普通" value="normal" />
         <el-option label="指定时间" value="scheduled" />
@@ -221,18 +213,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.tabs-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
 .time-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 0;
+  margin-bottom: 10px;
 }
 .time-tab {
   padding: 6px 16px;
@@ -254,7 +239,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 0;
+  margin-bottom: 12px;
 }
 .status-tab {
   display: inline-flex;

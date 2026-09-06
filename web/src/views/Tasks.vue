@@ -89,6 +89,7 @@
       <el-empty v-if="!list.length" description="暂无取件任务" />
     </div>
 
+    <div ref="sentinel" style="height: 1px" />
   </div>
 </template>
 
@@ -111,8 +112,12 @@ const timeRanges = [
   { key: 'month', label: '本月' },
 ]
 const page = ref(0)
-const size = 500
+const size = 20
 const total = ref(0)
+const hasMore = ref(true)
+const loading = ref(false)
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
 const counts = ref({ all: 0, open: 0, completed: 0, cancelled: 0 })
 let countSeq = 0
 
@@ -123,13 +128,26 @@ const statusTabs = computed(() => [
   { key: 'cancelled', label: '已取消', tone: 'cancelled', count: counts.value.cancelled },
 ])
 
-async function load() {
-  const data: any = await http.get('/tasks', {
-    params: { status: status.value, taskType: taskType.value, keyword: keyword.value, timeRange: timeRange.value, page: page.value, size },
-  })
-  list.value = data.list
-  total.value = data.total
-  loadCounts()
+async function load(reset = false) {
+  if (loading.value) return
+  loading.value = true
+  if (reset) page.value = 0
+  try {
+    const data: any = await http.get('/tasks', {
+      params: { status: status.value, taskType: taskType.value, keyword: keyword.value, timeRange: timeRange.value, page: page.value, size },
+    })
+    list.value = reset ? data.list : [...list.value, ...data.list]
+    total.value = data.total
+    hasMore.value = list.value.length < data.total
+    page.value += 1
+  } finally {
+    loading.value = false
+  }
+  if (reset) loadCounts()
+}
+
+function loadMore() {
+  if (!loading.value && hasMore.value) load(false)
 }
 
 async function loadCounts() {
@@ -147,8 +165,7 @@ async function loadCounts() {
 }
 
 function onFilterChange() {
-  page.value = 0
-  load()
+  load(true)
 }
 
 function pickTab(key: string) {
@@ -188,10 +205,19 @@ function statusType(s: string) {
   return { pending: 'warning', in_progress: 'primary', completed: 'success', cancelled: 'info' }[s] || 'info'
 }
 
-const liveRefresh = createRealtimeRefreshSubscription({ predicate: isTaskRealtimeEvent, refresh: load })
+const liveRefresh = createRealtimeRefreshSubscription({ predicate: isTaskRealtimeEvent, refresh: () => load(true) })
 
-onMounted(load)
-onUnmounted(() => liveRefresh.dispose())
+onMounted(() => {
+  load(true)
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) loadMore()
+  }, { root: null, threshold: 0.1 })
+  if (sentinel.value) observer.observe(sentinel.value)
+})
+onUnmounted(() => {
+  liveRefresh.dispose()
+  observer?.disconnect()
+})
 </script>
 
 <style scoped>

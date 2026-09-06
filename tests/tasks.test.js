@@ -103,7 +103,7 @@ test('assignTask updates ownership and uses the event id as an idempotency bound
   db.close();
 });
 
-test('task status changes notify the dispatch owner through the canonical service', () => {
+test('客服只在完成/取消时收到状态通知（中间状态不打扰）', () => {
   const { db, tasks } = taskModuleWithNotifications();
   db.prepare('INSERT INTO users (id,courier_id,status) VALUES (?,?,?)').run('dispatch-user', null, 'active');
   const task = tasks.createTask({ customerName: '状态客户', address: '状态地址', items: [] }, {
@@ -111,24 +111,32 @@ test('task status changes notify the dispatch owner through the canonical servic
   });
 
   tasks.transitionTask(task.id, 'in_progress', { id: 'worker-user', name: '取件员', eventId: 'status-event-1' });
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM notifications WHERE notification_type='pickupTask.statusChanged'").get().count, 0);
+  tasks.transitionTask(task.id, 'completed', { id: 'worker-user', name: '取件员', eventId: 'status-event-2' });
 
   const notification = db.prepare("SELECT * FROM notifications WHERE notification_type='pickupTask.statusChanged'").get();
   assert.equal(notification.user_id, 'dispatch-user');
-  assert.equal(JSON.parse(notification.data).status, 'in_progress');
+  assert.equal(JSON.parse(notification.data).status, 'completed');
   db.close();
 });
 
-test('successive status transitions use distinct generated idempotency keys', () => {
+test('完成与取消的状态通知幂等键互不相同', () => {
   const { db, tasks } = taskModuleWithNotifications();
   db.prepare('INSERT INTO users (id,courier_id,status) VALUES (?,?,?)').run('dispatch-user', null, 'active');
-  const task = tasks.createTask({ customerName: '连续状态客户', address: '连续状态地址', items: [] }, {
+  const taskA = tasks.createTask({ customerName: '连续状态客户A', address: '连续状态地址A', items: [] }, {
     id: 'dispatch-user', name: '客服'
   });
+  const taskB = tasks.createTask({ customerName: '连续状态客户B', address: '连续状态地址B', items: [] }, {
+    id: 'dispatch-user', name: '客服'
+  });
+  tasks.transitionTask(taskA.id, 'in_progress', { id: 'worker-user', name: '取件员' });
+  tasks.transitionTask(taskA.id, 'completed', { id: 'worker-user', name: '取件员' });
+  tasks.transitionTask(taskB.id, 'cancelled', { id: 'worker-user', name: '取件员' });
 
-  tasks.transitionTask(task.id, 'in_progress', { id: 'worker-user', name: '取件员' });
-  tasks.transitionTask(task.id, 'completed', { id: 'worker-user', name: '取件员' });
-
-  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM notifications WHERE notification_type='pickupTask.statusChanged'").get().count, 2);
+  const rows = db.prepare("SELECT * FROM notifications WHERE notification_type='pickupTask.statusChanged' ORDER BY created_at").all();
+  assert.equal(rows.length, 2);
+  assert.equal(new Set(rows.map(row => row.dedupe_key)).size, 2);
+  assert.deepEqual(new Set(rows.map(row => JSON.parse(row.data).status)), new Set(['completed', 'cancelled']));
   db.close();
 });
 

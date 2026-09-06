@@ -219,8 +219,10 @@ test('登录连续失败触发限速（429），成功登录清空计数', async
   const blocked = await request('POST', '/api/v2/auth/login', { username: uniqueUser, password: 'still-wrong' }, null);
   assert.equal(blocked.status, 429);
 
-  const login = await request('POST', '/api/login', { username: 'assist_cs', password: 'assist-cs-12345' }, null);
-  assert.equal(login.status, 200);
+  const fresh = await request('POST', '/api/login', { username: 'assist_cs', password: 'assist-cs-12345' }, null);
+  assert.equal(fresh.status, 200);
+  // 单会话策略：新登录会使旧 csToken 失效，后续用例改用新会话
+  csToken = fresh.data.token;
 });
 
 test('基础安全响应头存在', async () => {

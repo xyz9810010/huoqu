@@ -2,7 +2,6 @@
   <div>
     <h2 class="page-title" style="margin-bottom:16px">待匹配中心</h2>
     <el-card shadow="never">
-      <template #header>待匹配中心</template>
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
                 title="无票号记录补票号后自动获取最终重量；有票号但暂无重量会自动匹配原系统同步结果。" />
       <el-table class="desktop-table" :data="list">

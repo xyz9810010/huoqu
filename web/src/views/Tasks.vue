@@ -1,23 +1,22 @@
 <template>
   <div>
-    <h2 class="page-title" style="margin-bottom:12px">取件任务</h2>
-
-    <div class="time-tabs">
-      <button v-for="r in timeRanges" :key="r.key" type="button"
-              class="time-tab" :class="{ 'is-active': timeRange === r.key }"
-              @click="pickTimeRange(r.key)">
-        {{ r.label }}
-      </button>
-    </div>
-
-    <div class="status-tabs">
-      <button v-for="tab in statusTabs" :key="tab.key" type="button"
-              class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
-              @click="pickTab(tab.key)">
-        <span class="status-tab__dot" />
-        {{ tab.label }}
-        <b>{{ tab.count }}</b>
-      </button>
+    <div class="tabs-bar">
+      <div class="time-tabs">
+        <button v-for="r in timeRanges" :key="r.key" type="button"
+                class="time-tab" :class="{ 'is-active': timeRange === r.key }"
+                @click="pickTimeRange(r.key)">
+          {{ r.label }}
+        </button>
+      </div>
+      <div class="status-tabs">
+        <button v-for="tab in statusTabs" :key="tab.key" type="button"
+                class="status-tab" :class="[tab.tone, { 'is-active': isActiveTab(tab.key) }]"
+                @click="pickTab(tab.key)">
+          <span class="status-tab__dot" />
+          {{ tab.label }}
+          <b>{{ tab.count }}</b>
+        </button>
+      </div>
     </div>
 
     <div class="toolbar">
@@ -198,11 +197,18 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
+.tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
 .time-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .time-tab {
   padding: 6px 16px;
@@ -224,7 +230,7 @@ onUnmounted(() => liveRefresh.dispose())
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .status-tab {
   display: inline-flex;
@@ -259,7 +265,7 @@ onUnmounted(() => liveRefresh.dispose())
 .toolbar {
   display: flex;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 .task-type {
   margin-bottom: 6px;

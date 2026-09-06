@@ -70,13 +70,45 @@
         </el-menu-item>
       </el-menu>
     </el-drawer>
+
+    <el-dialog v-model="helpVisible" title="帮助" width="440px" class="help-dialog">
+      <div class="help-shortcuts">
+        <div v-for="s in visibleShortcuts" :key="s.key" class="help-row">
+          <kbd class="help-kbd">{{ s.key.toUpperCase() }}</kbd>
+          <span class="help-row-label">{{ s.label }}</span>
+        </div>
+      </div>
+      <el-divider content-position="left">信息</el-divider>
+      <div class="help-info">
+        <div class="help-row">
+          <span class="help-label">仓库地址</span>
+          <span class="help-copy" title="点击复制" @click="copyText('https://github.com/xyz9810010/huoqu')">github.com/xyz9810010/huoqu</span>
+        </div>
+        <div class="help-row">
+          <span class="help-label">实例地址</span>
+          <span class="help-copy" title="点击复制" @click="copyText('https://huoqu.onrender.com')">huoqu.onrender.com</span>
+        </div>
+        <div class="help-row">
+          <span class="help-label">实例账号</span>
+          <span class="help-copy" title="点击复制" @click="copyText('admin')">admin</span>
+        </div>
+        <div class="help-row">
+          <span class="help-label">实例密码</span>
+          <span class="help-copy" title="点击复制" @click="copyText('wu1234567890')">wu1234567890</span>
+        </div>
+      </div>
+      <div class="help-tip">点击地址 / 账号 / 密码即可复制 · 输入框内输入时不触发快捷键</div>
+      <template #footer>
+        <el-button type="primary" @click="helpVisible = false">知道了</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox, ElNotification } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 import 'element-plus/es/components/notification/style/css'
 import { useAuthStore } from '../stores/auth'
 import { unreadCount, refreshUnread } from '../stores/notif'
@@ -92,6 +124,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const mobileMenuOpen = ref(false)
+const helpVisible = ref(false)
 const latency = ref<number>(-1)
 const connected = ref(false)
 let heartbeatTimer: number | undefined
@@ -128,24 +161,22 @@ const shortcutDefs: { key: string; label: string; path: string; roles: string[] 
   { key: 'k', label: '客户管理', path: '/customers', roles: ['cs', 'admin', 'boss'] },
   { key: 's', label: '数据看板', path: '/dashboard', roles: ['admin', 'boss'] },
 ]
+const visibleShortcuts = computed(() => shortcutDefs.filter((s) => s.roles.includes(auth.role)))
 function showShortcutHelp() {
-  const kbd = 'display:inline-block;min-width:24px;text-align:center;padding:2px 8px;border:1px solid #d0d5dd;border-bottom-width:2px;border-radius:6px;background:#f7f8fa;font-family:ui-monospace,monospace;font-weight:600;color:#182431'
-  const rows = shortcutDefs
-    .filter((s) => s.roles.includes(auth.role))
-    .map((s) => '<tr><td style="padding:6px 0"><kbd style="' + kbd + '">' + s.key.toUpperCase() + '</kbd></td><td style="padding:6px 8px">' + s.label + '</td></tr>')
-    .join('')
-  const html = '<div style="line-height:1.8">'
-    + '<table style="width:100%;border-collapse:collapse;font-size:14px">' + rows + '</table>'
-    + '<div style="margin-top:12px;font-size:12px;color:#86909c;border-top:1px solid #f0f0f0;padding-top:10px">'
-    + '<div>仓库地址：<a href="https://github.com/xyz9810010/huoqu" target="_blank" style="color:#0a59f7;text-decoration:none">github.com/xyz9810010/huoqu</a></div>'
-    + '<div>实例地址：<a href="https://huoqu.onrender.com" target="_blank" style="color:#0a59f7;text-decoration:none">huoqu.onrender.com</a></div>'
-    + '<div style="margin-top:8px">按 <kbd style="' + kbd + '">?</kbd> 查看帮助 · 输入框内输入时不触发快捷键</div>'
-    + '</div>'
-    + '</div>'
-  ElMessageBox.alert(html, '帮助', {
-    dangerouslyUseHTMLString: true,
-    confirmButtonText: '知道了',
-  }).catch(() => {})
+  helpVisible.value = true
+}
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+  ElMessage.success('已复制：' + text)
 }
 function onKeydown(e: KeyboardEvent) {
   const target = e.target as HTMLElement | null
@@ -359,6 +390,13 @@ onUnmounted(() => {
   color: var(--el-color-primary);
   border-color: var(--el-color-primary);
 }
+.help-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.help-kbd { display: inline-block; min-width: 24px; text-align: center; padding: 2px 8px; border: 1px solid #d0d5dd; border-bottom-width: 2px; border-radius: 6px; background: #f7f8fa; font-family: ui-monospace, monospace; font-weight: 600; color: #182431; }
+.help-row-label { font-size: 14px; color: var(--qj-text); }
+.help-label { width: 64px; font-size: 13px; color: var(--qj-muted); flex: none; }
+.help-copy { flex: 1; font-size: 13px; color: var(--el-color-primary); cursor: pointer; word-break: break-all; }
+.help-copy:hover { text-decoration: underline; }
+.help-tip { margin-top: 12px; font-size: 12px; color: var(--qj-muted); }
 .bell:hover {
   color: var(--el-color-primary);
   border-color: var(--el-color-primary);

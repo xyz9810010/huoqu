@@ -11,7 +11,9 @@
                    :label="`${s.label} ${counts[s.value]}`" />
     </el-tabs>
 
-    <el-card v-for="t in shown" :key="t.id" shadow="never" class="task-card"
+    <Transition name="slide" mode="out-in">
+      <div :key="active">
+        <el-card v-for="t in shown" :key="t.id" shadow="never" class="task-card"
              :class="{ rush: t.taskType === 'rush' }">
       <div class="task-head">
         <div class="left">
@@ -46,6 +48,8 @@
       </div>
     </el-card>
     <el-empty v-if="!shown.length" :description="emptyText" />
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -171,6 +175,18 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
+.slide-enter-active,
+.slide-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.slide-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+.slide-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
 .toolbar {
   display: flex;
   justify-content: space-between;

@@ -57,6 +57,8 @@
     </el-table>
 
     <div class="mobile-list" @touchstart="onTouchStart" @touchend="onTouchEnd">
+      <Transition name="slide" mode="out-in">
+        <div :key="status">
       <article v-for="row in list" :key="row.id" class="mobile-item mobile-item--clickable mobile-task"
                :class="'mobile-task--' + row.status" @click="router.push('/tasks/' + row.id)">
         <div class="mobile-item__head">
@@ -79,6 +81,8 @@
         <div class="mobile-field"><span class="mobile-field__label">取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未分配' }}</span></div>
       </article>
       <el-empty v-if="!list.length" description="暂无取件任务" />
+        </div>
+      </Transition>
     </div>
 
     <div ref="sentinel" style="height: 1px" />
@@ -234,6 +238,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.slide-enter-active,
+.slide-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.slide-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+.slide-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
 .time-tabs {
   display: flex;
   flex-wrap: wrap;

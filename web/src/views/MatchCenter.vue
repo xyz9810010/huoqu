@@ -5,7 +5,8 @@
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
                 title="无票号记录补票号后自动获取最终重量；有票号但暂无重量会自动匹配原系统同步结果。" />
       <el-table class="desktop-table" :data="list">
-        <el-table-column prop="taskId" label="任务ID" width="80" />
+        <el-table-column prop="taskNo" label="任务号" width="150" />
+        <el-table-column prop="customerName" label="客户" min-width="120" />
         <el-table-column prop="waybillNo" label="票号" width="150">
           <template #default="{ row }">{{ row.waybillNo || '（无票号）' }}</template>
         </el-table-column>
@@ -31,8 +32,8 @@
         <article v-for="row in list" :key="row.id" class="mobile-item">
           <div class="mobile-item__head">
             <div>
-              <div class="mobile-item__title">{{ row.waybillNo || '无票号记录' }}</div>
-              <div class="mobile-item__sub">任务 {{ row.taskNo || row.taskId }}</div>
+              <div class="mobile-item__title">{{ row.customerName || '未命名客户' }}</div>
+              <div class="mobile-item__sub">{{ row.taskNo }} · {{ row.waybillNo || '无票号' }}</div>
             </div>
             <el-tag size="small" :type="row.matchStatus === 'pending' ? 'warning' : 'info'">
               {{ row.matchStatus === 'pending' ? '待重量' : '待补票号' }}

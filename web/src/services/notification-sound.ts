@@ -55,7 +55,7 @@ export function createNotificationSoundController(options: NotificationSoundOpti
     const gain = context.createGain()
     oscillator.type = 'sine'
     oscillator.frequency.setValueAtTime(frequency, startAt)
-    const peak = 0.12 * volume
+    const peak = 0.6 * volume
     gain.gain.setValueAtTime(0.0001, startAt)
     gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), startAt + 0.015)
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14)

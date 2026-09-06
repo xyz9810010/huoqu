@@ -74,6 +74,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElNotification } from 'element-plus'
+import 'element-plus/es/components/notification/style/css'
 import { useAuthStore } from '../stores/auth'
 import { unreadCount, refreshUnread } from '../stores/notif'
 import {

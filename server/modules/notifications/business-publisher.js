@@ -17,6 +17,12 @@ function createBusinessNotificationPublisher(db, notifications) {
     };
   }
 
+  // 计划时刻钟面文本 "YYYY-MM-DDTHH:mm:ss" → "MM-DD HH:mm"
+  function fmtClockTime(value) {
+    const s = String(value || '').replace('T', ' ').trim();
+    return s.length >= 16 ? s.slice(5, 16) : s;
+  }
+
   function publishToUsers(userIds, eventId, build) {
     const results = [];
     for (const userId of new Set(userIds.filter(Boolean))) {
@@ -60,7 +66,13 @@ function createBusinessNotificationPublisher(db, notifications) {
     // 客服只在「完成」和「取消/删除」时收到通知；开始取件等中间状态不打扰客服
     if (task.status !== 'completed' && task.status !== 'cancelled') return [];
     const actorId = actor && actor.id;
-    return publishToUsers([task.dispatchCsId, task.mainCsId].filter(userId => userId !== actorId), eventId, () => ({
+    const recipients = [task.dispatchCsId, task.mainCsId].filter(userId => userId && userId !== actorId);
+    // 取消时同时通知取件员
+    if (task.status === 'cancelled' && task.defaultWorkerId && workerUser) {
+      const worker = workerUser.get(task.defaultWorkerId);
+      if (worker && worker.id !== actorId) recipients.push(worker.id);
+    }
+    return publishToUsers(recipients, eventId, () => ({
       type: 'pickupTask.statusChanged',
       title: task.status === 'completed' ? '取件任务已完成' : '取件任务已取消',
       body: `${task.customerName}：${task.statusLabel}`.slice(0, 500),
@@ -86,13 +98,32 @@ function createBusinessNotificationPublisher(db, notifications) {
     if (!task.defaultWorkerId || !workerUser) return null;
     const recipient = workerUser.get(task.defaultWorkerId);
     if (!recipient) return null;
+    const parts = [task.customerName];
+    if (task.rushShipTime) parts.push('赶 ' + fmtClockTime(task.rushShipTime) + ' 出货');
+    if (task.rushReason) parts.push('原因：' + task.rushReason);
     return notifications.publish({
       recipientUserId: recipient.id,
       type: 'pickupTask.overdue',
       title: '取件任务已加急',
-      body: `${task.customerName}${task.rushReason ? ` · ${task.rushReason}` : ''}`.slice(0, 500),
+      body: parts.join(' · ').slice(0, 500),
       data: taskData(task, { rushShipTime: task.rushShipTime || '' }),
       priority: 'high',
+      dedupeKey: `${eventId}:${recipient.id}`
+    });
+  }
+
+  function taskScheduled(task, eventId) {
+    if (!task.defaultWorkerId || !workerUser) return null;
+    const recipient = workerUser.get(task.defaultWorkerId);
+    if (!recipient) return null;
+    const kind = task.scheduledKind === 'before' ? '前取' : task.scheduledKind === 'after' ? '后取' : task.scheduledKind === 'around' ? '左右取' : '';
+    return notifications.publish({
+      recipientUserId: recipient.id,
+      type: 'pickupTask.scheduled',
+      title: '取件任务已指定时间',
+      body: (`${task.customerName} · 指定时间 ${fmtClockTime(task.scheduledTime)}${kind ? ' ' + kind : ''}`).slice(0, 500),
+      data: taskData(task, { scheduledTime: task.scheduledTime || '' }),
+      priority: 'normal',
       dedupeKey: `${eventId}:${recipient.id}`
     });
   }
@@ -164,7 +195,7 @@ function createBusinessNotificationPublisher(db, notifications) {
 
   return {
     taskAssigned, taskStatusChanged, taskCreatedForCs, taskUrgent, taskException, taskExceptionResolved, taskAssistInvited,
-    recordAssigned, recordStatusChanged
+    recordAssigned, recordStatusChanged, taskScheduled
   };
 }
 

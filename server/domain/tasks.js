@@ -93,7 +93,7 @@ function taskFromRow(db, row) {
 
 function createTaskModule(db, options = {}) {
   const publisher = Object.assign({
-    taskAssigned() {}, taskStatusChanged() {}, taskUrgent() {}, taskException() {}, taskExceptionResolved() {}, taskAssistInvited() {}
+    taskAssigned() {}, taskStatusChanged() {}, taskUrgent() {}, taskException() {}, taskExceptionResolved() {}, taskAssistInvited() {}, taskScheduled() {}
   }, options.publisher || {});
   const insertTask = db.prepare(`INSERT INTO pickup_tasks (
     id,task_no,business_order_no,customer_id,customer_name_snap,address_snap,contact_snap,phone_snap,
@@ -291,6 +291,9 @@ function createTaskModule(db, options = {}) {
     const urgentChanged = next.taskType === 'rush' && (
       task.taskType !== 'rush' || next.rushShipTime !== task.rushShipTime || next.rushReason !== task.rushReason
     );
+    const scheduledChanged = next.taskType === 'scheduled' && (
+      task.taskType !== 'scheduled' || next.scheduledTime !== task.scheduledTime || next.scheduledKind !== task.scheduledKind
+    );
     const transaction = db.transaction(() => {
       db.prepare(`UPDATE pickup_tasks SET task_type=?,scheduled_kind=?,scheduled_time=?,rush_ship_time=?,rush_reason=?,
         pickup_note=?,internal_note=?,updated_at=? WHERE id=?`).run(
@@ -299,9 +302,10 @@ function createTaskModule(db, options = {}) {
         );
       insertEvent.run({
         id: eventId, taskId, eventType: 'updated', fromStatus: task.status, toStatus: task.status,
-        note: urgentChanged ? 'rush' : '', actorId: actor.id || '', actorName: actor.name || '', createdAt: changedAt
+        note: urgentChanged ? 'rush' : (scheduledChanged ? 'scheduled' : ''), actorId: actor.id || '', actorName: actor.name || '', createdAt: changedAt
       });
       if (urgentChanged) publisher.taskUrgent(getTask(taskId), eventId);
+      if (scheduledChanged) publisher.taskScheduled(getTask(taskId), eventId);
     });
     transaction();
     return getTask(taskId);

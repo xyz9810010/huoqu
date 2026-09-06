@@ -57,7 +57,13 @@ function clearLoginFailures(username, ip) {
 
 // ---------- 会话 ----------
 const SESSION_TTL_DAYS = 30;
+// 单点登录角色：取件员、客服。同账号新登录会踢掉旧会话（一个账号只能在一处登录）。
+const SINGLE_SESSION_ROLES = ['courier', 'cs'];
 function createSession(userId) {
+  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
+  if (user && SINGLE_SESSION_ROLES.includes(user.role)) {
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  }
   const token = randomUUID() + randomUUID().replace(/-/g, '');
   const expires = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 3600 * 1000)
     .toISOString();

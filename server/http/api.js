@@ -25,7 +25,7 @@ function customerNameMatches(name, query) {
   if (text.includes(q)) return true;
   if (!/[a-z0-9]/.test(q)) return false;
   return ['pinyin', 'first'].some((pattern) => {
-    try { return pinyin(text, { toneType: 'none', pattern: pattern, nonZh: 'consecutive', v: true }).includes(q); } catch { return false; }
+    try { return pinyin(text, { toneType: 'none', pattern: pattern, nonZh: 'consecutive', v: true }).replace(/\s+/g, '').includes(q); } catch { return false; }
   });
 }
 

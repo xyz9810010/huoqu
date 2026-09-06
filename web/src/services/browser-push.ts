@@ -104,3 +104,23 @@ export async function sendBrowserPushTest(subscriptionId?: string): Promise<void
 export function currentBrowserSubscriptionId(): string {
   return localStorage.getItem(STORAGE_KEY) || ''
 }
+
+// 自动修复：浏览器已授权通知、本地有订阅，但服务端订阅已失效时，自动重新登记（静默）
+export async function autoRepairBrowserPush(): Promise<boolean> {
+  if (getBrowserPushState().status !== 'granted') return false
+  if (!('serviceWorker' in navigator)) return false
+  try {
+    const sw = await navigator.serviceWorker.ready
+    const subscription = await sw.pushManager.getSubscription()
+    if (!subscription) return false
+    const list = await http.get<any, NotificationSubscription[]>('/v1/notification-subscriptions')
+    const active = list.find((item) => item.channel === 'web_push' && item.status === 'active')
+    if (active) return false
+    // 服务端已无有效订阅，但本地仍有 → 重新登记
+    await disableBrowserPush()
+    await enableBrowserPush()
+    return true
+  } catch {
+    return false
+  }
+}

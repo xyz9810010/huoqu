@@ -118,6 +118,7 @@ import {
   realtimeEventHub,
 } from '../services/realtime-events'
 import { notificationSound } from '../services/notification-sound'
+import { autoRepairBrowserPush } from '../services/browser-push'
 import http from '../api'
 
 const route = useRoute()
@@ -258,6 +259,7 @@ const realtime = createRealtimeEventClient({
 
 onMounted(() => {
   loadUnread()
+  void autoRepairBrowserPush()
   navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage)
   realtime.start().catch(() => {
     /* API 层已经展示连接错误，页面其余功能保持可用 */

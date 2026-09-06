@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div @touchstart="onTouchStart" @touchend="onTouchEnd">
     <div class="toolbar">
       <h2 class="page-title" style="margin:0">我的任务</h2>
       <span class="count">{{ activeLabel }} {{ shown.length }} 单</span>
@@ -83,6 +83,25 @@ async function load() {
 
 function onTab(name: string | number) {
   active.value = String(name)
+}
+
+// 移动端左右滑动切换状态（待取/进行中/已完成/已取消）
+let touchStartX = 0
+let touchStartY = 0
+function onTouchStart(e: TouchEvent) {
+  touchStartX = e.touches[0].clientX
+  touchStartY = e.touches[0].clientY
+}
+function onTouchEnd(e: TouchEvent) {
+  const dx = e.changedTouches[0].clientX - touchStartX
+  const dy = e.changedTouches[0].clientY - touchStartY
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return
+  const idx = statuses.findIndex(s => s.value === active.value)
+  if (dx < 0 && idx >= 0 && idx < statuses.length - 1) {
+    active.value = statuses[idx + 1].value
+  } else if (dx > 0 && idx > 0) {
+    active.value = statuses[idx - 1].value
+  }
 }
 
 function open(t: any) {

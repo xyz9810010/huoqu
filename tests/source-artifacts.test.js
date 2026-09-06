@@ -14,11 +14,11 @@ test('findForbidden detects generated source files and mobile directories', () =
   const root = fixture();
   fs.mkdirSync(path.join(root, 'web', 'src'), { recursive: true });
   fs.writeFileSync(path.join(root, 'web', 'src', 'App.js'), 'generated');
-  fs.mkdirSync(path.join(root, 'android'));
+  fs.mkdirSync(path.join(root, 'harmony'));
   fs.writeFileSync(path.join(root, 'web', 'tsconfig.tsbuildinfo'), '{}');
 
   assert.deepEqual(findForbidden(root).sort(), [
-    'android',
+    'harmony',
     'web/src/App.js',
     'web/tsconfig.tsbuildinfo',
   ]);

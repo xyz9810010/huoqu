@@ -1,9 +1,0 @@
-{
-  "string": [
-    { "name": "module_desc", "value": "货代取件平台主模块" },
-    { "name": "EntryAbility_desc", "value": "货代取件" },
-    { "name": "EntryAbility_label", "value": "货代取件" },
-    { "name": "perm_camera_reason", "value": "用于取件现场拍照留底" },
-    { "name": "perm_photo_reason", "value": "用于选择货物/取件照片并上传" }
-  ]
-}

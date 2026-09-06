@@ -266,6 +266,10 @@ app.post('/api/tasks', requireAuth, withIdempotency((req, res) => {
     }
     input.defaultWorkerId = input.defaultWorkerId || input.workerId || '';
     const task = tasks.createTask(input, { id: req.user.id, name: req.user.name || req.user.username });
+    if (req.user.role === 'courier') {
+      // 取件员自助建单时，通知该客户的负责客服
+      businessNotificationPublisher.taskCreatedForCs(task, { id: req.user.id, name: req.user.name || req.user.username }, task.id);
+    }
     logOperation(req.user, '创建取件任务', 'task', task.id, task.taskNo);
     broadcast({ type: 'task.created', taskId: task.id, status: task.status });
     res.status(201).json(localizeTaskForWeb(task));

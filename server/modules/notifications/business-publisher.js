@@ -57,13 +57,28 @@ function createBusinessNotificationPublisher(db, notifications) {
   }
 
   function taskStatusChanged(task, previousStatus, actor, eventId) {
+    // 客服只在「完成」和「取消/删除」时收到通知；开始取件等中间状态不打扰客服
+    if (task.status !== 'completed' && task.status !== 'cancelled') return [];
     const actorId = actor && actor.id;
     return publishToUsers([task.dispatchCsId, task.mainCsId].filter(userId => userId !== actorId), eventId, () => ({
       type: 'pickupTask.statusChanged',
-      title: '取件任务状态更新',
+      title: task.status === 'completed' ? '取件任务已完成' : '取件任务已取消',
       body: `${task.customerName}：${task.statusLabel}`.slice(0, 500),
       data: taskData(task, { status: task.status, previousStatus }),
       priority: task.status === 'cancelled' ? 'high' : 'normal'
+    }));
+  }
+
+  // 取件员自助建单时通知客户的负责客服
+  function taskCreatedForCs(task, actor, eventId) {
+    if (!task || !task.mainCsId) return null;
+    const actorId = actor && actor.id;
+    return publishToUsers([task.mainCsId, task.dispatchCsId].filter(userId => userId && userId !== actorId), eventId, () => ({
+      type: 'pickupTask.created',
+      title: '新增取件订单',
+      body: `${task.customerName} · ${task.address}`.slice(0, 500),
+      data: taskData(task),
+      priority: 'normal'
     }));
   }
 
@@ -148,7 +163,7 @@ function createBusinessNotificationPublisher(db, notifications) {
   }
 
   return {
-    taskAssigned, taskStatusChanged, taskUrgent, taskException, taskExceptionResolved, taskAssistInvited,
+    taskAssigned, taskStatusChanged, taskCreatedForCs, taskUrgent, taskException, taskExceptionResolved, taskAssistInvited,
     recordAssigned, recordStatusChanged
   };
 }

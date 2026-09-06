@@ -1,4 +1,5 @@
 const defaultWebPush = require('web-push');
+const { createHash } = require('node:crypto');
 
 function safeRoute(value) {
   const route = String(value || '');
@@ -74,7 +75,9 @@ function createWebPushProvider(options = {}) {
           const response = await webpush.sendNotification(target.secret, payload, {
             TTL: ttl,
             urgency: message.priority === 'high' ? 'high' : (message.priority === 'low' ? 'low' : 'normal'),
-            topic: `${message.type}:${message.id}`.slice(0, 32)
+            // Web Push topics require <=32 URL-safe Base64 characters.
+            // Hash the full identity so retries coalesce without invalid '.' / ':'.
+            topic: createHash('sha256').update(`${message.type}:${message.id}`).digest('base64url').slice(0, 32)
           });
           const providerMessageId = response && response.headers && typeof response.headers.get === 'function'
             ? String(response.headers.get('location') || '') : '';

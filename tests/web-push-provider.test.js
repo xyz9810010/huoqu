@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createECDH, randomBytes } = require('node:crypto');
+const webpush = require('web-push');
 
 const { createWebPushProvider } = require('../server/modules/notifications/providers/web-push');
 
@@ -8,6 +10,35 @@ const CONFIG = {
   vapidPublicKey: 'BNcRdreALRFXTkOOUHK1EtKJEhT7E0iW3oR4xJiwZRWp7T7PcR6jI_bzqR5-UfD6Wpc6sl6Z1L-hh9JgW8cI0xw',
   vapidPrivateKey: 'zN_j3Q2r7V_km0n4Gm-HnCJlP5qL8uTnSv_wo7ZBq8Q'
 };
+
+test('Web Push topic is accepted by the real request encoder', async () => {
+  const vapid = webpush.generateVAPIDKeys();
+  const curve = createECDH('prime256v1');
+  curve.generateKeys();
+  const subscription = { endpoint: 'https://push.example.test/send/test', keys: {
+    p256dh: curve.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url')
+  } };
+  const topics = [];
+  const provider = createWebPushProvider({ webpush: {
+    setVapidDetails: (...args) => webpush.setVapidDetails(...args),
+    async sendNotification(target, payload, options) {
+      // Real validation and encryption, without sending to any external device.
+      const request = webpush.generateRequestDetails(target, payload, options);
+      topics.push(request.headers.Topic);
+      return { statusCode: 201 };
+    }
+  } });
+  for (const id of ['n1', 'n1', 'n2']) {
+    const result = await provider.send({ id, type: 'pickupTask.statusChanged', title: '完成', data: {} },
+      [{ id: 's1', secret: subscription }], {
+        vapidSubject: 'mailto:ops@example.com', vapidPublicKey: vapid.publicKey, vapidPrivateKey: vapid.privateKey
+      });
+    assert.equal(result[0].status, 'sent', JSON.stringify(result));
+  }
+  assert.match(topics[0], /^[A-Za-z0-9_-]{1,32}$/);
+  assert.equal(topics[0], topics[1]);
+  assert.notEqual(topics[0], topics[2]);
+});
 
 test('Web Push payload exposes only safe routing metadata', () => {
   const provider = createWebPushProvider({ webpush: { setVapidDetails() {}, sendNotification: async () => {} } });
@@ -59,7 +90,7 @@ test('Web Push sends a compact encrypted payload with TTL and topic', async () =
   );
   assert.equal(captured.subject, CONFIG.vapidSubject);
   assert.equal(captured.options.urgency, 'high');
-  assert.equal(captured.options.topic, 'system.test:n1');
+  assert.match(captured.options.topic, /^[A-Za-z0-9_-]{32}$/);
   assert.ok(captured.options.TTL > 0);
   assert.deepEqual(results, [{ targetId: 's1', status: 'sent', providerMessageId: '' }]);
 });

@@ -141,8 +141,9 @@ const devices = ref<NotificationSubscription[]>([])
 const pushState = ref<BrowserPushState>(getBrowserPushState())
 const volume = ref(Math.round(notificationSound.getVolume() * 100))
 
-function onVolumeChange(value: number) {
-  notificationSound.setVolume(value / 100)
+function onVolumeChange(value: number | number[]) {
+  const v = Array.isArray(value) ? (value[0] ?? 0) : value
+  notificationSound.setVolume(v / 100)
 }
 function playPreview() {
   notificationSound.play()

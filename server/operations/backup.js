@@ -9,7 +9,12 @@ function sha256(filePath) {
 
 // 备份加密密钥（BACKUP_ENCRYPTION_KEY，base64 32 字节）；未配置则明文备份
 function backupEncryptionKey() {
-  const raw = process.env.BACKUP_ENCRYPTION_KEY || '';
+  let raw = process.env.BACKUP_ENCRYPTION_KEY || '';
+  const file = process.env.BACKUP_ENCRYPTION_KEY_FILE;
+  if (file) {
+    try { raw = fs.readFileSync(file, 'utf8').trim(); }
+    catch (e) { throw new Error('BACKUP_ENCRYPTION_KEY_FILE 读取失败: ' + e.message); }
+  }
   if (!raw) return null;
   const key = Buffer.from(raw, 'base64');
   if (key.length !== 32) throw new Error('BACKUP_ENCRYPTION_KEY 必须是32字节Base64');

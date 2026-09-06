@@ -14,14 +14,16 @@ services:
       TZ: Asia/Shanghai
       DATA_DIR: /app/data
       BACKUP_ROOT: /app/backups
-      PUSH_CONFIG_MASTER_KEY: ${PUSH_CONFIG_MASTER_KEY:-}
-      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
+      PUSH_CONFIG_MASTER_KEY_FILE: /run/secrets/push_master.key
+      BACKUP_ENCRYPTION_KEY_FILE: /run/secrets/backup.key
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       MACHINE_API_KEY: ${MACHINE_API_KEY:-}
     volumes:
       # 数据库持久化到宿主机的 ./data 目录（重装容器数据不丢）
       - ${CARGO_DATA_DIR:-./data}:/app/data
       - ${CARGO_BACKUP_DIR:-./backups}:/app/backups
+      # 加密主密钥（Docker secret 风格，权限受限文件，只读挂载）
+      - ${CARGO_SECRETS_DIR:-./secrets}:/run/secrets:ro
     restart: unless-stopped
     stop_grace_period: 20s
     healthcheck:

@@ -19,6 +19,7 @@ web/tsconfig.tsbuildinfo
 web/src/**/*.js
 web/src/**/*.js.map
 backups/
+secrets/
 # 服务账号私钥与证书（本机私有）
 *.p12
 *.pem

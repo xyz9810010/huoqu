@@ -21,10 +21,10 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160">
+        <el-table-column label="操作" width="130">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="openMatch(row)">补票号</el-button>
-            <el-button size="small" @click="router.push('/tasks/' + row.taskId)">查看任务</el-button>
+            <el-button size="small" type="primary" link @click="router.push('/tasks/' + row.taskId)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -43,7 +43,7 @@
           <div class="mobile-field"><span class="mobile-field__label">录入方式</span><span class="mobile-field__value">{{ entryMethodLabel(row.entryMethod) }}</span></div>
           <div class="mobile-item__actions">
             <el-button type="primary" @click="openMatch(row)">补票号</el-button>
-            <el-button @click="router.push('/tasks/' + row.taskId)">查看任务</el-button>
+            <el-button type="primary" link @click="router.push('/tasks/' + row.taskId)">查看任务</el-button>
           </div>
         </article>
         <el-empty v-if="!list.length" description="暂无待匹配记录" />

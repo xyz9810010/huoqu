@@ -59,9 +59,16 @@ function clearLoginFailures(username, ip) {
 const SESSION_TTL_DAYS = 30;
 // 单点登录角色：取件员、客服。同账号新登录会踢掉旧会话（一个账号只能在一处登录）。
 const SINGLE_SESSION_ROLES = ['courier', 'cs'];
+// 被踢下线的 token 标记（内存态，用于给旧端返回「在别处登录」提示）
+const KICKED_TOKEN_TTL_MS = 5 * 60 * 1000;
+const kickedTokens = new Map();
 function createSession(userId) {
   const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId);
   if (user && SINGLE_SESSION_ROLES.includes(user.role)) {
+    const oldSessions = db.prepare('SELECT token FROM sessions WHERE user_id = ?').all(userId);
+    for (const s of oldSessions) {
+      kickedTokens.set(s.token, Date.now() + KICKED_TOKEN_TTL_MS);
+    }
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
   }
   const token = randomUUID() + randomUUID().replace(/-/g, '');
@@ -83,6 +90,15 @@ function findSession(token) {
 }
 function destroySession(token) {
   if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+}
+function wasKicked(token) {
+  const until = kickedTokens.get(token);
+  if (!until) return false;
+  if (until < Date.now()) {
+    kickedTokens.delete(token);
+    return false;
+  }
+  return true;
 }
 function pruneSessions() {
   db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(new Date().toISOString());
@@ -124,7 +140,7 @@ function verifyLogin(username, password) {
 }
 
 module.exports = {
-  hashPassword, createSalt, createSession, findSession, destroySession,
+  hashPassword, createSalt, createSession, findSession, destroySession, wasKicked,
   pruneSessions, publicUser, ensureAdmin, verifyLogin,
   loginBlockedSeconds, noteLoginFailure, clearLoginFailures,
   LOGIN_FAILURE_WINDOW_MS, MAX_LOGIN_FAILURES

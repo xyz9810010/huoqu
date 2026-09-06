@@ -5,7 +5,12 @@ function requireAuth(req, res, next) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   const user = token ? auth.findSession(token) : null;
-  if (!user) return res.status(401).json({ error: '未登录或登录已过期' });
+  if (!user) {
+    if (token && auth.wasKicked(token)) {
+      return res.status(401).json({ error: '账号已在别处登录，请重新登录', kicked: true });
+    }
+    return res.status(401).json({ error: '未登录或登录已过期' });
+  }
   req.user = user;
   req.token = token;
   next();

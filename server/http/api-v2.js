@@ -13,6 +13,7 @@ const { createUploader } = require('./uploads');
 const { utcText } = require('../time');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const fc = require('../security/field-crypto');
+const loginPolicy = require('../security/login-policy');
 
 const TIME_TEXT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -167,6 +168,10 @@ function mountApiV2Routes(app, deps) {
       return fail(res, 401, '用户名或密码错误');
     }
     auth.clearLoginFailures(username, clientIp);
+    if (userRow.role === 'cs' || userRow.role === 'courier') {
+      const check = loginPolicy.checkLoginAllowed(userRow.role);
+      if (!check.allowed) return fail(res, 403, check.reason, 'LOGIN_TIME_FORBIDDEN');
+    }
     const token = auth.createSession(userRow.id);
     ok(res, { token, user: auth.publicUser(userRow) });
   });

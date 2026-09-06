@@ -14,6 +14,20 @@ const { workerTaskInput } = require('./worker-task-input');
 const { workerCustomerOptions } = require('./worker-customer-options');
 const { utcText, utcTextToBjText } = require('../time');
 const fc = require('../security/field-crypto');
+const loginPolicy = require('../security/login-policy');
+const { pinyin } = require('pinyin-pro');
+
+// 客户名称匹配：汉字包含 + 拼音（全拼/首字母）
+function customerNameMatches(name, query) {
+  const text = String(name || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  const q = String(query || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  if (text === '' || q === '') return true;
+  if (text.includes(q)) return true;
+  if (!/[a-z0-9]/.test(q)) return false;
+  return ['pinyin', 'first'].some((pattern) => {
+    try { return pinyin(text, { toneType: 'none', pattern: pattern, nonZh: 'consecutive', v: true }).includes(q); } catch { return false; }
+  });
+}
 
 // v1（Web）展示口径：任务域存储为 UTC 空格文本，输出前统一转为北京时间文本。
 // 只转换机器时刻字段；scheduled_time/rush_ship_time 为录入型北京钟面文本，保持原样。
@@ -172,6 +186,13 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: '用户名或密码错误' });
   }
   auth.clearLoginFailures(username, clientIp);
+  // 登录时间限制（仅客服/取件员，管理员不受限）
+  if (u.role === 'cs' || u.role === 'courier') {
+    const check = loginPolicy.checkLoginAllowed(u.role);
+    if (!check.allowed) {
+      return res.status(403).json({ error: check.reason });
+    }
+  }
   const token = auth.createSession(u.id);
   // 单端接收：登录即清理该用户旧的手机推送订阅（鸿蒙/安卓），当前端登录后再上报新 token。
   // 这样在网页端登录后，鸿蒙端就不会再收到推送。
@@ -205,6 +226,18 @@ app.post('/api/password', requireAuth, (req, res) => {
   db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
     .run(auth.hashPassword(newPassword, salt), salt, u.id);
   res.json({ ok: true });
+});
+
+// ================= 登录时间限制（管理员可编辑） =================
+app.get('/api/login-restrictions', requireAuth, requireAdmin, (req, res) => {
+  res.json(loginPolicy.listRestrictions());
+});
+app.put('/api/login-restrictions/:role', requireAuth, requireAdmin, (req, res) => {
+  const role = String(req.params.role || '');
+  if (role !== 'cs' && role !== 'courier') {
+    return res.status(400).json({ error: '仅支持 cs / courier 角色' });
+  }
+  res.json(loginPolicy.saveRestriction(role, req.body || {}));
 });
 
 // ================= 统一取件任务 =================
@@ -1210,16 +1243,19 @@ app.get('/api/worker/customer-options', requireAuth, (req, res) => {
 
 app.get('/api/customers', requireAuth, (req, res) => {
   const search = String(req.query.search || '').trim().toLowerCase();
+  const sizeLimit = Math.max(1, Number(req.query.size) || 0);
   const all = db.prepare('SELECT * FROM customers').all();
-  const rows = all
+  let rows = all
     .filter(c => {
       if (!search) return true;
       const name = fc.decryptField(c.name) || '';
       const phone = fc.decryptField(c.phone) || '';
       const legacy = c.legacy_customer_id || '';
-      return name.toLowerCase().includes(search) || phone.toLowerCase().includes(search) || legacy.toLowerCase().includes(search);
+      return name.toLowerCase().includes(search) || phone.toLowerCase().includes(search) || legacy.toLowerCase().includes(search)
+        || customerNameMatches(name, search);
     })
     .sort((a, b) => (fc.decryptField(a.name) || '').localeCompare(fc.decryptField(b.name) || '', 'zh'));
+  if (sizeLimit > 0) rows = rows.slice(0, sizeLimit);
   const stats = customerOrderStats(db, rows.map(row => row.id));
   res.json(rows.map(row => {
     const stat = stats.get(row.id) || { taskCount: 0, openTaskCount: 0, completedTaskCount: 0 };

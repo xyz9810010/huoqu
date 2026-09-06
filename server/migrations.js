@@ -269,6 +269,14 @@ function createSchema(db) {
       FOREIGN KEY(area_id) REFERENCES areas(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS login_restrictions (
+      role TEXT PRIMARY KEY,            -- cs | courier（客服/取件员登录时间限制）
+      weekdays TEXT DEFAULT '',         -- 允许登录的星期，逗号分隔 1-7（1=周一..7=周日）；空=不限
+      start_time TEXT DEFAULT '',       -- 允许起始时间 HH:MM；空=不限
+      end_time TEXT DEFAULT '',         -- 允许结束时间 HH:MM；空=不限
+      enabled INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS customer_addresses (
       id TEXT PRIMARY KEY,
       customer_id TEXT NOT NULL,

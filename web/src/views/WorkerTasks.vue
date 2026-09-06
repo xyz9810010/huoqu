@@ -4,6 +4,7 @@
       <div class="toolbar">
         <h2 class="page-title" style="margin:0">我的任务</h2>
         <span class="count">{{ activeLabel }} {{ shown.length }} 单</span>
+        <el-button type="primary" size="small" @click="router.push('/worker/dispatch')">新增订单</el-button>
         <el-button :icon="Refresh" circle @click="load" />
       </div>
 

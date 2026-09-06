@@ -25,6 +25,7 @@ const router = createRouter({
         { path: 'tasks/:id', component: () => import('./views/TaskDetail.vue') },
         { path: 'match-center', component: () => import('./views/MatchCenter.vue'), meta: { roles: ['cs', 'admin'] } },
         { path: 'worker/tasks', component: () => import('./views/WorkerTasks.vue'), meta: { roles: ['worker'] } },
+        { path: 'worker/dispatch', component: () => import('./views/WorkerDispatch.vue'), meta: { roles: ['worker'] } },
         { path: 'my-data', component: () => import('./views/MyData.vue'), meta: { roles: ['worker'] } },
         { path: 'areas', component: () => import('./views/Areas.vue'), meta: { roles: ['admin'] } },
         { path: 'employees', component: () => import('./views/Employees.vue'), meta: { roles: ['admin'] } },

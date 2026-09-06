@@ -24,6 +24,9 @@
           <span class="crumb">{{ currentTitle }}</span>
         </div>
         <div class="header-right">
+          <el-button circle class="shortcut-help" aria-label="快捷键帮助" @click="showShortcutHelp">
+            <el-icon><QuestionFilled /></el-icon>
+          </el-button>
           <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
             <el-button circle class="bell" @click="router.push('/notifications')">
               <el-icon><Bell /></el-icon>
@@ -73,7 +76,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElNotification } from 'element-plus'
+import { ElMessageBox, ElNotification } from 'element-plus'
 import 'element-plus/es/components/notification/style/css'
 import { useAuthStore } from '../stores/auth'
 import { unreadCount, refreshUnread } from '../stores/notif'
@@ -115,6 +118,40 @@ function onCommand(cmd: string) {
   if (cmd === 'logout') {
     auth.logout()
     router.push('/login')
+  }
+}
+
+// 键盘快捷键（桌面端高频操作）
+const shortcutDefs: { key: string; label: string; path: string; roles: string[] }[] = [
+  { key: 'n', label: '新建取件', path: '/dispatch', roles: ['cs', 'admin'] },
+  { key: 't', label: '取件任务', path: '/tasks', roles: ['cs', 'admin', 'boss'] },
+  { key: 'c', label: '客户管理', path: '/customers', roles: ['cs', 'admin', 'boss'] },
+  { key: 'd', label: '数据看板', path: '/dashboard', roles: ['admin', 'boss'] },
+]
+function showShortcutHelp() {
+  const lines = shortcutDefs
+    .filter((s) => s.roles.includes(auth.role))
+    .map((s) => s.key.toUpperCase() + ' — ' + s.label)
+  ElMessageBox.alert(lines.length ? lines.join('<br>') + '<br>? — 显示此帮助' : '? — 显示此帮助', '键盘快捷键', {
+    dangerouslyUseHTMLString: true,
+    confirmButtonText: '知道了',
+  }).catch(() => {})
+}
+function onKeydown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  const tag = target?.tagName || ''
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+  const key = e.key.toLowerCase()
+  if (key === '?') {
+    e.preventDefault()
+    showShortcutHelp()
+    return
+  }
+  const hit = shortcutDefs.find((s) => s.key === key && s.roles.includes(auth.role))
+  if (hit) {
+    e.preventDefault()
+    router.push(hit.path)
   }
 }
 
@@ -183,11 +220,13 @@ onMounted(() => {
   })
   heartbeat()
   heartbeatTimer = window.setInterval(heartbeat, 5000)
+  window.addEventListener('keydown', onKeydown)
 })
 onUnmounted(() => {
   navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage)
   realtime.stop()
   window.clearInterval(heartbeatTimer)
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
@@ -301,10 +340,14 @@ onUnmounted(() => {
 .latency.is-online .latency-text {
   color: #00b42a;
 }
-.bell {
+.bell, .shortcut-help {
   border: 1px solid var(--qj-border);
   background: #fff;
   color: var(--qj-text-2);
+}
+.shortcut-help:hover {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
 }
 .bell:hover {
   color: var(--el-color-primary);

@@ -77,6 +77,28 @@
         <el-button type="primary" @click="submit">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-card shadow="never" style="max-width:760px;margin-top:20px">
+      <template #header>登录时间限制（客服 / 取件员，管理员可编辑）</template>
+      <div v-for="r in restrictions" :key="r.role" class="login-restrict-row">
+        <div class="lr-head">
+          <span class="lr-role">{{ r.role === 'cs' ? '客服' : '取件员' }}</span>
+          <el-switch v-model="r.enabled" @change="saveRestriction(r)" />
+        </div>
+        <template v-if="r.enabled">
+          <div class="lr-label">允许登录的星期（不勾选则周末/休息日不可登录）</div>
+          <el-checkbox-group v-model="r.weekdaysArr" @change="saveRestriction(r)">
+            <el-checkbox v-for="d in weekOptions" :key="d.value" :label="d.value">{{ d.label }}</el-checkbox>
+          </el-checkbox-group>
+          <div class="lr-label">允许时间段（留空 = 全天不限）</div>
+          <div class="lr-time">
+            <el-input v-model="r.startTime" placeholder="08:00" style="width:120px" @change="saveRestriction(r)" />
+            <span style="margin:0 6px">~</span>
+            <el-input v-model="r.endTime" placeholder="20:00" style="width:120px" @change="saveRestriction(r)" />
+          </div>
+        </template>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -89,9 +111,35 @@ const list = ref<any[]>([])
 const role = ref('')
 const visible = ref(false)
 const form = reactive<any>({ id: null, username: '', password: '', name: '', phone: '', employeeNo: '', role: 'cs' })
+const weekOptions = [
+  { value: '1', label: '周一' }, { value: '2', label: '周二' }, { value: '3', label: '周三' },
+  { value: '4', label: '周四' }, { value: '5', label: '周五' }, { value: '6', label: '周六' },
+  { value: '7', label: '周日' },
+]
+const restrictions = ref<any[]>([])
 
 async function load() {
   list.value = await http.get('/employees', { params: { role: role.value || undefined } })
+}
+
+async function loadRestrictions() {
+  const data: any[] = await http.get('/login-restrictions')
+  const map: Record<string, any> = {}
+  data.forEach((r: any) => { map[r.role] = r })
+  restrictions.value = ['cs', 'courier'].map((rl: string) => {
+    const r = map[rl] || { role: rl, weekdays: '', startTime: '', endTime: '', enabled: false }
+    return { ...r, weekdaysArr: String(r.weekdays || '').split(',').filter(Boolean) }
+  })
+}
+
+async function saveRestriction(r: any) {
+  await http.put('/login-restrictions/' + r.role, {
+    weekdays: (r.weekdaysArr || []).join(','),
+    startTime: r.startTime || '',
+    endTime: r.endTime || '',
+    enabled: r.enabled,
+  })
+  ElMessage.success('已保存')
 }
 
 function roleLabel(r: string) {
@@ -125,7 +173,7 @@ async function toggleStatus(row: any) {
   load()
 }
 
-onMounted(load)
+onMounted(() => { load(); loadRestrictions() })
 </script>
 
 <style scoped>
@@ -134,6 +182,12 @@ onMounted(load)
   gap: 10px;
   margin-bottom: 16px;
 }
+.login-restrict-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+.login-restrict-row:last-child { border-bottom: none; }
+.lr-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lr-role { font-weight: 600; }
+.lr-label { font-size: 13px; color: #86909c; margin: 8px 0 6px; }
+.lr-time { display: flex; align-items: center; }
 @media (max-width: 768px) {
   .toolbar :deep(.el-select) {
     flex: 1;

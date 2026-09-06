@@ -7,7 +7,7 @@
         <el-form-item label="客户" required>
           <el-select v-model="customerId" filterable remote :remote-method="searchCustomer" placeholder="搜索客户名称/电话"
                      style="width:100%" @change="onCustomerChange">
-            <el-option v-for="c in customerOptions" :key="c.id" :label="c.name" :value="c.id" />
+            <el-option v-for="c in customerOptions" :key="c.id" :label="c.name + (c.phone ? ' · ' + c.phone : '')" :value="c.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="取件地址" required>

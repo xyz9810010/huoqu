@@ -579,3 +579,112 @@ test('v2 历史 records 重量在同步表缺失时兜底匹配任务明细', as
   assert.equal(item.finalWeight, 8.8);
   assert.equal(item.matchStatus, 'matched');
 });
+
+test('v2 区域：创建 / 列表 / 编辑与人员分配 / 删除约束', async () => {
+  // 先建两个取件员用作默认与备用人员
+  const mainWorker = await request('POST', '/api/v2/couriers', { name: '区域默认取件员' });
+  assert.equal(mainWorker.status, 201);
+  const mainWorkerId = mainWorker.body.data.courier.id;
+  const backupWorker = await request('POST', '/api/v2/couriers', { name: '区域备用取件员' });
+  assert.equal(backupWorker.status, 201);
+  const backupWorkerId = backupWorker.body.data.courier.id;
+
+  const created = await request('POST', '/api/v2/areas', {
+    name: 'v2 区域甲',
+    code: 'A-V2-1',
+    defaultWorkerIds: [mainWorkerId, backupWorkerId],
+    backupWorkerIds: [backupWorkerId]
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body).slice(0, 200));
+  const area = created.body.data.area;
+  assert.equal(area.name, 'v2 区域甲');
+  assert.equal(area.code, 'A-V2-1');
+  assert.equal(area.defaultWorkers.length, 2);
+  assert.equal(area.backupWorkers.length, 1);
+  // 默认人员列表按姓名排序，主默认取件员从列表与列表长度判断即可
+  assert.ok(area.defaultWorkers.some(worker => worker.userId === mainWorkerId));
+  assert.ok(area.backupWorkers.some(worker => worker.userId === backupWorkerId));
+  assert.ok(area.defaultWorkerId);
+  const areaId = area.id;
+
+  const dupe = await request('POST', '/api/v2/areas', { name: 'v2 区域甲' });
+  assert.equal(dupe.status, 400);
+  assert.match(dupe.body.error, /已存在/);
+
+  const noName = await request('POST', '/api/v2/areas', { name: '   ' });
+  assert.equal(noName.status, 400);
+
+  const listed = await request('GET', '/api/v2/areas?page=1&pageSize=10');
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.data.page, 1);
+  assert.equal(listed.body.data.items.some(item => item.id === areaId), true);
+
+  const updated = await request('PUT', `/api/v2/areas/${areaId}`, {
+    name: 'v2 区域乙',
+    code: 'A-V2-2',
+    defaultWorkerIds: [backupWorkerId],
+    backupWorkerIds: []
+  });
+  assert.equal(updated.status, 200, JSON.stringify(updated.body).slice(0, 200));
+  assert.equal(updated.body.data.area.name, 'v2 区域乙');
+  assert.equal(updated.body.data.area.defaultWorkers.length, 1);
+  assert.equal(updated.body.data.area.defaultWorkers[0].userId, backupWorkerId);
+  assert.equal(updated.body.data.area.backupWorkers.length, 0);
+
+  const missing = await request('PUT', '/api/v2/areas/not-exist', { name: 'v2 区域丙' });
+  assert.equal(missing.status, 404);
+
+  const deleted = await request('DELETE', `/api/v2/areas/${areaId}`);
+  assert.equal(deleted.status, 200);
+  assert.equal(deleted.body.data.ok, true);
+
+  const afterDelete = await request('GET', '/api/v2/areas?page=1&pageSize=100');
+  assert.equal(afterDelete.body.data.items.some(item => item.id === areaId), false);
+  assert.equal(
+    afterDelete.body.data.items.some(item => item.name === '区域默认取件员'),
+    false,
+    '删除区域不应影响取件员档案'
+  );
+});
+
+test('v2 区域：被客户地址引用时不允许删除，写接口仅管理员', async () => {
+  const worker = await request('POST', '/api/v2/couriers', { name: '区域占用取件员' });
+  assert.equal(worker.status, 201);
+  const area = await request('POST', '/api/v2/areas', { name: 'v2 占用区域' });
+  assert.equal(area.status, 201, JSON.stringify(area.body));
+  const areaId = area.body.data.area.id;
+
+  // 客户地址仍走 v1 写入口（v2 尚未提供地址写接口），这里只用于制造"区域被引用"的场景
+  const customer = await request('POST', '/api/v2/customers', {
+    name: 'v2 区域占用客户', address: '义乌市北苑街道 1 号'
+  });
+  assert.equal(customer.status, 201, JSON.stringify(customer.body).slice(0, 200));
+  const customerId = customer.body.data.customer.id;
+  const address = await request('POST', `/api/customers/${customerId}/addresses`, {
+    name: '仓库', address: '义乌市北苑街道 2 号', areaId
+  });
+  assert.equal(address.status, 201, JSON.stringify(address.body).slice(0, 200));
+
+  const blocked = await request('DELETE', `/api/v2/areas/${areaId}`);
+  assert.equal(blocked.status, 400);
+  assert.match(blocked.body.error, /客户地址/);
+
+  const csUser = await request('POST', '/api/users', {
+    username: `v2-area-cs-${Date.now()}`, password: 'cs-strong-password', role: 'cs', name: 'v2 区域客服'
+  });
+  assert.equal(csUser.status, 200);
+  const csLogin = await request('POST', '/api/v2/auth/login', {
+    username: csUser.body.username, password: 'cs-strong-password'
+  }, false);
+  assert.equal(csLogin.status, 200);
+  token = csLogin.body.data.token;
+
+  const csList = await request('GET', '/api/v2/areas?page=1&pageSize=10');
+  assert.equal(csList.status, 200);
+  const csCreate = await request('POST', '/api/v2/areas', { name: 'v2 客服建的停用区域' });
+  assert.equal(csCreate.status, 403);
+  const csDelete = await request('DELETE', `/api/v2/areas/${areaId}`);
+  assert.equal(csDelete.status, 403);
+
+  token = adminToken;
+});

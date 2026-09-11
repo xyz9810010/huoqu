@@ -81,6 +81,7 @@ function mountApiV2Routes(app, deps) {
   } = deps;
   const { imageUpload } = createUploader(uploadsDir);
   const broadcast = deps.broadcast || (() => {});
+  const audit = deps.audit || (() => {});
 
   // ---------- 工具（与 v1 语义一致） ----------
   const pad = n => (n < 10 ? '0' + n : String(n));
@@ -561,6 +562,103 @@ function mountApiV2Routes(app, deps) {
     const { page, pageSize } = pageOf(req.query);
     const rows = db.prepare('SELECT * FROM areas ORDER BY name').all().map(areaView);
     ok(res, listSlice(rows, page, pageSize));
+  });
+
+  // ---- 区域管理（写接口仅管理员；客户地址引用区域时不允许删除） ----
+  const areaNameTaken = (name, excludeId = '') =>
+    Boolean(db.prepare('SELECT 1 FROM areas WHERE name=? AND id<>?').get(name, excludeId));
+
+  const workerIdsOf = ids => [...new Set(
+    (Array.isArray(ids) ? ids : []).map(value => String(value || '').trim()).filter(Boolean)
+  )];
+
+  /**
+   * 区域人员分配：字段缺省表示"这一项不改动"，显式传空数组表示"清空"。
+   * 与 v1 `/api/areas/:id` 的语义保持一致，避免客户端只想改名字却清掉人员。
+   */
+  const assignedWorkers = body => {
+    const payload = body || {};
+    const hasDefaults = Object.prototype.hasOwnProperty.call(payload, 'defaultWorkerIds');
+    const hasBackups = Object.prototype.hasOwnProperty.call(payload, 'backupWorkerIds');
+    const defaultWorkerIds = hasDefaults ? workerIdsOf(payload.defaultWorkerIds) : null;
+    const backupWorkerIds = hasBackups ? workerIdsOf(payload.backupWorkerIds) : null;
+    const unknown = [...(defaultWorkerIds || []), ...(backupWorkerIds || [])]
+      .find(workerId => !db.prepare('SELECT 1 FROM couriers WHERE id=?').get(workerId));
+    if (unknown) return { error: fail(res, 400, '指定的取件员不存在') };
+    return { defaultWorkerIds, backupWorkerIds };
+  };
+
+  const writeAreaWorkers = (areaId, defaultWorkerIds, backupWorkerIds) => {
+    db.prepare('DELETE FROM area_workers WHERE area_id=?').run(areaId);
+    const insert = db.prepare('INSERT OR IGNORE INTO area_workers (area_id,worker_id,worker_role) VALUES (?,?,?)');
+    for (const workerId of defaultWorkerIds) insert.run(areaId, workerId, 'default');
+    for (const workerId of backupWorkerIds) insert.run(areaId, workerId, 'backup');
+  };
+
+  const referencedAddressCount = areaId =>
+    db.prepare('SELECT COUNT(*) AS count FROM customer_addresses WHERE area_id=?').get(areaId).count;
+
+  app.post('/api/v2/areas', requireAuth, requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const name = String(body.name || '').trim();
+    if (!name) return fail(res, 400, '区域名称不能为空');
+    if (name.length > 50) return fail(res, 400, '区域名称不能超过 50 个字符');
+    if (areaNameTaken(name)) return fail(res, 400, '区域名称已存在');
+
+    const workers = assignedWorkers(body);
+    if (workers.error) return workers.error;
+    const code = String(body.code || '').trim().slice(0, 50);
+    const id = randomUUID();
+    db.transaction(() => {
+      db.prepare('INSERT INTO areas (id,name,code,created_at) VALUES (?,?,?,?)').run(id, name, code, nowStr());
+      writeAreaWorkers(id, workers.defaultWorkerIds || [], workers.backupWorkerIds || []);
+    })();
+    audit(req.user, '创建区域', 'area', id, name);
+    broadcast({ type: 'areas.updated' });
+    ok(res, { area: areaView(db.prepare('SELECT * FROM areas WHERE id=?').get(id)) }, 201);
+  });
+
+  app.put('/api/v2/areas/:id', requireAuth, requireAdmin, (req, res) => {
+    const current = db.prepare('SELECT * FROM areas WHERE id=?').get(req.params.id);
+    if (!current) return fail(res, 404, '区域不存在');
+    const body = req.body || {};
+    const name = body.name == null ? current.name : String(body.name).trim();
+    if (!name) return fail(res, 400, '区域名称不能为空');
+    if (name.length > 50) return fail(res, 400, '区域名称不能超过 50 个字符');
+    if (areaNameTaken(name, current.id)) return fail(res, 400, '区域名称已存在');
+
+    const workers = assignedWorkers(body);
+    if (workers.error) return workers.error;
+    const existingWorkers = db.prepare('SELECT worker_id,worker_role FROM area_workers WHERE area_id=?')
+      .all(current.id);
+    const nextDefaults = workers.defaultWorkerIds
+      ?? existingWorkers.filter(row => row.worker_role === 'default').map(row => row.worker_id);
+    const nextBackups = workers.backupWorkerIds
+      ?? existingWorkers.filter(row => row.worker_role === 'backup').map(row => row.worker_id);
+    const code = String(body.code == null ? (current.code || '') : body.code).trim().slice(0, 50);
+    db.transaction(() => {
+      db.prepare('UPDATE areas SET name=?,code=? WHERE id=?').run(name, code, current.id);
+      writeAreaWorkers(current.id, nextDefaults, nextBackups);
+    })();
+    audit(req.user, '编辑区域', 'area', current.id, name);
+    broadcast({ type: 'areas.updated' });
+    ok(res, { area: areaView(db.prepare('SELECT * FROM areas WHERE id=?').get(current.id)) });
+  });
+
+  app.delete('/api/v2/areas/:id', requireAuth, requireAdmin, (req, res) => {
+    const current = db.prepare('SELECT * FROM areas WHERE id=?').get(req.params.id);
+    if (!current) return fail(res, 404, '区域不存在');
+    const addressCount = referencedAddressCount(current.id);
+    if (addressCount > 0) {
+      return fail(res, 400, `该区域已被 ${addressCount} 个客户地址使用，请先调整地址所属区域`);
+    }
+    db.transaction(() => {
+      db.prepare('DELETE FROM area_workers WHERE area_id=?').run(current.id);
+      db.prepare('DELETE FROM areas WHERE id=?').run(current.id);
+    })();
+    audit(req.user, '删除区域', 'area', current.id, current.name);
+    broadcast({ type: 'areas.updated' });
+    ok(res, { ok: true });
   });
 
   app.get('/api/v2/dashboard/me', requireAuth, (req, res) => {

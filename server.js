@@ -23,7 +23,10 @@ const { mountApiRoutes } = require('./server/http/api');
 const { mountApiV2Routes } = require('./server/http/api-v2');
 const { createBusinessNotificationPublisher } = require('./server/modules/notifications/business-publisher');
 const { createTaskModule } = require('./server/domain/tasks');
+const { createAuditLogger } = require('./server/operations/audit');
+const { bjText } = require('./server/time');
 const sseTickets = createSseTicketStore(db);
+const auditLog = createAuditLogger(db, () => bjText());
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
@@ -194,6 +197,7 @@ mountApiV2Routes(app, {
   preferenceStore,
   providerRegistry,
   broadcast,
+  audit: auditLog,
   uploadsDir
 });
 

@@ -16,6 +16,7 @@ const { utcText, utcTextToBjText } = require('../time');
 const fc = require('../security/field-crypto');
 const loginPolicy = require('../security/login-policy');
 const { pinyin } = require('pinyin-pro');
+const { createAuditLogger } = require('../operations/audit');
 
 // 客户名称匹配：汉字包含 + 拼音（全拼/首字母）
 function customerNameMatches(name, query) {
@@ -109,6 +110,8 @@ const todayStr = () => { const d = bjNow(); return d.getUTCFullYear() + '-' + pa
 // nowStr 只用于北京自洽模块（操作日志/旧 records/基础资料等原样展示的表）；
 // 任务域机器时刻一律 utcText()（见 server/time.js）。
 const nowStr = () => { const d = bjNow(); return todayStr() + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()); };
+// 操作日志走统一审计模块（与 v2 共用同一张表与北京时间口径）。
+const logOperation = createAuditLogger(db, nowStr);
 const startOfWeek = () => { const d = bjNow(); const day = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() - day + 1); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
 const rowCourier = (c) => ({ id: c.id, name: c.name, region: c.region || '', commissionRate: c.commission_rate || 0 });
 const parseImages = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
@@ -244,11 +247,6 @@ app.put('/api/login-restrictions/:role', requireAuth, requireAdmin, (req, res) =
 // 权限/详情富化/删除占用判定收敛到 server/http/task-views.js；此处仅做 v1 时间本地化
 function taskDetail(taskId) {
   return localizeTaskForWeb(enrichTaskDetail(db, tasks, taskId));
-}
-
-function logOperation(user, action, targetType = '', targetId = '', detail = '') {
-  db.prepare(`INSERT INTO operation_logs (id,user_id,user_name,action,target_type,target_id,detail,created_at)
-    VALUES (?,?,?,?,?,?,?,?)`).run(randomUUID(), user?.id || '', user?.name || user?.username || '', action, targetType, targetId, detail, nowStr());
 }
 
 app.get('/api/tasks', requireAuth, (req, res) => {

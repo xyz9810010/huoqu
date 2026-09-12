@@ -14,6 +14,7 @@ const { utcText } = require('../time');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const fc = require('../security/field-crypto');
 const loginPolicy = require('../security/login-policy');
+const { createEmployeeService } = require('../operations/employees');
 
 const TIME_TEXT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -77,11 +78,12 @@ function customerView(db, row, addressCount) {
 function mountApiV2Routes(app, deps) {
   const {
     db, auth, tasks, notificationService, notificationRepository,
-    subscriptionStore, preferenceStore, providerRegistry, uploadsDir
+    subscriptionStore, preferenceStore, providerConfigStore, providerRegistry, uploadsDir
   } = deps;
   const { imageUpload } = createUploader(uploadsDir);
   const broadcast = deps.broadcast || (() => {});
   const audit = deps.audit || (() => {});
+  const employees = createEmployeeService(db, auth, () => nowStr());
 
   // ---------- 工具（与 v1 语义一致） ----------
   const pad = n => (n < 10 ? '0' + n : String(n));
@@ -169,6 +171,9 @@ function mountApiV2Routes(app, deps) {
       return fail(res, 401, '用户名或密码错误');
     }
     auth.clearLoginFailures(username, clientIp);
+    if (userRow.status === 'disabled') {
+      return fail(res, 401, '账号已停用，请联系管理员', 'ACCOUNT_DISABLED');
+    }
     if (userRow.role === 'cs' || userRow.role === 'courier') {
       const check = loginPolicy.checkLoginAllowed(userRow.role);
       if (!check.allowed) return fail(res, 403, check.reason, 'LOGIN_TIME_FORBIDDEN');
@@ -662,6 +667,138 @@ function mountApiV2Routes(app, deps) {
     audit(req.user, '删除区域', 'area', current.id, current.name);
     broadcast({ type: 'areas.updated' });
     ok(res, { ok: true });
+  });
+
+  // ============ 员工（仅管理员） ============
+  app.get('/api/v2/employees', requireAuth, requireAdmin, (req, res) => {
+    const role = String(req.query.role || '').trim();
+    ok(res, { items: employees.list(role) });
+  });
+
+  app.post('/api/v2/employees', requireAuth, requireAdmin, (req, res) => {
+    const result = employees.create(req.body || {});
+    if (result.error) return fail(res, 400, result.error);
+    audit(req.user, '创建员工', 'employee', result.data.id, result.data.username);
+    ok(res, { employee: result.data }, 201);
+  });
+
+  app.put('/api/v2/employees/:id', requireAuth, requireAdmin, (req, res) => {
+    const result = employees.update(req.params.id, req.body || {});
+    if (result.error) return fail(res, result.status || 400, result.error);
+    audit(req.user, '编辑员工', 'employee', result.data.id, result.data.username);
+    ok(res, { employee: result.data });
+  });
+
+  app.put('/api/v2/employees/:id/status', requireAuth, requireAdmin, (req, res) => {
+    const result = employees.setStatus(req.params.id, (req.body || {}).status, req.user);
+    if (result.error) return fail(res, result.status || 400, result.error);
+    audit(
+      req.user,
+      result.data.status === 'disabled' ? '停用员工' : '启用员工',
+      'employee',
+      result.data.id,
+      result.data.username
+    );
+    ok(res, { employee: result.data });
+  });
+
+  // ============ 操作日志（仅管理员） ============
+  app.get('/api/v2/logs', requireAuth, requireAdmin, (req, res) => {
+    const { page, pageSize } = pageOf(req.query);
+    const conditions = [];
+    const params = [];
+    const targetType = String(req.query.targetType || '').trim();
+    if (targetType) { conditions.push('target_type=?'); params.push(targetType); }
+    const action = String(req.query.action || '').trim();
+    if (action) { conditions.push('action LIKE ?'); params.push(`%${action}%`); }
+    const keyword = String(req.query.keyword || '').trim();
+    if (keyword) {
+      conditions.push("(action LIKE ? OR detail LIKE ? OR user_name LIKE ?)");
+      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const total = db.prepare(`SELECT COUNT(*) AS count FROM operation_logs ${where}`).get(...params).count;
+    const rows = db.prepare(`SELECT id,user_id AS userId,user_name AS userName,action,
+        target_type AS targetType,target_id AS targetId,detail,created_at AS createdAt
+      FROM operation_logs ${where}
+      ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`)
+      .all(...params, pageSize, (page - 1) * pageSize);
+    ok(res, {
+      items: rows.map(row => ({ ...row, createdAt: toIso(row.createdAt, false) })),
+      total,
+      page,
+      pageSize
+    });
+  });
+
+  // ============ 推送供应商配置（仅管理员；密钥只回传"是否已配置"） ============
+  const providerOr404 = (req, res) => {
+    const adapter = providerRegistry.get(req.params.code);
+    if (!adapter) {
+      fail(res, 404, '推送供应商不存在');
+      return null;
+    }
+    return adapter;
+  };
+
+  const providerView = adapter => ({
+    ...adapter,
+    ...providerConfigStore.publicView(adapter.code, adapter.credentialSchema)
+  });
+
+  app.get('/api/v2/push-providers', requireAuth, requireAdmin, (req, res) => {
+    ok(res, { items: providerRegistry.list().map(providerView) });
+  });
+
+  app.put('/api/v2/push-providers/:code', requireAuth, requireAdmin, async (req, res) => {
+    const adapter = providerOr404(req, res);
+    if (!adapter) return;
+    try {
+      const credentials = (req.body && req.body.credentials) || {};
+      providerConfigStore.save(adapter.code, credentials, adapter.credentialSchema);
+      const allowed = new Set(adapter.credentialSchema.map(field => field.key));
+      const changed = Object.keys(credentials).filter(key => allowed.has(key)).sort();
+      audit(req.user, '保存推送供应商配置', 'push_provider', adapter.code, `字段：${changed.join(',')}`);
+      const validation = await adapter.validateConfig(providerConfigStore.getDecrypted(adapter.code));
+      if (!validation.ok) {
+        providerConfigStore.recordHealth(adapter.code, validation);
+        return fail(res, 400, validation.message || '供应商配置校验失败', validation.code || 'PROVIDER_CONFIG_INVALID');
+      }
+      ok(res, providerConfigStore.publicView(adapter.code, adapter.credentialSchema));
+    } catch (error) {
+      const status = error && error.code === 'PUSH_MASTER_KEY_MISSING' ? 503 : 400;
+      fail(res, status, error.message || '保存供应商配置失败', error.code || '');
+    }
+  });
+
+  app.post('/api/v2/push-providers/:code/test', requireAuth, requireAdmin, async (req, res) => {
+    const adapter = providerOr404(req, res);
+    if (!adapter) return;
+    try {
+      const config = providerConfigStore.getDecrypted(adapter.code);
+      if (!config) return fail(res, 400, '供应商尚未配置');
+      const result = await adapter.healthCheck(config);
+      providerConfigStore.recordHealth(adapter.code, result);
+      audit(req.user, '测试推送供应商配置', 'push_provider', adapter.code, `结果：${result.ok ? 'healthy' : (result.code || 'unhealthy')}`);
+      const view = providerConfigStore.publicView(adapter.code, adapter.credentialSchema);
+      if (!result.ok) return fail(res, 400, result.message || '供应商连接测试失败', result.code || '');
+      ok(res, view);
+    } catch (error) {
+      fail(res, 400, '供应商连接测试失败', error.code || 'PROVIDER_TEST_FAILED');
+    }
+  });
+
+  app.put('/api/v2/push-providers/:code/enabled', requireAuth, requireAdmin, (req, res) => {
+    const adapter = providerOr404(req, res);
+    if (!adapter) return;
+    try {
+      const enabled = Boolean(req.body && req.body.enabled);
+      const result = providerConfigStore.setEnabled(adapter.code, enabled);
+      audit(req.user, enabled ? '启用推送供应商' : '停用推送供应商', 'push_provider', adapter.code);
+      ok(res, result);
+    } catch (error) {
+      fail(res, 400, error.message || '切换供应商状态失败');
+    }
   });
 
   app.get('/api/v2/dashboard/me', requireAuth, (req, res) => {

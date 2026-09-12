@@ -195,6 +195,7 @@ mountApiV2Routes(app, {
   notificationRepository,
   subscriptionStore,
   preferenceStore,
+  providerConfigStore,
   providerRegistry,
   broadcast,
   audit: auditLog,

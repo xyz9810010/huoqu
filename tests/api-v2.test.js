@@ -688,3 +688,197 @@ test('v2 区域：被客户地址引用时不允许删除，写接口仅管理�
 
   token = adminToken;
 });
+
+test('v2 员工管理：增改查 / 角色校验 / 停用保护 / 仅管理员', async () => {
+  const username = `v2-emp-${Date.now()}`;
+  const created = await request('POST', '/api/v2/employees', {
+    username,
+    password: 'strong-password-1',
+    name: 'v2 员工甲',
+    phone: '13800000001',
+    employeeNo: 'E-V2-1',
+    role: 'courier',
+    region: '义乌北苑'
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body).slice(0, 200));
+  const employee = created.body.data.employee;
+  assert.equal(employee.username, username);
+  assert.equal(employee.name, 'v2 员工甲');
+  assert.equal(employee.role, 'courier');
+  assert.equal(employee.status, 'active');
+  assert.ok(employee.courierId, '取件员角色必须自动建档案');
+  const employeeId = employee.id;
+
+  const weakPassword = await request('POST', '/api/v2/employees', {
+    username: `${username}-weak`, password: '123', name: 'v2 弱密码', role: 'cs'
+  });
+  assert.equal(weakPassword.status, 400);
+  assert.match(weakPassword.body.error, /密码/);
+
+  const dupe = await request('POST', '/api/v2/employees', {
+    username, password: 'strong-password-2', name: 'v2 重名', role: 'cs'
+  });
+  assert.equal(dupe.status, 400);
+  assert.match(dupe.body.error, /已存在/);
+
+  const badRole = await request('POST', '/api/v2/employees', {
+    username: `${username}-role`, password: 'strong-password-3', name: 'v2 角色', role: 'boss'
+  });
+  assert.equal(badRole.status, 400, 'Android 只接受 canonical 角色');
+
+  const filtered = await request('GET', '/api/v2/employees?role=courier');
+  assert.equal(filtered.status, 200);
+  assert.equal(Array.isArray(filtered.body.data.items), true);
+  assert.equal(filtered.body.data.items.every(item => item.role === 'courier'), true);
+  assert.equal(filtered.body.data.items.some(item => item.id === employeeId), true);
+
+  const updated = await request('PUT', `/api/v2/employees/${employeeId}`, {
+    name: 'v2 员工乙',
+    phone: '13800000002',
+    employeeNo: 'E-V2-2',
+    role: 'cs'
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.data.employee.name, 'v2 员工乙');
+  assert.equal(updated.body.data.employee.role, 'cs');
+  assert.equal(updated.body.data.employee.employeeNo, 'E-V2-2');
+
+  const login = await request('POST', '/api/v2/auth/login', {
+    username, password: 'strong-password-1'
+  }, false);
+  assert.equal(login.status, 200, '改名后原密码仍可登录');
+
+  const disabled = await request('PUT', `/api/v2/employees/${employeeId}/status`, { status: 'disabled' });
+  assert.equal(disabled.status, 200);
+  assert.equal(disabled.body.data.employee.status, 'disabled');
+
+  const blockedLogin = await request('POST', '/api/v2/auth/login', {
+    username, password: 'strong-password-1'
+  }, false);
+  assert.equal(blockedLogin.status, 401, '停用账号不能登录');
+
+  const reenabled = await request('PUT', `/api/v2/employees/${employeeId}/status`, { status: 'active' });
+  assert.equal(reenabled.status, 200);
+  assert.equal(reenabled.body.data.employee.status, 'active');
+
+  const selfBlocks = await request('PUT', '/api/v2/employees/' + '00000000-0000-0000-0000-000000000000/status', {
+    status: 'disabled'
+  });
+  assert.equal(selfBlocks.status, 404);
+
+  const me = await request('GET', '/api/v2/me');
+  const adminId = me.body.data.user.id;
+  const selfDisable = await request('PUT', `/api/v2/employees/${adminId}/status`, { status: 'disabled' });
+  assert.equal(selfDisable.status, 400);
+  assert.match(selfDisable.body.error, /当前登录/);
+
+  const csUser = await request('POST', '/api/v2/employees', {
+    username: `${username}-cs`, password: 'strong-password-4', name: 'v2 权限客服', role: 'cs'
+  });
+  assert.equal(csUser.status, 201);
+  const csLogin = await request('POST', '/api/v2/auth/login', {
+    username: `${username}-cs`, password: 'strong-password-4'
+  }, false);
+  assert.equal(csLogin.status, 200);
+  token = csLogin.body.data.token;
+  const csList = await request('GET', '/api/v2/employees');
+  assert.equal(csList.status, 403);
+  const csCreate = await request('POST', '/api/v2/employees', {
+    username: 'v2-cs-created', password: 'strong-password-5', name: 'v2 客服建的', role: 'cs'
+  });
+  assert.equal(csCreate.status, 403);
+  token = adminToken;
+});
+
+test('v2 操作日志：管理员分页查询与过滤，客服不可见', async () => {
+  const listed = await request('GET', '/api/v2/logs?page=1&pageSize=5');
+  assert.equal(listed.status, 200);
+  assert.equal(Array.isArray(listed.body.data.items), true);
+  assert.equal(listed.body.data.page, 1);
+  assert.ok(listed.body.data.total >= 1, '前面的写操作应该留下审计日志');
+  const entry = listed.body.data.items[0];
+  for (const key of ['id', 'userName', 'action', 'targetType', 'targetId', 'detail', 'createdAt']) {
+    assert.ok(key in entry, `日志字段缺少 ${key}`);
+  }
+
+  const areaOnly = await request('GET', '/api/v2/logs?targetType=area&page=1&pageSize=10');
+  assert.equal(areaOnly.status, 200);
+  assert.equal(areaOnly.body.data.items.every(item => item.targetType === 'area'), true);
+
+  const keyword = await request('GET', '/api/v2/logs?keyword=区域&page=1&pageSize=10');
+  assert.equal(keyword.status, 200);
+  assert.ok(keyword.body.data.items.every(item => item.action.includes('区域') || item.detail.includes('区域')));
+
+  const tooBig = await request('GET', '/api/v2/logs?page=1&pageSize=500');
+  assert.equal(tooBig.status, 200);
+  assert.equal(tooBig.body.data.pageSize, 100, 'pageSize 上限 100');
+
+  const csUser = await request('POST', '/api/v2/employees', {
+    username: `v2-log-cs-${Date.now()}`, password: 'strong-password-6', name: 'v2 日志客服', role: 'cs'
+  });
+  assert.equal(csUser.status, 201);
+  const csLogin = await request('POST', '/api/v2/auth/login', {
+    username: csUser.body.data.employee.username, password: 'strong-password-6'
+  }, false);
+  assert.equal(csLogin.status, 200);
+  token = csLogin.body.data.token;
+  const forbidden = await request('GET', '/api/v2/logs');
+  assert.equal(forbidden.status, 403);
+  token = adminToken;
+});
+
+test('v2 推送供应商：列表隐藏密钥 / 未知供应商 404 / 测试与启停 / 仅管理员', async () => {
+  const listed = await request('GET', '/api/v2/push-providers');
+  assert.equal(listed.status, 200, JSON.stringify(listed.body).slice(0, 300));
+  const providers = listed.body.data.items;
+  assert.equal(Array.isArray(providers), true);
+  const huawei = providers.find(item => item.code === 'huawei');
+  assert.ok(huawei, '应包含 huawei 供应商');
+  assert.equal(Array.isArray(huawei.credentialSchema), true);
+  const serviceAccount = huawei.credentialSchema.find(field => field.key === 'serviceAccount');
+  assert.equal(serviceAccount.secret, true);
+  assert.equal('value' in (huawei.fields.serviceAccount || {}), false, '密钥字段不得回传明文');
+
+  const missing = await request('PUT', '/api/v2/push-providers/not-a-provider', {
+    credentials: { anything: 'x' }
+  });
+  assert.equal(missing.status, 404);
+
+  const unknownField = await request('PUT', '/api/v2/push-providers/huawei', {
+    credentials: { notAllowed: 'x' }
+  });
+  assert.equal(unknownField.status, 400);
+
+  const notConfiguredTest = await request('POST', '/api/v2/push-providers/huawei/test');
+  assert.equal(notConfiguredTest.status, 400);
+
+  // 保存一份明显的假凭据：校验必须失败，但仍要返回结构化错误（不泄露密钥）
+  const badCredentials = await request('PUT', '/api/v2/push-providers/huawei', {
+    credentials: { projectId: 'not-a-project', serviceAccount: '{"key_id":"x"}' }
+  });
+  assert.equal([400, 503].includes(badCredentials.status), true, JSON.stringify(badCredentials.body));
+  assert.equal(typeof badCredentials.body.error, 'string');
+  assert.equal('credentials' in badCredentials.body, false, '错误响应不得回传凭据');
+
+  const providerView = await request('GET', '/api/v2/push-providers');
+  const huaweiAfterSave = providerView.body.data.items.find(item => item.code === 'huawei');
+  assert.equal('value' in (huaweiAfterSave.fields.serviceAccount || {}), false, '密钥字段永不回传明文');
+  assert.equal(
+    typeof huaweiAfterSave.fields.serviceAccount.configured,
+    'boolean',
+    '只暴露"是否已配置"'
+  );
+
+  const csUser = await request('POST', '/api/v2/employees', {
+    username: `v2-provider-cs-${Date.now()}`, password: 'strong-password-7', name: 'v2 供应商客服', role: 'cs'
+  });
+  assert.equal(csUser.status, 201);
+  const csLogin = await request('POST', '/api/v2/auth/login', {
+    username: csUser.body.data.employee.username, password: 'strong-password-7'
+  }, false);
+  assert.equal(csLogin.status, 200);
+  token = csLogin.body.data.token;
+  assert.equal((await request('GET', '/api/v2/push-providers')).status, 403);
+  assert.equal((await request('PUT', '/api/v2/push-providers/huawei', { credentials: {} })).status, 403);
+  token = adminToken;
+});

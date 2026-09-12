@@ -569,7 +569,10 @@ function mountApiV2Routes(app, deps) {
     Boolean(db.prepare('SELECT 1 FROM areas WHERE name=? AND id<>?').get(name, excludeId));
 
   const workerIdsOf = ids => [...new Set(
-    (Array.isArray(ids) ? ids : []).map(value => String(value || '').trim()).filter(Boolean)
+    (Array.isArray(ids) ? ids : [])
+      .filter(value => value != null)
+      .map(value => String(value).trim())
+      .filter(Boolean)
   )];
 
   /**

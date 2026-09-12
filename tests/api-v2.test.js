@@ -689,6 +689,51 @@ test('v2 区域：被客户地址引用时不允许删除，写接口仅管理�
   token = adminToken;
 });
 
+test('v2 看板区间语义：昨日只统计昨日数据', async () => {
+  // 真机验收发现：range 之前只有"起始日期"下界，导致"昨日"把今天的数据也算进去。
+  const now = new Date(Date.now() + 8 * 3600 * 1000);
+  const pad = n => (n < 10 ? '0' + n : String(n));
+  const dayStr = offsetDays => {
+    const d = new Date(now.getTime());
+    d.setUTCDate(d.getUTCDate() + offsetDays);
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  };
+  const marker = `区间口径-${Date.now()}`;
+  const board = async range => {
+    const res = await request('GET', `/api/v2/dashboard/board?range=${range}`);
+    assert.equal(res.status, 200, JSON.stringify(res.body).slice(0, 200));
+    return res.body.data.pendingCount;
+  };
+  const seed = async date => {
+    const created = await request('POST', '/api/v2/tasks', {
+      customerName: `${marker}-${date}`,
+      address: '义乌市区间口径 1 号',
+      items: [{ waybillNo: `WB-RANGE-${date}-${Math.random().toString(36).slice(2, 8)}`, pieces: 1 }]
+    });
+    assert.equal(created.status, 201, JSON.stringify(created.body).slice(0, 200));
+    return created.body.data.task.id;
+  };
+
+  const beforeToday = await board('today');
+  const beforeYesterday = await board('yesterday');
+
+  // 今天建一单：今日 +1，昨日不受影响
+  await seed(dayStr(0));
+  assert.equal(await board('today'), beforeToday + 1, '今天创建的任务应计入今日');
+  assert.equal(await board('yesterday'), beforeYesterday, '今天创建的任务不应计入昨日');
+
+  // 昨天的单（回填创建时间）：昨日 +1，今日不变
+  const yesterdayId = await seed(dayStr(-1));
+  const path = require('node:path');
+  const Database = require('better-sqlite3');
+  const raw = new Database(path.join(tempDir, 'app.db'));
+  raw.prepare('UPDATE pickup_tasks SET created_at=? WHERE id=?').run(`${dayStr(-1)} 03:00:00`, yesterdayId);
+  raw.close();
+
+  assert.equal(await board('yesterday'), beforeYesterday + 1, '昨天创建的任务应计入昨日');
+  assert.equal(await board('today'), beforeToday + 1, '昨天创建的任务不应计入今日');
+});
+
 test('v2 员工管理：增改查 / 角色校验 / 停用保护 / 仅管理员', async () => {
   const username = `v2-emp-${Date.now()}`;
   const created = await request('POST', '/api/v2/employees', {

@@ -564,20 +564,29 @@ app.post('/api/sync/match/:id', requireAuth, requireStaff, (req, res) => {
   res.json({ matched: found.matched, finalWeight: found.finalWeight });
 });
 
-function dashboardRangeStart(range) {
-  if (range === 'today') return todayStr();
+// 区间口径：start 下界 + 可选 end 上界（仅"昨日"需要，避免把今天的数据算进昨天）。
+function dashboardRange(range) {
+  if (range === 'today') return { start: todayStr(), end: '' };
   if (range === 'yesterday') {
     const d = bjNow(); d.setUTCDate(d.getUTCDate() - 1);
-    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+    const day = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+    return { start: day, end: day };
   }
-  if (range === 'week') return startOfWeek();
-  if (range === 'month') return todayStr().slice(0, 8) + '01';
-  return '';
+  if (range === 'week') return { start: startOfWeek(), end: '' };
+  if (range === 'month') return { start: todayStr().slice(0, 8) + '01', end: '' };
+  return { start: '', end: '' };
 }
 function dashboardWhere(range, alias = 't') {
   // created_at 为 UTC 文本：先 +8 小时换算为北京日期再按天过滤
-  const start = dashboardRangeStart(range);
-  return start ? { sql: `WHERE date(${alias}.created_at,'+8 hours')>=?`, params: [start] } : { sql: '', params: [] };
+  const { start, end } = dashboardRange(range);
+  if (!start) return { sql: '', params: [] };
+  if (end) {
+    return {
+      sql: `WHERE date(${alias}.created_at,'+8 hours')>=? AND date(${alias}.created_at,'+8 hours')<=?`,
+      params: [start, end]
+    };
+  }
+  return { sql: `WHERE date(${alias}.created_at,'+8 hours')>=?`, params: [start] };
 }
 
 app.get('/api/dashboard/board', requireAuth, (req, res) => {

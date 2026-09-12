@@ -148,11 +148,12 @@ test('dashboard day filter attributes Beijing-midnight tasks to the Beijing day'
 
   const afterT = count(await board('today'));
   const afterY = count(await board('yesterday'));
-  // B 从今天移出（today -1）；A 北京今日 00:30 仍属 today。
-  // yesterday 端点按「北京日 >= 昨日」过滤（含今天），两任务均未离开该窗口，计数不变。
-  // 若按 UTC 文本日期直接截断（旧缺陷），A 会因文本日期在昨天而被漏出 today。
+  // A：UTC 昨日 16:30 = 北京今日 00:30 → 属于 today；B：UTC 昨日 15:59 = 北京昨日 23:59 → 属于 yesterday。
+  // 修正区间口径后：B 从 today 移到 yesterday（today -1 / yesterday +1）；
+  // A 的文本日期虽在 UTC 昨日，但北京时刻是今天 00:30，仍留在 today。
+  // 若按 UTC 文本日期直接截断（旧缺陷），A 会被漏出 today。
   assert.equal(afterT, bT - 1, '北京今日 00:30 的任务必须计入 today');
-  assert.equal(afterY, bY, '北京昨日 23:59 的任务保持在北京日期窗口内');
+  assert.equal(afterY, bY + 1, '北京昨日 23:59 的任务应计入 yesterday 且不再出现在 today');
 });
 
 test('task API rejects completion before pickup starts and then completes through valid transitions', async () => {

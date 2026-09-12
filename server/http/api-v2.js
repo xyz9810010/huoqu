@@ -102,21 +102,35 @@ function mountApiV2Routes(app, deps) {
     d.setUTCDate(d.getUTCDate() - day + 1);
     return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
   };
-  const dashboardRangeStart = range => {
-    if (range === 'today') return todayStr();
+  /**
+   * 区间口径：start 为下界，end 为可选上界（仅"昨日"需要）。
+   *
+   * 真机验收发现：原先只取下界，导致"昨日"把今天创建的任务也算进去。
+   * now 与 end 都按北京日期计算（与存储的 +8 小时换算保持一致）。
+   */
+  const dashboardRange = range => {
     if (range === 'yesterday') {
       const d = bjNow();
       d.setUTCDate(d.getUTCDate() - 1);
-      return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      const day = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      return { start: day, end: day };
     }
-    if (range === 'week') return startOfWeek();
-    if (range === 'month') return `${todayStr().slice(0, 8)}01`;
-    return '';
+    if (range === 'today') return { start: todayStr(), end: '' };
+    if (range === 'week') return { start: startOfWeek(), end: '' };
+    if (range === 'month') return { start: `${todayStr().slice(0, 8)}01`, end: '' };
+    return { start: '', end: '' };
   };
   const dashboardWhere = (range, alias = 't') => {
     // created_at 为 UTC 文本：先 +8 小时换算为北京日期再按天过滤
-    const start = dashboardRangeStart(range);
-    return start ? { sql: `WHERE date(${alias}.created_at,'+8 hours')>=?`, params: [start] } : { sql: '', params: [] };
+    const { start, end } = dashboardRange(range);
+    if (!start) return { sql: '', params: [] };
+    if (end) {
+      return {
+        sql: `WHERE date(${alias}.created_at,'+8 hours')>=? AND date(${alias}.created_at,'+8 hours')<=?`,
+        params: [start, end]
+      };
+    }
+    return { sql: `WHERE date(${alias}.created_at,'+8 hours')>=?`, params: [start] };
   };
   const num = v => {
     const n = parseFloat(v);

@@ -804,6 +804,28 @@ body {
     min-height: 44px;
     padding: 0 20px;
   }
+  /* nowrap 变体：窄屏也保持标题与操作同一行（如「我的任务」） */
+  .page-head--nowrap {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: nowrap;
+  }
+  .page-head--nowrap .page-head__main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .page-head--nowrap .page-head__actions {
+    width: auto;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: var(--sp-2);
+  }
+  .page-head--nowrap .page-head__actions > .el-button--primary {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 12px;
+  }
   .page-description {
     display: none;
   }

@@ -1,6 +1,6 @@
 <template>
   <div @touchstart="onTouchStart" @touchend="onTouchEnd">
-    <PageHead title="我的任务" sticky>
+    <PageHead title="我的任务" sticky nowrap>
       <template #actions>
         <span class="count qj-num">{{ activeLabel }} {{ shown.length }} 单</span>
         <el-button type="primary" @click="router.push('/worker/dispatch')">新增订单</el-button>
@@ -193,6 +193,7 @@ onUnmounted(() => liveRefresh.dispose())
   font-weight: 600;
   color: var(--qj-text-2);
   margin-right: var(--sp-1);
+  white-space: nowrap;
 }
 .status-tabs {
   margin-bottom: var(--sp-3);

@@ -1,5 +1,5 @@
 <template>
-  <header class="page-head" :class="{ 'page-head--sticky': sticky }">
+  <header class="page-head" :class="{ 'page-head--sticky': sticky, 'page-head--nowrap': nowrap }">
     <div class="page-head__main">
       <h2 class="page-title">{{ title }}</h2>
       <p v-if="description" class="page-description">{{ description }}</p>
@@ -15,7 +15,9 @@ withDefaults(defineProps<{
   title: string
   description?: string
   sticky?: boolean
-}>(), { description: '', sticky: false })
+  /** 窄屏也保持标题与操作同一行（用于操作不多、纵向空间紧张的页面） */
+  nowrap?: boolean
+}>(), { description: '', sticky: false, nowrap: false })
 </script>
 
 <style scoped>

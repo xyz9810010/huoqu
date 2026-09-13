@@ -6,10 +6,12 @@
 :root {
   /* ---------- 主色：墨色（承担文字与结构层级，不再用于大面积填充） ---------- */
   --qj-primary: #0f172a;        /* 品牌主色：深墨（文字/强调） */
-  /* 实色按钮底：柔和青绿，饱和度压到 26%（原近黑 #111c30 对比 17:1 过重；
-   * 高饱和青绿 #0f766e 也偏刺眼）。最终白字 5.98:1，久看舒适。 */
-  --qj-primary-btn: #3f6b68;
-  --qj-primary-btn-hover: #355b58;
+  /* v6：实色填充一律取消，实色令牌退为「浅底按钮的描边色」。
+   * 浅底 + 描边 + 深色字：文字对比 8.64:1，且界面上不再出现深色块。 */
+  --qj-primary-btn: #5f8d89;    /* 主按钮描边（对浅底 3.29:1，满足非文本 UI） */
+  --qj-primary-btn-hover: #4f7d79;
+  --qj-btn-bg: #eaf3f2;         /* 主按钮浅底 */
+  --qj-btn-bg-hover: #dcebe9;
   --qj-primary-hover: #1e293b;
   --qj-primary-text: #0f172a;   /* 深墨文字令牌 */
   --qj-primary-bg: #eef2f7;     /* 浅墨底（用于浅底按钮/选中底） */
@@ -41,17 +43,17 @@
   --qj-chrome-active-text: #0b4f5c; /* 7.87:1 */
   --qj-chrome-active-icon: #0891b2;
 
-  /* ---------- 深色顶栏（v5：提亮 + 降饱和，久看不刺眼）----------
-   * 顶栏从 #164e63 提到 #2a6472（白底对比 9.11 → 6.64），并与按钮同族但更浅，
-   * 保证层次：顶栏(最深) > 按钮 > 浅色侧栏/内容区。
+  /* ---------- 顶栏（v6：大幅提亮 + 深色文字）----------
+   * 提亮到 #7cabbb 后白字只剩 2.5:1，**必须改用深色字**（这是提亮的硬约束）。
+   * 深青字 #0f2f38 对顶栏 5.66:1；顶栏对侧栏 2.3:1，仍是界面上最"重"的一层。
    */
-  --qj-bar: #2a6472;
-  --qj-bar-2: #336f7d;
-  --qj-bar-border: #1e4c58;
-  --qj-bar-text: #d8e3ea;           /* 5.0:1 */
-  --qj-bar-text-strong: #ffffff;    /* 6.64:1 */
-  --qj-bar-accent: #a5f3fc;
-  --qj-bar-accent-2: #67e8f9;       /* 4.57:1 */
+  --qj-bar: #7cabbb;
+  --qj-bar-2: #8ab5c3;
+  --qj-bar-border: #5d8f9e;
+  --qj-bar-text: #123a44;           /* 4.90:1 */
+  --qj-bar-text-strong: #0f2f38;    /* 5.66:1 */
+  --qj-bar-accent: #0a3f4a;         /* 实时点/强调 4.61:1 */
+  --qj-bar-accent-2: #0a3f4a;
 
   /* ---------- 中性色（内容区保持浅色，保证表格/对账可读） ---------- */
   --qj-bg: #eef1f6;             /* 冷调浅灰，带一点科技冷感 */
@@ -257,7 +259,11 @@ body {
   white-space: nowrap;
 }
 
-/* ===== 按钮 ===== */
+/* ===== 按钮：浅底 + 描边 + 深色字（v6，取消所有实色填充）=====
+ * 理由：实色填充是"看久了累"的主要来源。改为浅底描边后界面不再出现深色块，
+ * 文字对比反而更高（8.64:1 vs 之前实色的 5.98:1），描边单独满足 3:1 非文本要求。
+ * 注意：Element Plus 的按需样式在运行时注入，文档顺序晚于本文件，故最终绘制属性用 !important。
+ */
 .el-button {
   font-weight: 500;
   border-radius: var(--r-control);
@@ -268,59 +274,90 @@ body {
   min-height: 32px;
   padding: 0 12px;
 }
-/* 浅底主色按钮（plain/text/link）：墨色文字 + 冷灰底 */
-.el-button--primary.is-plain,
-.el-button--primary.is-text,
-.el-button--primary.is-link {
+
+/* 主按钮 */
+.el-button--primary {
+  --el-button-bg-color: var(--qj-btn-bg);
+  --el-button-border-color: var(--qj-primary-btn);
   --el-button-text-color: var(--qj-primary-text);
+  --el-button-hover-bg-color: var(--qj-btn-bg-hover);
+  --el-button-hover-border-color: var(--qj-primary-btn-hover);
+  --el-button-hover-text-color: var(--qj-primary-text);
+  font-weight: 600;
+}
+.el-button--primary:not(.is-text):not(.is-link):not(.is-disabled) {
+  background-color: var(--qj-btn-bg) !important;
+  background-image: none !important;
+  border-color: var(--qj-primary-btn) !important;
+  color: var(--qj-primary-text) !important;
+  box-shadow: none;
+}
+.el-button--primary:not(.is-text):not(.is-link):not(.is-disabled):hover,
+.el-button--primary:not(.is-text):not(.is-link):not(.is-disabled):focus {
+  background-color: var(--qj-btn-bg-hover) !important;
+  border-color: var(--qj-primary-btn-hover) !important;
   color: var(--qj-primary-text) !important;
 }
-.el-button--primary.is-plain {
-  --el-button-bg-color: var(--qj-primary-bg);
-  --el-button-border-color: var(--qj-border-strong);
-  background-color: var(--qj-primary-bg) !important;
-  border-color: var(--qj-border-strong) !important;
+.el-button--primary:not(.is-text):not(.is-link):not(.is-disabled):focus-visible {
+  box-shadow: var(--qj-focus);
 }
-.el-button--primary.is-plain:hover,
-.el-button--primary.is-plain:focus {
-  background-color: var(--qj-primary-bg-hover) !important;
+
+/* 成功按钮 */
+.el-button--success {
+  --el-button-text-color: var(--qj-success-text);
+  --el-button-border-color: #55906a;
+  --el-button-hover-text-color: var(--qj-success-text);
+  --el-button-hover-border-color: #3f7854;
+}
+.el-button--success:not(.is-text):not(.is-link):not(.is-disabled) {
+  background-color: #eaf6ee !important;
+  background-image: none !important;
+  border-color: #55906a !important;
+  color: var(--qj-success-text) !important;
+  box-shadow: none;
+}
+.el-button--success:not(.is-text):not(.is-link):not(.is-disabled):hover,
+.el-button--success:not(.is-text):not(.is-link):not(.is-disabled):focus {
+  background-color: #dcefe2 !important;
+  border-color: #3f7854 !important;
+  color: var(--qj-success-text) !important;
+}
+
+/* 危险按钮 */
+.el-button--danger {
+  --el-button-text-color: var(--qj-danger-text);
+  --el-button-border-color: #bd7676;
+  --el-button-hover-text-color: var(--qj-danger-text);
+  --el-button-hover-border-color: #a85454;
+}
+.el-button--danger:not(.is-text):not(.is-link):not(.is-disabled) {
+  background-color: #fdeeee !important;
+  background-image: none !important;
+  border-color: #bd7676 !important;
+  color: var(--qj-danger-text) !important;
+  box-shadow: none;
+}
+.el-button--danger:not(.is-text):not(.is-link):not(.is-disabled):hover,
+.el-button--danger:not(.is-text):not(.is-link):not(.is-disabled):focus {
+  background-color: #fadede !important;
+  border-color: #a85454 !important;
+  color: var(--qj-danger-text) !important;
+}
+
+/* plain 变体：统一走浅底描边，不再单独加深 */
+.el-button--primary.is-plain {
+  background-color: var(--qj-btn-bg) !important;
   border-color: var(--qj-primary-btn) !important;
   color: var(--qj-primary-text) !important;
 }
-/* 实色主按钮：深墨渐变 + 青色描边光，科技感来源之一 */
-.el-button--primary {
-  --el-button-bg-color: var(--qj-primary-btn);
-  --el-button-border-color: var(--qj-primary-btn);
-  --el-button-hover-bg-color: var(--qj-primary-btn-hover);
-  --el-button-hover-border-color: var(--qj-primary-btn-hover);
-  --el-button-active-bg-color: var(--qj-primary-btn-hover);
-  --el-button-active-border-color: var(--qj-primary-btn-hover);
+.el-button--primary.is-plain:hover,
+.el-button--primary.is-plain:focus {
+  background-color: var(--qj-btn-bg-hover) !important;
+  border-color: var(--qj-primary-btn-hover) !important;
 }
-.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled) {
-  background-image: linear-gradient(180deg, #487673 0%, var(--qj-primary-btn) 100%) !important;
-  background-color: var(--qj-primary-btn) !important;
-  border-color: #355b58 !important;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 1px 2px rgba(53, 91, 88, 0.16);
-}
-.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):hover,
-.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):focus {
-  background-image: linear-gradient(180deg, #3d6461 0%, var(--qj-primary-btn-hover) 100%) !important;
-  background-color: var(--qj-primary-btn-hover) !important;
-  border-color: #2c4d4a !important;
-}
-.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):focus-visible {
-  box-shadow: var(--qj-focus);
-}
-.el-button--success:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled) {
-  --el-button-bg-color: var(--qj-success-text);
-  --el-button-border-color: var(--qj-success-text);
-  background-color: var(--qj-success-text) !important;
-  border-color: var(--qj-success-text) !important;
-}
-.el-button--success:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):hover,
-.el-button--success:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):focus {
-  background-color: #116632 !important;
-  border-color: #116632 !important;
+.el-button--primary.is-text,
+.el-button--primary.is-link {
+  color: var(--qj-primary-text) !important;
 }
 .el-button--danger:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled) {
   --el-button-bg-color: var(--qj-danger-text);
@@ -350,14 +387,16 @@ body {
   color: var(--qj-muted) !important;
 }
 
-/* ===== 单选/分段按钮组（看板时间范围、任务类型）===== */
+/* ===== 单选/分段按钮组（看板时间范围、任务类型）=====
+ * v6：也取消深色填充，改用深一档的浅底 + 深青字 + 加粗，靠"底色+字重"表达选中。
+ */
 .el-radio-button__original-radio:checked + .el-radio-button__inner,
 .el-radio-button.is-active .el-radio-button__inner {
-  /* 选中态用深墨底 + 白字（14.6:1），蓝色不再出现在分段控件上 */
-  background-color: var(--qj-primary-btn) !important;
+  background-color: var(--qj-btn-bg-hover) !important;
   border-color: var(--qj-primary-btn) !important;
   box-shadow: -1px 0 0 0 var(--qj-primary-btn) !important;
-  color: #fff !important;
+  color: var(--qj-primary-text) !important;
+  font-weight: 600;
 }
 .el-radio-group .el-radio-button__inner {
   transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
@@ -406,7 +445,10 @@ body {
   color: var(--qj-text) !important;
 }
 .el-pagination.is-background .el-pager li.is-active {
-  background-color: var(--qj-primary-btn) !important;
+  /* 分页当前页也用浅底 + 深青字，与按钮体系一致 */
+  background-color: var(--qj-btn-bg-hover) !important;
+  color: var(--qj-primary-text) !important;
+  font-weight: 600;
 }
 .el-tabs__active-bar {
   background-color: var(--qj-accent-strong) !important;

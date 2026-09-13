@@ -121,9 +121,9 @@ async function collectStyleFacts(page) {
     }
   })
   if (facts.rootVar !== '#0f172a') problems.push(`主题主色变量异常: ${facts.rootVar}`)
-  // 主按钮底为柔和青绿（白字 5.98:1）。历史上曾用亮蓝(#3370ff，4.28:1，不达 AA)
-  // 与近黑(#111c30，17:1，对比过重久看疲劳)，现取低饱和中间档。
-  if (facts.buttonBg !== 'rgb(63, 107, 104)') problems.push(`主按钮背景异常: ${facts.buttonBg}`)
+  // 主按钮为「浅底 #eaf3f2 + 描边 + 深墨字」（文字对比 8.64:1，界面不再有深色色块）。
+  // 演进：亮蓝 #3370ff(白字4.28:1，不达 AA) → 近黑 #111c30(17:1，对比过重) → 低饱和实色 #3f6b68 → 浅底描边。
+  if (facts.buttonBg !== 'rgb(234, 243, 242)') problems.push(`主按钮背景异常: ${facts.buttonBg}`)
   if (!facts.hasMessageCss) problems.push('缺失 el-message 样式')
   if (!facts.hasMessageBoxCss) problems.push('缺失 el-message-box 样式（TaskDetail 弹窗）')
   if (!facts.hasOverlayCss) problems.push('缺失 el-overlay 样式')

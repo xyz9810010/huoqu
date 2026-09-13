@@ -927,3 +927,81 @@ test('v2 推送供应商：列表隐藏密钥 / 未知供应商 404 / 测试与�
   assert.equal((await request('PUT', '/api/v2/push-providers/huawei', { credentials: {} })).status, 403);
   token = adminToken;
 });
+
+// ============ v1↔v2 补齐：客户字段对齐（含历史别名） ============
+test('v2 客户列表字段与 v1 对齐（含 taskCount 等与 contactName 别名）', async () => {
+  const created = await request('POST', '/api/v2/customers', {
+    name: `v2 字段对齐客户 ${Date.now()}`, contactName: '张三', contactPhone: '13800000001', remark: '备注X'
+  });
+  assert.equal(created.status, 201);
+
+  const list = await request('GET', '/api/v2/customers?page=1&pageSize=100');
+  assert.equal(list.status, 200);
+  const row = list.body.data.items.find(item => item.name.startsWith('v2 字段对齐客户'));
+  assert.ok(row, '新建客户应出现在列表中');
+
+  // 与 v1 一致：主名 + 别名 + 订单统计
+  for (const key of ['contactName', 'contactPhone', 'remark', 'taskCount', 'openTaskCount', 'completedTaskCount', 'addressCount', 'mainCsId']) {
+    assert.equal(key in row, true, `v2 客户列表应包含字段 ${key}`);
+  }
+  assert.equal(row.contactName, '张三');
+  assert.equal(row.contactPhone, '13800000001');
+  assert.equal(row.remark, '备注X');
+  assert.equal(row.taskCount, 0);
+
+  // v1 同名接口（列表）的字段集合应被完全覆盖 —— 这是"补齐"的判据。
+  // 注意 v1 /api/customers 的 size 默认值是 1（且 size=0 会因 `|| 1` 也变成 1），
+  // 取全量必须显式传一个足够大的 size。
+  const v1 = await request('GET', '/api/customers?size=200');
+  assert.equal(v1.status, 200);
+  const v1Arr = Array.isArray(v1.body) ? v1.body : (v1.body.list || v1.body.items || []);
+  const v1Row = v1Arr.find(item => item.name.startsWith('v2 字段对齐客户'));
+  assert.ok(v1Row, `v1 列表未包含新建客户；v1 条数=${v1Arr.length}`);
+  const missing = Object.keys(v1Row).filter(key => !(key in row));
+  assert.deepEqual(missing, [], `v2 客户列表缺字段: ${missing.join(', ')}`);
+  assert.equal(row.mainCsName, '', 'v2 列表应带 mainCsName（移动端列表需要）');
+});
+
+// ============ v1↔v2 补齐：取件员端接口 ============
+test('v2 取件员端接口：我的任务 / 可选客户 / 取件员下拉', async () => {
+  // 下拉：与 v1 /api/employees/workers 语义一致
+  const workers = await request('GET', '/api/v2/employees/workers');
+  assert.equal(workers.status, 200);
+  assert.ok(Array.isArray(workers.body.data.items));
+  if (workers.body.data.items.length) {
+    const w = workers.body.data.items[0];
+    for (const key of ['id', 'userId', 'name', 'region']) {
+      assert.equal(key in w, true, `取件员下拉应含 ${key}`);
+    }
+    assert.equal(w.id, w.userId);
+  }
+
+  // 建一个取件员账号并登录（v2 的 employees 服务使用存储角色值 courier）
+  const workerName = `v2 取件员 ${Date.now()}`;
+  const emp = await request('POST', '/api/v2/employees', {
+    username: `v2-worker-${Date.now()}`, password: 'strong-password-7', name: workerName, role: 'courier'
+  });
+  assert.equal(emp.status, 201, JSON.stringify(emp.body));
+  const workerLogin = await request('POST', '/api/v2/auth/login', {
+    username: emp.body.data.employee.username, password: 'strong-password-7'
+  }, false);
+  assert.equal(workerLogin.status, 200);
+  const workerToken = workerLogin.body.data.token;
+
+  const saved = token;
+  token = workerToken;
+  const mine = await request('GET', '/api/v2/worker/tasks');
+  assert.equal(mine.status, 200);
+  assert.ok(Array.isArray(mine.body.data.items), '我的任务应返回 {data:{items}}');
+
+  const options = await request('GET', '/api/v2/worker/customer-options');
+  assert.equal(options.status, 200);
+  assert.ok(Array.isArray(options.body.data.items), '可选客户应返回 {data:{items}}');
+
+  // 取件员不应看到管理员专属的员工下拉以外的越权数据（此处仅验证接口可用）
+  token = saved;
+
+  // 非取件员调用 customer-options 应 403（与 v1 一致）
+  const asAdmin = await request('GET', '/api/v2/worker/customer-options');
+  assert.equal(asAdmin.status, 403);
+});

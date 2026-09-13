@@ -12,9 +12,12 @@ const { withIdempotency } = require('./idempotency');
 const { createUploader } = require('./uploads');
 const { utcText } = require('../time');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
+const views = require('./views');
+const { rowCourier, employeeView, customerListView, maskName, locateTrackTarget } = views;
 const fc = require('../security/field-crypto');
 const loginPolicy = require('../security/login-policy');
 const { createEmployeeService } = require('../operations/employees');
+const { workerCustomerOptions } = require('./worker-customer-options');
 
 const TIME_TEXT = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -136,7 +139,6 @@ function mountApiV2Routes(app, deps) {
     const n = parseFloat(v);
     return isNaN(n) ? 0 : n;
   };
-  const rowCourier = c => ({ id: c.id, name: c.name, region: c.region || '', commissionRate: c.commission_rate || 0 });
   const recordScope = user => {
     if (user.role === 'admin' || user.role === 'cs') return { cond: '', params: {} };
     return { cond: 'r.courier_id = :myCid', params: { myCid: user.courier_id || '__none__' } };
@@ -434,6 +436,29 @@ function mountApiV2Routes(app, deps) {
     }
   });
 
+  // ---- 取件员端：我的任务（等价 v1 GET /api/worker/tasks）----
+  // 取件员强制只看自己；其它角色给空列表（与 v1 的 '__none__' 语义一致，不报错）
+  app.get('/api/v2/worker/tasks', requireAuth, (req, res) => {
+    const list = tasks.listTasks({
+      workerId: req.user.courier_id || '__none__',
+      status: String(req.query.status || '')
+    }).map(task => isoTask(task));
+    ok(res, { items: list, total: list.length });
+  });
+
+  // ---- 取件员端：可选客户（用于移动端新建单据时的客户下拉）----
+  app.get('/api/v2/worker/customer-options', requireAuth, (req, res) => {
+    if (req.user.role !== 'courier') return fail(res, 403, '仅取件员可用');
+    ok(res, { items: workerCustomerOptions(db, req.user.courier_id, req.query.search) });
+  });
+
+  // ---- 取件员下拉（id/userId/name/region）：等价 v1 GET /api/employees/workers ----
+  app.get('/api/v2/employees/workers', requireAuth, (req, res) => {
+    const items = db.prepare('SELECT * FROM couriers ORDER BY name').all()
+      .map(c => ({ id: c.id, userId: c.id, name: c.name, region: c.region || '' }));
+    ok(res, { items });
+  });
+
   // ============ 客户（只读检索对取件员开放，编辑仅客服/管理员） ============
   app.get('/api/v2/customers', requireAuth, (req, res) => {
     const { page, pageSize } = pageOf(req.query);
@@ -453,7 +478,14 @@ function mountApiV2Routes(app, deps) {
         WHERE customer_id IN (${rows.map(() => '?').join(',')}) GROUP BY customer_id`).all(...rows.map(row => row.id))
         .map(count => [count.customer_id, count.n])
       : []);
-    const items = rows.map(row => customerView(db, row, countMap.get(row.id) || 0));
+    // 主客服姓名：一次 JOIN 批量取，避免逐行查询
+    const nameMap = new Map(rows.length
+      ? db.prepare(`SELECT c.id,u.name AS cs FROM customers c LEFT JOIN users u ON u.id=c.main_cs_id
+        WHERE c.id IN (${rows.map(() => '?').join(',')})`).all(...rows.map(row => row.id))
+        .map(r => [r.id, r.cs || ''])
+      : []);
+    // 与 v1 字段完全对齐（含 taskCount/openTaskCount/completedTaskCount、contactName 别名与 mainCsName）
+    const items = customerListView(db, rows, countMap, nameMap);
     ok(res, { items, total, page, pageSize });
   });
 

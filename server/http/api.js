@@ -14,6 +14,7 @@ const { workerTaskInput } = require('./worker-task-input');
 const { workerCustomerOptions } = require('./worker-customer-options');
 const { utcText, utcTextToBjText } = require('../time');
 const fc = require('../security/field-crypto');
+const views = require('./views');
 const loginPolicy = require('../security/login-policy');
 const { pinyin } = require('pinyin-pro');
 const { createAuditLogger } = require('../operations/audit');
@@ -125,24 +126,8 @@ const rowRecord = (r) => ({
   dispatcherId: r.dispatcher_id || '', dispatcherName: r.dispatcher_name || '',
   goodsImages: parseImages(r.goods_images), pickupImages: parseImages(r.pickup_images)
 });
-const rowCustomer = (c) => ({
-  id: c.id, customerNo: String(c.id || '').slice(0, 8), name: fc.decryptField(c.name),
-  contact: fc.decryptField(c.contact || ''), contactName: fc.decryptField(c.contact || ''), phone: fc.decryptField(c.phone || ''), contactPhone: fc.decryptField(c.phone || ''),
-  address: fc.decryptField(c.address || ''), note: fc.decryptField(c.note || ''), remark: fc.decryptField(c.note || ''), status: c.status || 'active',
-  legacyCustomerId: c.legacy_customer_id || '', importantNote: fc.decryptField(c.important_note || ''), mainCsId: c.main_cs_id || ''
-});
-const customerOrderStats = (db, ids) => {
-  if (!ids.length) return new Map();
-  const rows = db.prepare(`SELECT customer_id AS id,
-      COUNT(*) AS taskCount,
-      SUM(CASE WHEN status IN ('pending','in_progress') THEN 1 ELSE 0 END) AS openTaskCount,
-      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completedTaskCount
-    FROM pickup_tasks WHERE customer_id IN (${ids.map(() => '?').join(',')}) GROUP BY customer_id`).all(...ids);
-  return new Map(rows.map(row => [row.id, {
-    taskCount: Number(row.taskCount), openTaskCount: Number(row.openTaskCount || 0),
-    completedTaskCount: Number(row.completedTaskCount || 0)
-  }]));
-};
+const rowCustomer = (c) => views.rowCustomer(c);
+const customerOrderStats = (db, ids) => views.customerOrderStats(db, ids);
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const STATUSES = ['待取', '已取', '已完成', '已取消'];
 // 客户名称归一化：全角→半角、全角空格→半角、合并连续空白
@@ -1733,45 +1718,11 @@ function normalizeDate(v) {
 
 // 隐私脱敏：只显示姓/简称
 function maskName(name) {
-  const s = String(name || '').trim();
-  if (!s) return '';
-  return s.length <= 1 ? s : s[0] + '**';
+  return views.maskName(name);
 }
 // 客户自助查单（免登录）：按订单号/面单号，或按「手机号 + 姓氏」查询轨迹
 function trackTaskRecord(q, phone, surname) {
-  // 新任务模型优先（业务订单号/任务号/明细面单号），旧 records 兜底，兼顾迁移后的老单。
-  if (q) {
-    const task = db.prepare(`SELECT DISTINCT t.* FROM pickup_tasks t
-      LEFT JOIN pickup_items i ON i.task_id = t.id
-      WHERE t.business_order_no = ? OR t.task_no = ? OR i.waybill_no = ?
-      ORDER BY t.created_at DESC LIMIT 1`).get(q, q, q);
-    if (task) return { task };
-    const legacy = db.prepare('SELECT * FROM records WHERE order_no = ? OR tracking_no = ?').get(q, q);
-    return { legacy };
-  }
-  if (phone) {
-    const allCust = db.prepare('SELECT id,name,contact,phone FROM customers').all();
-    const custIds = allCust
-      .filter(c => fc.decryptField(c.phone) === phone && (fc.decryptField(c.name).startsWith(surname) || fc.decryptField(c.contact).startsWith(surname)))
-      .map(c => c.id);
-    const task = custIds.length
-      ? db.prepare(`SELECT * FROM pickup_tasks WHERE customer_id IN (${custIds.map(() => '?').join(',')})
-          ORDER BY created_at DESC LIMIT 1`).get(...custIds)
-      : null;
-    if (!task) {
-      const bySnap = db.prepare(`SELECT * FROM pickup_tasks WHERE phone_snap <> '' ORDER BY created_at DESC`).all()
-        .find(t => fc.decryptField(t.phone_snap) === phone &&
-          (fc.decryptField(t.customer_name_snap).startsWith(surname) || fc.decryptField(t.contact_snap).startsWith(surname)));
-      if (bySnap) return { task: bySnap };
-    } else {
-      return { task };
-    }
-    if (!custIds.length) return {};
-    const legacy = db.prepare(`SELECT * FROM records WHERE customer_id IN (${custIds.map(() => '?').join(',')})
-      ORDER BY date DESC, id DESC LIMIT 1`).get(...custIds);
-    return { legacy };
-  }
-  return {};
+  return views.locateTrackTarget(db, { q, phone, surname });
 }
 
 app.get('/api/track', (req, res) => {

@@ -13,6 +13,7 @@ const { createUploader } = require('./uploads');
 const { utcText } = require('../time');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const views = require('./views');
+const dashViews = require('./dashboard-views');
 const { rowCourier, employeeView, customerListView, maskName, locateTrackTarget, findWaybillWeight } = views;
 const fc = require('../security/field-crypto');
 const loginPolicy = require('../security/login-policy');
@@ -1048,6 +1049,151 @@ function mountApiV2Routes(app, deps) {
       unresolvedException: db.prepare('SELECT COUNT(*) AS count FROM task_exceptions WHERE resolved=0').get().count,
       syncFailed: 0
     });
+  });
+
+  // ---- 看板其余聚合（与 v1 同名接口同源，避免两端数字不一致）----
+  app.get('/api/v2/dashboard/workers', requireAuth, requireStaff, (req, res) => {
+    const items = dashViews.dashboardWorkers(db);
+    ok(res, { items, total: items.length });
+  });
+
+  app.get('/api/v2/dashboard/cs', requireAuth, requireStaff, (req, res) => {
+    const items = dashViews.dashboardCs(db);
+    ok(res, { items, total: items.length });
+  });
+
+  app.get('/api/v2/dashboard/customers', requireAuth, requireStaff, (req, res) => {
+    const items = dashViews.dashboardCustomers(db);
+    ok(res, { items, total: items.length });
+  });
+
+  app.get('/api/v2/dashboard/trends', requireAuth, requireStaff, (req, res) => {
+    ok(res, dashViews.dashboardTrends(db, req.query.days));
+  });
+
+  // ---- 区域取件员分配（等价 v1 PUT /api/areas/:id/workers）----
+  app.put('/api/v2/areas/:id/workers', requireAuth, requireStaff, (req, res) => {
+    const area = db.prepare('SELECT * FROM areas WHERE id=?').get(req.params.id);
+    if (!area) return fail(res, 404, '区域不存在');
+    const body = req.body || {};
+    const defaults = Array.isArray(body.defaultWorkerIds) ? body.defaultWorkerIds : [];
+    const backups = Array.isArray(body.backupWorkerIds) ? body.backupWorkerIds : [];
+    db.transaction(() => {
+      db.prepare('DELETE FROM area_workers WHERE area_id=?').run(area.id);
+      const insert = db.prepare('INSERT INTO area_workers (area_id,worker_id,worker_role) VALUES (?,?,?)');
+      for (const id of defaults) if (id) insert.run(area.id, id, 'default');
+      for (const id of backups) if (id) insert.run(area.id, id, 'backup');
+    })();
+    audit(req.user, '设置区域取件员', 'area', area.id);
+    ok(res, { ok: true });
+  });
+
+  // ---- 自助查单（免登录；等价 v1 GET /api/track，输出统一 ISO8601）----
+  app.get('/api/v2/track', (req, res) => {
+    const q = String(req.query.q || '').trim();
+    const phone = String(req.query.phone || '').trim();
+    const surname = String(req.query.surname || '').trim();
+    if (!q && !phone) return fail(res, 400, '请输入订单号、面单号或手机号');
+    if (phone && !surname) return fail(res, 400, '请同时输入姓氏以确认身份');
+    const found = locateTrackTarget(db, { q, phone, surname });
+    if (found.task) {
+      const task = found.task;
+      const label = { pending: '待取', in_progress: '取件中', completed: '已完成', cancelled: '已取消' }[task.status] || task.status;
+      const totalPieces = db.prepare('SELECT COALESCE(SUM(pieces),0) AS n FROM pickup_items WHERE task_id=?').get(task.id).n;
+      const waybills = db.prepare("SELECT waybill_no FROM pickup_items WHERE task_id=? AND waybill_no<>'' ORDER BY sort_order").all(task.id).map(r => r.waybill_no);
+      const timeline = db.prepare(`SELECT event_type,note,actor_name AS by,created_at AS at FROM task_events
+        WHERE task_id=? ORDER BY created_at,rowid`).all(task.id).map(row => ({
+        status: ({ created: '已下单', assigned: '已派单', assist_added: '已邀请协助', status_changed: label, updated: '信息更新', exception_resolved: '异常已处理' })[row.event_type] || row.event_type,
+        note: row.note || '', by: row.by || '', at: toIso(String(row.at || '').slice(0, 19), true)
+      }));
+      return ok(res, {
+        taskNo: task.task_no || '',
+        orderNo: task.business_order_no || '',
+        trackingNo: waybills.join('、'),
+        customer: maskName(fc.decryptField(task.customer_name_snap || '')),
+        pieces: totalPieces,
+        goods: fc.decryptField(task.pickup_note || ''),
+        status: label,
+        timeline
+      });
+    }
+    if (found.legacy) {
+      const legacy = found.legacy;
+      const timeline = db.prepare('SELECT status, note, user_name AS by, created_at AS at FROM record_status_log WHERE record_id = ? ORDER BY rowid ASC').all(legacy.id);
+      return ok(res, {
+        orderNo: legacy.order_no || '', trackingNo: legacy.tracking_no || '',
+        customer: maskName(fc.decryptField(legacy.customer)), pieces: legacy.pieces,
+        goods: legacy.goods || '', status: legacy.status || '待取', timeline: timeline.map(row => ({ ...row, at: toIso(String(row.at || '').slice(0, 19), false) }))
+      });
+    }
+    fail(res, 404, '未查询到该单');
+  });
+
+  // ---- 任务：状态直改 与 明细编辑（等价 v1，权限沿用任务可见性）----
+  app.put('/api/v2/tasks/:id/status', requireAuth, (req, res) => {
+    try {
+      const current = tasks.getTask(req.params.id);
+      if (!current) return fail(res, 404, '取件任务不存在');
+      if (!taskVisibleTo(req.user, current)) return fail(res, 403, '无权操作该任务');
+      const task = tasks.transitionTask(
+        req.params.id,
+        String((req.body && req.body.status) || ''),
+        { id: req.user.id, name: req.user.name || req.user.username },
+        String((req.body && req.body.note) || '')
+      );
+      broadcast({ type: 'task.status', taskId: task.id, status: task.status });
+      ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) });
+    } catch (error) {
+      fail(res, 400, error.message || '更新任务状态失败');
+    }
+  });
+
+  app.put('/api/v2/tasks/:id/items/:itemId', requireAuth, (req, res) => {
+    const task = tasks.getTask(req.params.id);
+    if (!task) return fail(res, 404, '取件任务不存在');
+    if (!taskVisibleTo(req.user, task)) return fail(res, 403, '无权操作该任务');
+    if (task.status === 'cancelled') return fail(res, 409, '已取消任务不能修改明细');
+    const item = db.prepare('SELECT * FROM pickup_items WHERE id=? AND task_id=?').get(req.params.itemId, task.id);
+    if (!item) return fail(res, 404, '货物明细不存在');
+    const body = req.body || {};
+    if (typeof body.pieces !== 'number' || !Number.isSafeInteger(body.pieces) || body.pieces <= 0) {
+      return fail(res, 400, '件数必须为正整数');
+    }
+    const goodsName = body.goodsName === undefined ? item.goods_name : body.goodsName;
+    const waybillInput = body.waybillNo === undefined ? item.waybill_no : body.waybillNo;
+    if (typeof goodsName !== 'string' || goodsName.length > 200 ||
+        typeof waybillInput !== 'string' || waybillInput.length > 128) {
+      return fail(res, 400, '品名或面单号格式不正确');
+    }
+    const waybillNo = waybillInput.trim();
+    const changedWaybill = waybillNo !== item.waybill_no;
+    const before = { goodsName: item.goods_name, waybillNo: item.waybill_no, pieces: item.pieces };
+    const after = { goodsName: goodsName.trim(), waybillNo, pieces: body.pieces };
+    if (JSON.stringify(before) === JSON.stringify(after)) {
+      return ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) });
+    }
+    const updatedAt = utcText();
+    try {
+      db.transaction(() => {
+        // 保留归属与财务字段；换了面单号不得继承旧运单的匹配重量，需重新匹配
+        db.prepare(`UPDATE pickup_items SET goods_name=?,waybill_no=?,pieces=?,entry_method=?,
+          final_weight=?,weight_source=?,match_status=?,updated_at=? WHERE id=? AND task_id=?`).run(
+          after.goodsName, waybillNo, after.pieces,
+          changedWaybill ? (waybillNo ? 'manual' : 'no_waybill') : item.entry_method,
+          changedWaybill ? 0 : item.final_weight, changedWaybill ? '' : item.weight_source,
+          changedWaybill ? (waybillNo ? 'pending' : 'no_waybill') : item.match_status,
+          updatedAt, item.id, task.id
+        );
+        db.prepare('UPDATE pickup_tasks SET updated_at=? WHERE id=?').run(updatedAt, task.id);
+        db.prepare(`INSERT INTO task_events (id,task_id,event_type,note,actor_id,actor_name,created_at)
+          VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), task.id, 'item_updated',
+          JSON.stringify({ itemId: item.id, before, after }), req.user.id, req.user.name || req.user.username, updatedAt);
+      })();
+      broadcast({ type: 'task.updated', taskId: task.id, status: task.status });
+      ok(res, { task: isoTask(taskDetailV2(db, tasks, task.id)) });
+    } catch {
+      fail(res, 500, '保存货物明细失败');
+    }
   });
 
   // ============ 历史取件记录（后台与取件员共用） ============

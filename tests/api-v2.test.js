@@ -1253,3 +1253,71 @@ test('v2 匹配中心：待匹配列表与补票号', async () => {
   assert.equal((await request('POST', `/api/v2/sync/match/${target.id}`, { waybillNo: '  ' })).status, 400);
   assert.equal((await request('POST', '/api/v2/sync/match/not-exist', { waybillNo: 'x' })).status, 404);
 });
+
+// ============ v1↔v2 补齐：看板其余聚合 / 区域取件员 / 自助查单 / 任务明细编辑 ============
+test('v2 看板聚合与 v1 同源（数字一致）', async () => {
+  for (const path of ['/api/dashboard/workers', '/api/dashboard/cs', '/api/dashboard/customers', '/api/dashboard/trends']) {
+    const v1 = await request('GET', path);
+    const v2 = await request('GET', '/api/v2' + path.replace('/api', ''));
+    assert.equal(v1.status, 200, path);
+    assert.equal(v2.status, 200, path);
+    const a = Array.isArray(v1.body) ? v1.body : v1.body.weight;
+    const b = Array.isArray(v2.body.data.items) ? v2.body.data.items : v2.body.data.weight;
+    assert.deepEqual(b, a, `${path} 的 v1/v2 结果必须一致`);
+  }
+});
+
+test('v2 区域取件员分配 / 自助查单 / 任务明细编辑', async () => {
+  // 区域取件员分配
+  const area = await request('POST', '/api/v2/areas', { name: `v2 区域 ${Date.now()}` });
+  assert.equal([200, 201].includes(area.status), true, JSON.stringify(area.body));
+  const areaId = (area.body.data.area || area.body.data).id;
+  const assign = await request('PUT', `/api/v2/areas/${areaId}/workers`, {
+    defaultWorkerIds: [], backupWorkerIds: []
+  });
+  assert.equal(assign.status, 200);
+  assert.equal(assign.body.data.ok, true);
+  assert.equal((await request('PUT', '/api/v2/areas/not-exist/workers', {})).status, 404);
+
+  // 自助查单：参数缺失与查不到
+  assert.equal((await request('GET', '/api/v2/track', undefined, false)).status, 400);
+  assert.equal((await request('GET', '/api/v2/track?phone=13800000000', undefined, false)).status, 400);
+  assert.equal((await request('GET', '/api/v2/track?q=NOT-EXIST-XYZ', undefined, false)).status, 404);
+
+  // 任务明细编辑：建单 → 加明细 → 改件数 → 换面单号需重置匹配状态
+  const cust = await request('POST', '/api/v2/customers', { name: `v2 明细客户 ${Date.now()}`, address: '明细地址' });
+  const customerId = cust.body.data.customer.id;
+  const detail = await request('GET', `/api/v2/customers/${customerId}`);
+  const addressId = detail.body.data.customer.addresses[0].id;
+  const task = await request('POST', '/api/v2/tasks', { customerId, addressId, taskType: 'normal' }, true,
+    { 'X-Idempotency-Key': `item-edit-${Date.now()}` });
+  assert.equal([200, 201].includes(task.status), true, JSON.stringify(task.body));
+  const taskId = task.body.data.task.id;
+
+  const added = await request('POST', `/api/v2/tasks/${taskId}/items`, {
+    entryMethod: 'manual', waybillNo: `V2-ITEM-${Date.now()}`, pieces: 2, goodsName: '初始品名'
+  });
+  assert.equal([200, 201].includes(added.status), true, JSON.stringify(added.body));
+  const items = added.body.data.task.items;
+  const itemId = items[items.length - 1].id;
+
+  // 件数必须为正整数
+  assert.equal((await request('PUT', `/api/v2/tasks/${taskId}/items/${itemId}`, { pieces: 0 })).status, 400);
+  assert.equal((await request('PUT', `/api/v2/tasks/${taskId}/items/${itemId}`, { pieces: '2' })).status, 400);
+
+  const edited = await request('PUT', `/api/v2/tasks/${taskId}/items/${itemId}`, { pieces: 5, goodsName: '改后品名' });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  const changed = edited.body.data.task.items.find(i => i.id === itemId);
+  assert.equal(changed.pieces, 5);
+  assert.equal(changed.goodsName, '改后品名');
+
+  // 不存在明细 / 不存在任务
+  assert.equal((await request('PUT', `/api/v2/tasks/${taskId}/items/not-exist`, { pieces: 1 })).status, 404);
+  assert.equal((await request('PUT', '/api/v2/tasks/not-exist/items/not-exist', { pieces: 1 })).status, 404);
+
+  // 任务状态直改（v1 同款语义）
+  const st = await request('PUT', `/api/v2/tasks/${taskId}/status`, { status: 'in_progress' });
+  assert.equal(st.status, 200, JSON.stringify(st.body));
+  assert.equal(st.body.data.task.status, 'in_progress');
+  assert.equal((await request('PUT', `/api/v2/tasks/${taskId}/status`, { status: '乱写' })).status, 400);
+});

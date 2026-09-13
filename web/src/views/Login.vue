@@ -1,10 +1,12 @@
 <template>
   <div class="login-wrap">
+    <div class="login-glow" aria-hidden="true" />
     <div class="login-card">
+      <div class="card-edge" aria-hidden="true" />
       <div class="brand">
         <div class="logo"><el-icon :size="30"><Van /></el-icon></div>
         <h1>Huoqu</h1>
-        <p>Pickup Operations Management</p>
+        <p>PICKUP OPERATIONS · 货代取件运营</p>
       </div>
 
       <el-form :model="form" @submit.prevent>
@@ -59,20 +61,47 @@ async function submit() {
 
 <style scoped>
 .login-wrap {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--qj-bg);
+  background-color: var(--qj-chrome);
+  background-image: var(--qj-grid-chrome);
+  background-size: var(--qj-grid-size);
+  overflow: hidden;
+}
+/* 青色光斑：登录页的科技感来源，纯装饰 */
+.login-glow {
+  position: absolute;
+  top: -160px;
+  left: 50%;
+  width: 720px;
+  height: 420px;
+  transform: translateX(-50%);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(34, 211, 238, 0.22) 0%, rgba(34, 211, 238, 0) 70%);
+  pointer-events: none;
 }
 .login-card {
+  position: relative;
   width: 480px;
   background: var(--qj-surface);
   border: 1px solid var(--qj-border);
   border-radius: var(--r-overlay);
   padding: 48px 44px 36px;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-3), 0 0 0 1px rgba(34, 211, 238, 0.08);
+}
+/* 卡片顶部青色描边高光 */
+.card-edge {
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--qj-accent-bright), transparent);
+  opacity: 0.85;
 }
 .brand {
   text-align: center;
@@ -83,11 +112,12 @@ async function submit() {
   height: 68px;
   margin: 0 auto 18px;
   border-radius: 16px;
-  background: var(--qj-primary-btn);
-  color: var(--el-color-white);
+  background: linear-gradient(140deg, var(--qj-accent-bright) 0%, var(--qj-accent-strong) 55%, #155e75 100%);
+  color: #04121a;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 10px 30px rgba(8, 145, 178, 0.3);
 }
 .brand h1 {
   font-size: 24px;
@@ -98,13 +128,15 @@ async function submit() {
 }
 .brand p {
   margin: 0;
-  font-size: var(--fs-body);
+  font-size: var(--fs-meta);
   color: var(--qj-muted);
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 .big-input :deep(.el-input__wrapper) {
   height: 48px;
   border-radius: var(--r-control);
+  transition: box-shadow var(--dur-fast) var(--ease);
 }
 .big-input :deep(.el-input__inner) {
   font-size: 15px;
@@ -128,7 +160,7 @@ async function submit() {
 .footer {
   position: absolute;
   bottom: 24px;
-  color: var(--qj-muted);
+  color: var(--qj-chrome-text);
   font-size: var(--fs-sub);
 }
 

@@ -120,9 +120,9 @@ async function collectStyleFacts(page) {
       hasOverlayCss: cssText.includes('.el-overlay{') || cssText.includes('.el-overlay ')
     }
   })
-  if (facts.rootVar !== '#3370ff') problems.push(`主题主色变量异常: ${facts.rootVar}`)
-  // 主按钮底色比品牌色深一档：白字在 #3370ff 上仅 4.28:1，不满足正文 AA
-  if (facts.buttonBg !== 'rgb(43, 98, 230)') problems.push(`主按钮背景异常: ${facts.buttonBg}`)
+  if (facts.rootVar !== '#0f172a') problems.push(`主题主色变量异常: ${facts.rootVar}`)
+  // 主按钮底色为深墨（白字 17:1）；旧版亮蓝 #3370ff 上白字仅 4.28:1，不达 AA
+  if (facts.buttonBg !== 'rgb(17, 28, 48)') problems.push(`主按钮背景异常: ${facts.buttonBg}`)
   if (!facts.hasMessageCss) problems.push('缺失 el-message 样式')
   if (!facts.hasMessageBoxCss) problems.push('缺失 el-message-box 样式（TaskDetail 弹窗）')
   if (!facts.hasOverlayCss) problems.push('缺失 el-overlay 样式')

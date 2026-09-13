@@ -93,10 +93,10 @@
         </div>
         <div class="help-row">
           <span class="help-label">实例密码</span>
-          <span class="help-copy" title="点击复制" @click="copyText('wu1234567890')">wu1234567890</span>
+          <span class="help-note">见部署配置的 INITIAL_ADMIN_PASSWORD（不在此处展示）</span>
         </div>
       </div>
-      <div class="help-tip">点击地址 / 账号 / 密码即可复制 · 输入框内输入时不触发快捷键</div>
+      <div class="help-tip">点击地址 / 账号即可复制 · 输入框内输入时不触发快捷键</div>
       <template #footer>
         <el-button type="primary" @click="helpVisible = false">知道了</el-button>
       </template>
@@ -303,9 +303,12 @@ onUnmounted(() => {
 .layout {
   height: 100%;
 }
+/* ===== 深色操作台：左侧导航 ===== */
 .aside {
-  background: var(--qj-side);
-  border-right: 1px solid var(--qj-border);
+  background-color: var(--qj-chrome);
+  background-image: var(--qj-grid-chrome);
+  background-size: var(--qj-grid-size);
+  border-right: 1px solid var(--qj-chrome-border);
   display: flex;
   flex-direction: column;
 }
@@ -313,65 +316,83 @@ onUnmounted(() => {
   height: 60px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--qj-border);
+  gap: 10px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--qj-chrome-border);
 }
 .logo-mark {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--r-control);
-  background: var(--qj-primary);
-  color: #fff;
+  /* 青色渐变品牌块，替代原先的实心蓝 */
+  background: linear-gradient(140deg, var(--qj-accent-bright) 0%, var(--qj-accent-strong) 55%, #155e75 100%);
+  color: #04121a;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 4px 14px rgba(8, 145, 178, 0.28);
 }
 .logo span {
-  font-size: 15px;
+  font-size: var(--fs-card);
   font-weight: 600;
-  color: var(--qj-text);
+  color: var(--qj-chrome-text-strong);
+  letter-spacing: 0.4px;
 }
 .menu {
   flex: 1;
   border-right: none;
-  padding: 8px;
+  padding: 10px 8px;
+  overflow-y: auto;
   --el-menu-bg-color: transparent;
   --el-menu-hover-bg-color: transparent;
+  --el-menu-text-color: var(--qj-chrome-text);
+  --el-menu-active-color: var(--qj-accent-bright);
 }
 .menu :deep(.el-menu-item) {
   height: 42px;
   border-radius: var(--r-control);
   margin-bottom: 2px;
-  color: var(--qj-text-2);
+  color: var(--qj-chrome-text);
   font-size: var(--fs-body);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+.menu :deep(.el-menu-item .el-icon) {
+  color: var(--qj-chrome-text);
+  transition: color var(--dur-fast) var(--ease);
 }
 .menu :deep(.el-menu-item:hover) {
-  background: var(--qj-info-bg);
-  color: var(--qj-text);
+  background: var(--qj-chrome-hover);
+  color: var(--qj-chrome-text-strong);
+}
+.menu :deep(.el-menu-item:hover .el-icon) {
+  color: var(--qj-accent-bright);
 }
 .menu :deep(.el-menu-item.is-active) {
-  background: var(--qj-primary-bg);
-  color: var(--qj-primary-text);
+  /* 激活态：青色左侧指示条 + 淡青底 + 亮青文字，是"科技感"的主要落点 */
+  background: var(--qj-accent-ink);
+  color: var(--qj-accent-bright);
   font-weight: 600;
+  box-shadow: var(--qj-chrome-glow);
 }
 .menu :deep(.el-menu-item.is-active .el-icon) {
-  color: var(--qj-primary-text);
+  color: var(--qj-accent-bright);
 }
 .menu :deep(.el-menu-item:focus-visible) {
-  box-shadow: var(--qj-focus);
+  box-shadow: var(--qj-focus-chrome);
 }
 .body {
-  background: var(--qj-bg);
+  background: transparent;
 }
+/* ===== 顶栏：与侧栏同属深色操作台 ===== */
 .header {
   height: 56px;
-  background: var(--qj-surface);
+  background-color: var(--qj-chrome-2);
+  border-bottom: 1px solid var(--qj-chrome-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--sp-6);
-  border-bottom: 1px solid var(--qj-border);
 }
 .header-left {
   display: flex;
@@ -390,36 +411,43 @@ onUnmounted(() => {
 .latency {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: var(--fs-meta);
-  color: var(--qj-muted);
+  color: var(--qj-chrome-text);
   white-space: nowrap;
 }
 .latency-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--qj-border-strong);
+  background: var(--qj-chrome-text-dim);
 }
 .latency.is-online .latency-dot {
-  background: #16a34a;
+  /* 实时指示用青色 + 呼吸光晕 */
+  background: var(--qj-accent-bright);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+  animation: qj-pulse 2.4s var(--ease) infinite;
 }
 .latency.is-online .latency-text {
-  color: var(--qj-success-text);
+  color: var(--qj-accent-bright-2);
+}
+@keyframes qj-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.06); }
 }
 .bell,
 .shortcut-help {
-  border: 1px solid var(--qj-border);
-  background: var(--qj-surface);
-  color: var(--qj-text-2);
+  border: 1px solid var(--qj-chrome-border);
+  background: transparent;
+  color: var(--qj-chrome-text);
   width: 34px;
   height: 34px;
 }
 .shortcut-help:hover,
 .bell:hover {
-  color: var(--qj-primary-text);
-  border-color: var(--qj-primary);
-  background: var(--qj-primary-bg);
+  color: var(--qj-accent-bright);
+  border-color: var(--qj-accent-strong);
+  background: var(--qj-chrome-hover);
 }
 .help-row {
   display: flex;
@@ -435,7 +463,7 @@ onUnmounted(() => {
   border: 1px solid var(--qj-border-strong);
   border-bottom-width: 2px;
   border-radius: var(--r-badge);
-  background: var(--qj-side);
+  background: var(--qj-surface-subtle);
   font-family: ui-monospace, monospace;
   font-weight: 600;
   color: var(--qj-text);
@@ -453,12 +481,17 @@ onUnmounted(() => {
 .help-copy {
   flex: 1;
   font-size: var(--fs-sub);
-  color: var(--qj-primary-text);
+  color: var(--qj-accent);
   cursor: pointer;
   word-break: break-all;
 }
 .help-copy:hover {
   text-decoration: underline;
+}
+.help-note {
+  flex: 1;
+  font-size: var(--fs-sub);
+  color: var(--qj-muted);
 }
 .help-tip {
   margin-top: var(--sp-3);
@@ -475,18 +508,19 @@ onUnmounted(() => {
   transition: background-color var(--dur-fast) var(--ease);
 }
 .user-box:hover {
-  background: var(--qj-info-bg);
+  background: var(--qj-chrome-hover);
 }
 .user-box:focus-visible {
-  box-shadow: var(--qj-focus);
+  box-shadow: var(--qj-focus-chrome);
 }
 .avatar {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  /* 白字在 #3370ff 上仅 4.28:1，头像底用深一档的蓝 */
-  background: var(--qj-primary-btn);
-  color: #fff;
+  /* 青色描边 + 深底，亮青字在深底上 10:1 以上 */
+  background: linear-gradient(150deg, #164e63 0%, #0e2a33 100%);
+  color: var(--qj-accent-bright-2);
+  border: 1px solid rgba(34, 211, 238, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -495,10 +529,10 @@ onUnmounted(() => {
 }
 .name {
   font-size: var(--fs-body);
-  color: var(--qj-text);
+  color: var(--qj-chrome-text-strong);
 }
 .caret {
-  color: var(--qj-muted);
+  color: var(--qj-chrome-text-dim);
   font-size: var(--fs-meta);
 }
 .main {
@@ -509,7 +543,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   padding: 0;
-  background: var(--qj-side);
+  background-color: var(--qj-chrome);
+  background-image: var(--qj-grid-chrome);
+  background-size: var(--qj-grid-size);
 }
 .mobile-logo {
   flex: none;
@@ -533,6 +569,14 @@ onUnmounted(() => {
     display: inline-flex;
     width: 40px;
     height: 40px;
+    border: 1px solid var(--qj-chrome-border);
+    background: transparent;
+    color: var(--qj-chrome-text-strong);
+  }
+  .mobile-menu-trigger:hover {
+    color: var(--qj-accent-bright);
+    border-color: var(--qj-accent-strong);
+    background: var(--qj-chrome-hover);
   }
   .header-right {
     gap: var(--sp-2);

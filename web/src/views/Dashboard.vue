@@ -316,9 +316,9 @@ async function renderCharts() {
   await getEchartsSetup()
   if (seq !== renderSeq) return
 
-  // 出货重量趋势：折线图
+  // 出货重量趋势：折线图（主序列深墨，副要素青色 —— 图表也用同一套语义）
   await initChart(trendChartEl.value, {
-    color: ['#3370ff'],
+    color: ['#0f172a'],
     tooltip: { trigger: 'axis' },
     grid: { left: 55, right: 20, top: 30, bottom: 30 },
     xAxis: { type: 'category', data: trends.weight.map((t: any) => t.date), boundaryGap: false },
@@ -326,28 +326,28 @@ async function renderCharts() {
     series: [{
       name: '最终重量', type: 'line', smooth: true,
       data: trends.weight.map((t: any) => t.weight),
-      areaStyle: { opacity: 0.08 }, itemStyle: { color: '#3370ff' }, lineStyle: { width: 2.5 },
+      areaStyle: { opacity: 0.06 }, itemStyle: { color: '#0f172a' }, lineStyle: { width: 2.5 },
     }],
   }, seq)
 
-  // 取件员重量排行：横向柱状图
+  // 取件员重量排行：横向柱状图（青色，强调"数据对比"）
   const ws = [...workers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0))
   await initChart(workerChartEl.value, {
-    color: ['#3370ff'],
+    color: ['#0891b2'],
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 90, right: 40, top: 20, bottom: 30 },
     xAxis: { type: 'value', name: 'kg' },
     yAxis: { type: 'category', data: ws.map((w) => w.name), inverse: true },
     series: [{
       type: 'bar', data: ws.map((w) => w.weight), barMaxWidth: 22,
-      itemStyle: { borderRadius: [0, 4, 4, 0], color: '#3370ff' },
+      itemStyle: { borderRadius: [0, 4, 4, 0], color: '#0891b2' },
     }],
   }, seq)
 
-  // 客户重量占比：环形饼图
+  // 客户重量占比：环形饼图（墨 → 青 的冷色阶 + 少量状态色）
   const topCustomers = [...customers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0)).slice(0, 8)
   await initChart(customerChartEl.value, {
-    color: ['#3370ff', '#0ea5e9', '#16a34a', '#d97706', '#8b5cf6', '#dc2626', '#0d9488', '#64748b'],
+    color: ['#0f172a', '#155e75', '#0891b2', '#22d3ee', '#64748b', '#16a34a', '#b45309', '#b91c1c'],
     tooltip: { trigger: 'item', formatter: '{b}: {c} kg ({d}%)' },
     legend: { bottom: 0, type: 'scroll' },
     series: [{
@@ -432,9 +432,9 @@ onUnmounted(() => {
   border-color: #f6e0c4;
 }
 .attn.info {
-  background: var(--qj-primary-bg);
-  color: var(--qj-primary-text);
-  border-color: #d6e2ff;
+  background: var(--qj-accent-bg);
+  color: var(--qj-accent);
+  border-color: #a5f3fc;
 }
 .all-clear {
   display: inline-flex;

@@ -8,44 +8,90 @@
   :root {
     --qj-text: #1f2329;
     --qj-text-2: #4e5969;
-    --qj-muted: #6b7280;
-    --qj-bg: #f0f2f5;
-    --qj-side: #f7f8fa;
+    --qj-muted: #666d78;
+    --qj-bg: #eef1f6;
     --qj-surface: #ffffff;
-    --qj-border: #e5e8ee;
+    --qj-surface-subtle: #f8fafc;
+    --qj-border: #e3e8ef;
     --qj-border-strong: #c9ced6;
-    --qj-primary: #3370ff;
-    --qj-primary-text: #1d4ed8;
-    --qj-primary-bg: #eef3ff;
-    --qj-primary-hover: #2860e8;
+    /* v2：深墨为主 + 青色点睛 */
+    --qj-primary: #0f172a;
+    --qj-primary-btn: #111c30;
+    --qj-primary-btn-hover: #1e293b;
+    --qj-primary-text: #0f172a;
+    --qj-primary-bg: #eef2f7;
+    --qj-primary-bg-hover: #e2e8f0;
+    --qj-accent: #0e7490;
+    --qj-accent-strong: #0891b2;
+    --qj-accent-bg: #ecfeff;
+    --qj-accent-bright: #22d3ee;
+    --qj-accent-bright-2: #67e8f9;
+    --qj-accent-ink: #0e2a33;
+    --qj-chrome: #0b1220;
+    --qj-chrome-2: #111c30;
+    --qj-chrome-hover: #1b2739;
+    --qj-chrome-border: #24334a;
+    --qj-chrome-text: #94a3b8;
+    --qj-chrome-text-dim: #64748b;
+    --qj-chrome-text-strong: #e2e8f0;
     --qj-success-text: #15803d;
     --qj-success-bg: #ecfaf0;
-    --qj-warning-text: #b45309;
+    --qj-warning-text: #a14a08;
     --qj-warning-bg: #fff7ec;
     --qj-danger-text: #b91c1c;
     --qj-danger-bg: #feefef;
-    --qj-focus: 0 0 0 3px rgba(51, 112, 255, .35);
-    --shadow-1: 0 1px 2px rgba(31, 35, 41, .04);
-    --shadow-2: 0 2px 8px rgba(31, 35, 41, .06);
-    --shadow-3: 0 8px 24px rgba(31, 35, 41, .10);
+    --qj-focus: 0 0 0 3px rgba(8, 145, 178, .35);
+    --shadow-1: 0 1px 2px rgba(15, 23, 42, .04);
+    --shadow-2: 0 2px 10px rgba(15, 23, 42, .07);
+    --shadow-3: 0 10px 28px rgba(15, 23, 42, .12);
     --fs-title: 18px; --fs-card: 15px; --fs-body: 14px; --fs-sub: 13px; --fs-meta: 12px; --fs-metric: 28px;
     --dur-fast: 150ms;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--qj-bg); color: var(--qj-text);
+    margin: 0; color: var(--qj-text);
+    background-color: var(--qj-bg);
+    background-image: linear-gradient(rgba(15,23,42,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,.035) 1px, transparent 1px);
+    background-size: 32px 32px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     font-size: var(--fs-body); -webkit-font-smoothing: antialiased;
   }
   .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 24px 64px; }
   .banner {
     display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
-    padding: 12px 16px; border-radius: 10px; background: var(--qj-primary-bg);
-    border: 1px solid #d6e2ff; color: var(--qj-primary-text); font-size: var(--fs-sub);
+    padding: 12px 16px; border-radius: 10px; background: var(--qj-accent-bg);
+    border: 1px solid #a5f3fc; color: var(--qj-accent); font-size: var(--fs-sub);
   }
   h2.section { font-size: var(--fs-title); margin: 32px 0 12px; font-weight: 600; }
   h2.section:first-of-type { margin-top: 0; }
   .note { color: var(--qj-muted); font-size: var(--fs-meta); margin: -6px 0 12px; }
+
+  /* ---- 深色操作台样张 ---- */
+  .chrome-demo { display: grid; grid-template-columns: 220px 1fr; border-radius: 12px; overflow: hidden; border: 1px solid var(--qj-chrome-border); box-shadow: var(--shadow-3); }
+  .chrome-side {
+    background-color: var(--qj-chrome);
+    background-image: linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.07) 1px, transparent 1px);
+    background-size: 32px 32px;
+    padding: 10px 8px;
+  }
+  .chrome-logo { display: flex; align-items: center; gap: 10px; padding: 4px 10px 14px; border-bottom: 1px solid var(--qj-chrome-border); margin-bottom: 10px; }
+  .chrome-logo__mark {
+    width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: #04121a;
+    background: linear-gradient(140deg, var(--qj-accent-bright) 0%, var(--qj-accent-strong) 55%, #155e75 100%);
+    box-shadow: 0 0 0 1px rgba(34,211,238,.25), 0 4px 14px rgba(8,145,178,.28);
+  }
+  .chrome-logo span { color: var(--qj-chrome-text-strong); font-weight: 600; font-size: var(--fs-card); letter-spacing: .4px; }
+  .chrome-item { display: flex; align-items: center; gap: 9px; height: 42px; padding: 0 12px; border-radius: 8px; color: var(--qj-chrome-text); font-size: var(--fs-body); margin-bottom: 2px; }
+  .chrome-item.is-active { background: var(--qj-accent-ink); color: var(--qj-accent-bright); font-weight: 600; box-shadow: inset 3px 0 0 0 var(--qj-accent-bright); }
+  .chrome-item:not(.is-active):hover { background: var(--qj-chrome-hover); color: var(--qj-chrome-text-strong); }
+  .chrome-main { background: var(--qj-surface); }
+  .chrome-top { height: 56px; background: var(--qj-chrome-2); border-bottom: 1px solid var(--qj-chrome-border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+  .chrome-live { display: flex; align-items: center; gap: 6px; color: var(--qj-accent-bright-2); font-size: var(--fs-meta); }
+  .chrome-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--qj-accent-bright); box-shadow: 0 0 0 3px rgba(34,211,238,.16); }
+  .chrome-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--qj-accent-bright-2); font-size: var(--fs-sub); font-weight: 600; background: linear-gradient(150deg, #164e63 0%, #0e2a33 100%); border: 1px solid rgba(34,211,238,.35); }
+  .chrome-body { padding: 18px 20px; }
+  .chrome-body h3 { margin: 0 0 6px; font-size: var(--fs-title); }
+  .chrome-body p { margin: 0; color: var(--qj-muted); font-size: var(--fs-meta); }
 
   /* ---- 页头 ---- */
   .page-head {
@@ -192,8 +238,46 @@
 <body>
 <div class="wrap">
   <div class="banner">
-    <strong>设计稿预览 v1</strong>
-    <span>这是「全面视觉+体验升级」的静态样张，用真实令牌渲染。确认后我按它改 `web/` 下的实际页面。</span>
+    <strong>设计稿预览 v2 · 科技感</strong>
+    <span>深色操作台 + 浅色内容区；深墨为主色、青色点睛。用真实令牌渲染，确认后即按此改实际页面。</span>
+  </div>
+
+  <h2 class="section">0 · 深色操作台（v2 的骨架）</h2>
+  <p class="note">左侧导航与顶栏合为深色面（#0b1220 / #111c30）+ 32px 网格纹理；激活项左侧 3px 亮青指示条；实时指示用亮青呼吸点。</p>
+  <div class="chrome-demo">
+    <div class="chrome-side">
+      <div class="chrome-logo">
+        <div class="chrome-logo__mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="16.5" cy="18" r="1.6"/></svg>
+        </div>
+        <span>Huoqu</span>
+      </div>
+      <div class="chrome-item is-active">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4zM4 10h16"/></svg>数据看板
+      </div>
+      <div class="chrome-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>客户管理
+      </div>
+      <div class="chrome-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新建取件
+      </div>
+      <div class="chrome-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>取件任务
+      </div>
+    </div>
+    <div class="chrome-main">
+      <div class="chrome-top">
+        <span style="color:var(--qj-chrome-text-dim);font-size:var(--fs-meta)">Huoqu · 深色操作台</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="chrome-live"><i></i>12 ms</span>
+          <div class="chrome-avatar">系</div>
+        </div>
+      </div>
+      <div class="chrome-body">
+        <h3>内容区保持浅色</h3>
+        <p>表格、对账、Excel 导出这些长时段盯屏场景仍在白底上，保证可读性。</p>
+      </div>
+    </div>
   </div>
 
   <h2 class="section">1 · 页头（统一结构，替代各页各写的 toolbar）</h2>
@@ -230,7 +314,7 @@
   <p class="note">改前：「最终出货重量 (kg)」被压成两行、卡片高度不一。改后：标签单行省略，单位与数值同行，0 值弱化。</p>
   <div class="stat-grid">
     <div class="stat">
-      <div class="stat__icon" style="background:#eef3ff;color:#1d4ed8">
+      <div class="stat__icon" style="background:#eef2f7;color:#0f172a">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4"/></svg>
       </div>
       <div class="stat__body">
@@ -250,7 +334,7 @@
       </div>
     </div>
     <div class="stat">
-      <div class="stat__icon" style="background:#eef9fd;color:#0369a1">
+      <div class="stat__icon" style="background:#ecfeff;color:#0e7490">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
       </div>
       <div class="stat__body">
@@ -431,14 +515,18 @@
 
   <h2 class="section">8 · 令牌速查</h2>
   <div class="swatch-grid">
+    <div class="swatch"><div class="swatch__chip" style="background:#0b1220"></div><div class="swatch__name">--qj-chrome</div><div class="swatch__val">#0b1220 · 深色操作台</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#0f172a"></div><div class="swatch__name">--qj-primary</div><div class="swatch__val">#0f172a · 主色（深墨）</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#111c30"></div><div class="swatch__name">--qj-primary-btn</div><div class="swatch__val">#111c30 · 主按钮底 · 白字 17:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#0891b2"></div><div class="swatch__name">--qj-accent-strong</div><div class="swatch__val">#0891b2 · 青色描边/指示条</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#22d3ee"></div><div class="swatch__name">--qj-accent-bright</div><div class="swatch__val">#22d3ee · 深色面上的亮青 10.36:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#0e7490"></div><div class="swatch__name">--qj-accent</div><div class="swatch__val">#0e7490 · 亮底青字 5.36:1</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#1f2329"></div><div class="swatch__name">--qj-text</div><div class="swatch__val">#1f2329 · 15.78:1</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#4e5969"></div><div class="swatch__name">--qj-text-2</div><div class="swatch__val">#4e5969 · 7.10:1</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#6b7280"></div><div class="swatch__name">--qj-muted</div><div class="swatch__val">#6b7280 · 4.83:1（原 2.91 ✗）</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#3370ff"></div><div class="swatch__name">--qj-primary</div><div class="swatch__val">#3370ff · 按钮底色</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#1d4ed8"></div><div class="swatch__name">--qj-primary-text</div><div class="swatch__val">#1d4ed8 · 蓝色文字</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#b45309"></div><div class="swatch__name">--qj-warning-text</div><div class="swatch__val">#b45309 · 4.73:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#666d78"></div><div class="swatch__name">--qj-muted</div><div class="swatch__val">#666d78 · 5.22:1（原 2.91 ✗）</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#a14a08"></div><div class="swatch__name">--qj-warning-text</div><div class="swatch__val">#a14a08 · 5.65:1</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#15803d"></div><div class="swatch__name">--qj-success-text</div><div class="swatch__val">#15803d · 4.66:1</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#b91c1c"></div><div class="swatch__name">--qj-danger-text</div><div class="swatch__val">#b91c1c · 4.6:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#b91c1c"></div><div class="swatch__name">--qj-danger-text</div><div class="swatch__val">#b91c1c · 5.79:1</div></div>
   </div>
 </div>
 </body>

@@ -78,6 +78,16 @@ function customerView(db, row, addressCount) {
   };
 }
 
+/** 客户地址视图（v2 客户详情与地址接口共用，字段与 v1 一致） */
+function addressView(address) {
+  return {
+    id: address.id, name: fc.decryptField(address.name), address: fc.decryptField(address.address),
+    contactName: fc.decryptField(address.contact_name), contactPhone: fc.decryptField(address.contact_phone),
+    areaId: address.area_id || '', isCommon: Boolean(address.is_common),
+    isActive: Boolean(address.is_active), remark: fc.decryptField(address.remark || '')
+  };
+}
+
 function mountApiV2Routes(app, deps) {
   const {
     db, auth, tasks, notificationService, notificationRepository,
@@ -494,12 +504,7 @@ function mountApiV2Routes(app, deps) {
       .get(req.params.id);
     if (!row) return fail(res, 404, '客户不存在');
     const addresses = db.prepare('SELECT * FROM customer_addresses WHERE customer_id=? ORDER BY is_common DESC,created_at,id')
-      .all(row.id).map(address => ({
-        id: address.id, name: fc.decryptField(address.name), address: fc.decryptField(address.address),
-        contactName: fc.decryptField(address.contact_name), contactPhone: fc.decryptField(address.contact_phone),
-        areaId: address.area_id || '', isCommon: Boolean(address.is_common),
-        isActive: Boolean(address.is_active), remark: fc.decryptField(address.remark || '')
-      }));
+      .all(row.id).map(addressView);
     ok(res, { customer: { ...customerView(db, row), mainCsName: row.main_cs_name || '', addresses } });
   });
 
@@ -545,6 +550,80 @@ function mountApiV2Routes(app, deps) {
     db.prepare(`UPDATE customers SET name=?,contact=?,phone=?,address=?,note=?,important_note=?,main_cs_id=? WHERE id=?`)
       .run(fc.encryptField(name), fc.encryptField(contact), fc.encryptField(phone), fc.encryptField(address), fc.encryptField(note), fc.encryptField(importantNote), mainCsId, current.id);
     ok(res, { customer: customerView(db, db.prepare('SELECT * FROM customers WHERE id=?').get(current.id)) });
+  });
+
+  // ---- 客户停用/启用（等价 v1 PATCH /api/customers/:id/status）----
+  app.patch('/api/v2/customers/:id/status', requireAuth, requireStaff, (req, res) => {
+    const current = db.prepare('SELECT * FROM customers WHERE id=?').get(req.params.id);
+    if (!current) return fail(res, 404, '客户不存在');
+    const raw = (req.body && req.body.status != null) ? req.body.status : req.query.status;
+    const status = String(raw || 'active') === 'disabled' ? 'disabled' : 'active';
+    db.prepare('UPDATE customers SET status=? WHERE id=?').run(status, current.id);
+    audit(req.user, '修改客户状态', 'customer', current.id, status);
+    ok(res, { customer: customerView(db, db.prepare('SELECT * FROM customers WHERE id=?').get(current.id)) });
+  });
+
+  // ---- 删除客户（等价 v1 DELETE /api/customers/:id；有进行中任务时拒绝）----
+  app.delete('/api/v2/customers/:id', requireAuth, requireStaff, (req, res) => {
+    const current = db.prepare('SELECT id FROM customers WHERE id=?').get(req.params.id);
+    if (!current) return fail(res, 404, '客户不存在');
+    const active = db.prepare("SELECT COUNT(*) AS n FROM pickup_tasks WHERE customer_id=? AND status IN ('pending','in_progress')")
+      .get(current.id).n;
+    if (active > 0) return fail(res, 400, '该客户有进行中的任务，请先完成或取消后再删除');
+    db.transaction(() => {
+      db.prepare('DELETE FROM customer_addresses WHERE customer_id=?').run(current.id);
+      db.prepare('DELETE FROM customers WHERE id=?').run(current.id);
+    })();
+    broadcast({ type: 'customers.updated' });
+    ok(res, { ok: true });
+  });
+
+  // ---- 客户地址：新增（等价 v1 POST /api/customers/:id/addresses）----
+  app.post('/api/v2/customers/:id/addresses', requireAuth, requireStaff, (req, res) => {
+    if (!db.prepare('SELECT 1 FROM customers WHERE id=?').get(req.params.id)) return fail(res, 404, '客户不存在');
+    const body = req.body || {};
+    const address = String(body.address || '').trim();
+    if (!address) return fail(res, 400, '地址不能为空');
+    const id = randomUUID();
+    db.prepare(`INSERT INTO customer_addresses (id,customer_id,name,address,contact_name,contact_phone,area_id,is_common,is_active,remark,created_at)
+      VALUES (?,?,?,?,?,?,?,?,1,?,?)`).run(
+      id, req.params.id, fc.encryptField(body.name || ''), fc.encryptField(address),
+      fc.encryptField(body.contactName || ''), fc.encryptField(body.contactPhone || ''),
+      body.areaId || '', body.isCommon ? 1 : 0, fc.encryptField(body.remark || ''), nowStr());
+    audit(req.user, '新增客户地址', 'customer', req.params.id, id);
+    const row = db.prepare('SELECT * FROM customer_addresses WHERE id=?').get(id);
+    ok(res, { address: addressView(row) }, 201);
+  });
+
+  // ---- 客户地址：编辑（等价 v1 PUT /api/addresses/:id；省缺字段保持原值）----
+  app.put('/api/v2/addresses/:id', requireAuth, requireStaff, (req, res) => {
+    const current = db.prepare('SELECT * FROM customer_addresses WHERE id=?').get(req.params.id);
+    if (!current) return fail(res, 404, '地址不存在');
+    const body = req.body || {};
+    const dec = {
+      name: fc.decryptField(current.name), address: fc.decryptField(current.address),
+      contact_name: fc.decryptField(current.contact_name), contact_phone: fc.decryptField(current.contact_phone),
+      remark: fc.decryptField(current.remark)
+    };
+    db.prepare(`UPDATE customer_addresses SET name=?,address=?,contact_name=?,contact_phone=?,area_id=?,is_common=?,remark=? WHERE id=?`).run(
+      fc.encryptField(body.name != null ? body.name : dec.name),
+      fc.encryptField(body.address != null ? body.address : dec.address),
+      fc.encryptField(body.contactName != null ? body.contactName : dec.contact_name),
+      fc.encryptField(body.contactPhone != null ? body.contactPhone : dec.contact_phone),
+      body.areaId != null ? body.areaId : current.area_id,
+      body.isCommon == null ? current.is_common : (body.isCommon ? 1 : 0),
+      fc.encryptField(body.remark != null ? body.remark : dec.remark), current.id);
+    ok(res, { address: addressView(db.prepare('SELECT * FROM customer_addresses WHERE id=?').get(current.id)) });
+  });
+
+  // ---- 客户地址：启用/停用（等价 v1 PATCH /api/addresses/:id/status）----
+  app.patch('/api/v2/addresses/:id/status', requireAuth, requireStaff, (req, res) => {
+    const current = db.prepare('SELECT * FROM customer_addresses WHERE id=?').get(req.params.id);
+    if (!current) return fail(res, 404, '地址不存在');
+    const raw = (req.body && req.body.isActive != null) ? req.body.isActive : req.query.isActive;
+    const active = String(raw) === 'false' ? 0 : 1;
+    db.prepare('UPDATE customer_addresses SET is_active=? WHERE id=?').run(active, current.id);
+    ok(res, { address: addressView(db.prepare('SELECT * FROM customer_addresses WHERE id=?').get(current.id)) });
   });
 
   // ============ 基础资料：取件员 / 区域 ============

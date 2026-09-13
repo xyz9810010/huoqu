@@ -12,8 +12,8 @@ let child;
 let token;
 let adminToken;
 
-async function request(method, url, body, auth = true) {
-  const headers = { 'Content-Type': 'application/json' };
+async function request(method, url, body, auth = true, extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
   if (auth && token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(baseUrl + url, {
     method,
@@ -1004,4 +1004,79 @@ test('v2 取件员端接口：我的任务 / 可选客户 / 取件员下拉', as
   // 非取件员调用 customer-options 应 403（与 v1 一致）
   const asAdmin = await request('GET', '/api/v2/worker/customer-options');
   assert.equal(asAdmin.status, 403);
+});
+
+// ============ v1↔v2 补齐：客户删除/停用 与 地址 CRUD ============
+test('v2 客户停用/删除 与 地址增改停用', async () => {
+  const name = `v2 地址客户 ${Date.now()}`;
+  const created = await request('POST', '/api/v2/customers', { name, address: '初始地址 1 号' });
+  assert.equal(created.status, 201);
+  const customerId = created.body.data.customer.id;
+
+  // 新建客户时带地址，应已生成一条默认地址
+  const detail0 = await request('GET', `/api/v2/customers/${customerId}`);
+  assert.equal(detail0.status, 200);
+  assert.equal(detail0.body.data.customer.addresses.length, 1);
+
+  // 新增地址
+  const added = await request('POST', `/api/v2/customers/${customerId}/addresses`, {
+    name: '仓库', address: '仓库地址 2 号', contactName: '李四', contactPhone: '13900000002', isCommon: true
+  });
+  assert.equal(added.status, 201, JSON.stringify(added.body));
+  const addressId = added.body.data.address.id;
+  for (const key of ['id', 'name', 'address', 'contactName', 'contactPhone', 'areaId', 'isCommon', 'isActive', 'remark']) {
+    assert.equal(key in added.body.data.address, true, `地址视图应含 ${key}`);
+  }
+  assert.equal(added.body.data.address.isCommon, true);
+
+  // 编辑地址（只传部分字段，其余保持原值）
+  const edited = await request('PUT', `/api/v2/addresses/${addressId}`, { address: '仓库地址 2 号改' });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.data.address.address, '仓库地址 2 号改');
+  assert.equal(edited.body.data.address.contactName, '李四', '未传字段应保持原值');
+  assert.equal(edited.body.data.address.isCommon, true, '未传 isCommon 应保持原值');
+
+  // 停用地址
+  const disabled = await request('PATCH', `/api/v2/addresses/${addressId}/status`, { isActive: false });
+  assert.equal(disabled.status, 200);
+  assert.equal(disabled.body.data.address.isActive, false);
+
+  // 地址不存在 → 404
+  assert.equal((await request('PUT', '/api/v2/addresses/not-exist', { address: 'x' })).status, 404);
+  assert.equal((await request('PATCH', '/api/v2/addresses/not-exist/status', { isActive: false })).status, 404);
+  assert.equal((await request('POST', '/api/v2/customers/not-exist/addresses', { address: 'x' })).status, 404);
+  // 地址为空 → 400
+  assert.equal((await request('POST', `/api/v2/customers/${customerId}/addresses`, { address: '  ' })).status, 400);
+
+  // 客户停用 / 启用
+  const off = await request('PATCH', `/api/v2/customers/${customerId}/status`, { status: 'disabled' });
+  assert.equal(off.status, 200);
+  assert.equal(off.body.data.customer.status, 'disabled');
+  const on = await request('PATCH', `/api/v2/customers/${customerId}/status`, { status: 'active' });
+  assert.equal(on.body.data.customer.status, 'active');
+
+  // 删除客户（同时清掉地址）
+  const removed = await request('DELETE', `/api/v2/customers/${customerId}`);
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.data.ok, true);
+  assert.equal((await request('GET', `/api/v2/customers/${customerId}`)).status, 404);
+  assert.equal((await request('DELETE', `/api/v2/customers/${customerId}`)).status, 404);
+});
+
+// v2 与 v1 对"有进行中任务时禁止删客户"的行为必须一致
+test('v2 删除客户：有进行中任务时拒绝', async () => {
+  const name = `v2 删单保护 ${Date.now()}`;
+  const created = await request('POST', '/api/v2/customers', { name, address: '保护测试地址' });
+  const customerId = created.body.data.customer.id;
+  const detail = await request('GET', `/api/v2/customers/${customerId}`);
+  const addressId = detail.body.data.customer.addresses[0].id;
+
+  const task = await request('POST', '/api/v2/tasks', {
+    customerId, addressId, taskType: 'normal'
+  }, true, { 'X-Idempotency-Key': `del-guard-${Date.now()}` });
+  assert.equal([200, 201].includes(task.status), true, JSON.stringify(task.body));
+
+  const removed = await request('DELETE', `/api/v2/customers/${customerId}`);
+  assert.equal(removed.status, 400);
+  assert.match(String(removed.body.error), /进行中的任务/);
 });

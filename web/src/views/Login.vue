@@ -67,20 +67,20 @@ async function submit() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: var(--qj-chrome);
-  background-image: var(--qj-grid-chrome);
+  background-color: var(--qj-bg);
+  background-image: var(--qj-grid);
   background-size: var(--qj-grid-size);
   overflow: hidden;
 }
-/* 青色光斑：登录页的科技感来源，纯装饰 */
+/* 青色光斑：登录页的科技感来源，浅底上压低到很轻 */
 .login-glow {
   position: absolute;
-  top: -160px;
+  top: -180px;
   left: 50%;
-  width: 720px;
-  height: 420px;
+  width: 760px;
+  height: 440px;
   transform: translateX(-50%);
-  background: radial-gradient(50% 50% at 50% 50%, rgba(34, 211, 238, 0.22) 0%, rgba(34, 211, 238, 0) 70%);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(8, 145, 178, 0.13) 0%, rgba(8, 145, 178, 0) 70%);
   pointer-events: none;
 }
 .login-card {
@@ -90,7 +90,7 @@ async function submit() {
   border: 1px solid var(--qj-border);
   border-radius: var(--r-overlay);
   padding: 48px 44px 36px;
-  box-shadow: var(--shadow-3), 0 0 0 1px rgba(34, 211, 238, 0.08);
+  box-shadow: var(--shadow-3);
 }
 /* 卡片顶部青色描边高光 */
 .card-edge {
@@ -100,8 +100,8 @@ async function submit() {
   right: 12%;
   height: 2px;
   border-radius: 0 0 2px 2px;
-  background: linear-gradient(90deg, transparent, var(--qj-accent-bright), transparent);
-  opacity: 0.85;
+  background: linear-gradient(90deg, transparent, var(--qj-accent-strong), transparent);
+  opacity: 0.75;
 }
 .brand {
   text-align: center;
@@ -160,7 +160,7 @@ async function submit() {
 .footer {
   position: absolute;
   bottom: 24px;
-  color: var(--qj-chrome-text);
+  color: var(--qj-muted);
   font-size: var(--fs-sub);
 }
 

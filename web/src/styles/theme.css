@@ -22,15 +22,22 @@
   --qj-accent-bright-2: #67e8f9;
   --qj-accent-ink: #0e2a33;     /* 深色面上的激活底 */
 
-  /* ---------- 深色操作台（侧栏 / 顶栏 / 品牌面） ---------- */
-  --qj-chrome: #0b1220;
-  --qj-chrome-2: #111c30;
-  --qj-chrome-hover: #1b2739;
-  --qj-chrome-border: #24334a;
-  --qj-chrome-text: #94a3b8;    /* 7.30:1 on #0b1220 */
-  --qj-chrome-text-dim: #64748b;
-  --qj-chrome-text-strong: #e2e8f0;
-  --qj-chrome-glow: inset 3px 0 0 0 var(--qj-accent-bright);
+  /* ---------- 浅色操作台（侧栏 / 顶栏）----------
+   * 曾试过深色面（#0b1220）；实测大面积深色紧贴浅色内容长时间阅读易疲劳，
+   * 故改为「浅色面 + 墨色文字 + 青色指示」：靠结构线与点睛色做出秩序感，不靠压暗。
+   */
+  --qj-chrome: #f2f6fb;
+  --qj-chrome-2: #ffffff;
+  --qj-chrome-hover: #e6eef8;
+  --qj-chrome-border: #dde4ee;
+  --qj-chrome-text: #4e5969;        /* 6.73:1 on #f7f9fc */
+  --qj-chrome-text-dim: #666d78;
+  --qj-chrome-text-strong: #1f2329;
+  --qj-chrome-glow: inset 3px 0 0 0 var(--qj-accent-strong);
+  /* 侧栏激活态（浅色面专用配色） */
+  --qj-chrome-active-bg: #d9f2f7;
+  --qj-chrome-active-text: #0b4f5c; /* 7.87:1 */
+  --qj-chrome-active-icon: #0891b2;
 
   /* ---------- 中性色（内容区保持浅色，保证表格/对账可读） ---------- */
   --qj-bg: #eef1f6;             /* 冷调浅灰，带一点科技冷感 */
@@ -114,12 +121,12 @@
   --qj-focus: 0 0 0 3px rgba(8, 145, 178, 0.35);
   --qj-focus-chrome: 0 0 0 3px rgba(34, 211, 238, 0.4);
 
-  /* ---------- 科技感纹理 ---------- */
+  /* ---------- 科技感纹理（浅色面用极低对比的冷色网格） ---------- */
   --qj-grid: linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
   --qj-grid-size: 32px 32px;
-  --qj-grid-chrome: linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+  --qj-grid-chrome: linear-gradient(rgba(15, 23, 42, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.028) 1px, transparent 1px);
 
   /* ---------- Element Plus 变量映射 ---------- */
   --el-color-primary: var(--qj-primary);

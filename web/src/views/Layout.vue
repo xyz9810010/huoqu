@@ -303,7 +303,9 @@ onUnmounted(() => {
 .layout {
   height: 100%;
 }
-/* ===== 深色操作台：左侧导航 ===== */
+/* ===== 浅色操作台：左侧导航 =====
+ * 不使用大面积深色（长时间阅读易疲劳）：靠结构线 + 青色指示做出秩序感。
+ */
 .aside {
   background-color: var(--qj-chrome);
   background-image: var(--qj-grid-chrome);
@@ -324,13 +326,13 @@ onUnmounted(() => {
   width: 32px;
   height: 32px;
   border-radius: var(--r-control);
-  /* 青色渐变品牌块，替代原先的实心蓝 */
+  /* 青色渐变品牌块：点睛色唯一的大面积出现处 */
   background: linear-gradient(140deg, var(--qj-accent-bright) 0%, var(--qj-accent-strong) 55%, #155e75 100%);
   color: #04121a;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 4px 14px rgba(8, 145, 178, 0.28);
+  box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.22), 0 3px 10px rgba(8, 145, 178, 0.22);
 }
 .logo span {
   font-size: var(--fs-card);
@@ -346,7 +348,7 @@ onUnmounted(() => {
   --el-menu-bg-color: transparent;
   --el-menu-hover-bg-color: transparent;
   --el-menu-text-color: var(--qj-chrome-text);
-  --el-menu-active-color: var(--qj-accent-bright);
+  --el-menu-active-color: var(--qj-chrome-active-text);
 }
 .menu :deep(.el-menu-item) {
   height: 42px;
@@ -358,7 +360,7 @@ onUnmounted(() => {
     box-shadow var(--dur-fast) var(--ease);
 }
 .menu :deep(.el-menu-item .el-icon) {
-  color: var(--qj-chrome-text);
+  color: var(--qj-chrome-text-dim);
   transition: color var(--dur-fast) var(--ease);
 }
 .menu :deep(.el-menu-item:hover) {
@@ -366,25 +368,25 @@ onUnmounted(() => {
   color: var(--qj-chrome-text-strong);
 }
 .menu :deep(.el-menu-item:hover .el-icon) {
-  color: var(--qj-accent-bright);
+  color: var(--qj-accent);
 }
 .menu :deep(.el-menu-item.is-active) {
-  /* 激活态：青色左侧指示条 + 淡青底 + 亮青文字，是"科技感"的主要落点 */
-  background: var(--qj-accent-ink);
-  color: var(--qj-accent-bright);
+  /* 激活态：淡青底 + 深青文字 + 左侧 3px 青色指示条 */
+  background: var(--qj-chrome-active-bg);
+  color: var(--qj-chrome-active-text);
   font-weight: 600;
   box-shadow: var(--qj-chrome-glow);
 }
 .menu :deep(.el-menu-item.is-active .el-icon) {
-  color: var(--qj-accent-bright);
+  color: var(--qj-chrome-active-icon);
 }
 .menu :deep(.el-menu-item:focus-visible) {
-  box-shadow: var(--qj-focus-chrome);
+  box-shadow: var(--qj-focus);
 }
 .body {
   background: transparent;
 }
-/* ===== 顶栏：与侧栏同属深色操作台 ===== */
+/* ===== 顶栏：浅色面 + 青色实时指示 ===== */
 .header {
   height: 56px;
   background-color: var(--qj-chrome-2);
@@ -413,41 +415,41 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: var(--fs-meta);
-  color: var(--qj-chrome-text);
+  color: var(--qj-muted);
   white-space: nowrap;
 }
 .latency-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--qj-chrome-text-dim);
+  background: var(--qj-border-strong);
 }
 .latency.is-online .latency-dot {
-  /* 实时指示用青色 + 呼吸光晕 */
-  background: var(--qj-accent-bright);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
-  animation: qj-pulse 2.4s var(--ease) infinite;
+  /* 实时指示：青色点 + 极轻呼吸光晕（浅底上不刺眼） */
+  background: var(--qj-accent-strong);
+  box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.14);
+  animation: qj-pulse 2.6s var(--ease) infinite;
 }
 .latency.is-online .latency-text {
-  color: var(--qj-accent-bright-2);
+  color: var(--qj-accent);
 }
 @keyframes qj-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16); }
-  50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.06); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.14); }
+  50% { box-shadow: 0 0 0 5px rgba(8, 145, 178, 0.05); }
 }
 .bell,
 .shortcut-help {
-  border: 1px solid var(--qj-chrome-border);
-  background: transparent;
-  color: var(--qj-chrome-text);
+  border: 1px solid var(--qj-border);
+  background: var(--qj-surface);
+  color: var(--qj-text-2);
   width: 34px;
   height: 34px;
 }
 .shortcut-help:hover,
 .bell:hover {
-  color: var(--qj-accent-bright);
+  color: var(--qj-accent);
   border-color: var(--qj-accent-strong);
-  background: var(--qj-chrome-hover);
+  background: var(--qj-accent-bg);
 }
 .help-row {
   display: flex;
@@ -511,16 +513,16 @@ onUnmounted(() => {
   background: var(--qj-chrome-hover);
 }
 .user-box:focus-visible {
-  box-shadow: var(--qj-focus-chrome);
+  box-shadow: var(--qj-focus);
 }
 .avatar {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  /* 青色描边 + 深底，亮青字在深底上 10:1 以上 */
-  background: linear-gradient(150deg, #164e63 0%, #0e2a33 100%);
-  color: var(--qj-accent-bright-2);
-  border: 1px solid rgba(34, 211, 238, 0.35);
+  /* 淡青底 + 深青字（7.87:1），与侧栏激活态同一套语义色 */
+  background: var(--qj-chrome-active-bg);
+  color: var(--qj-chrome-active-text);
+  border: 1px solid #a5e8f2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -529,10 +531,10 @@ onUnmounted(() => {
 }
 .name {
   font-size: var(--fs-body);
-  color: var(--qj-chrome-text-strong);
+  color: var(--qj-text);
 }
 .caret {
-  color: var(--qj-chrome-text-dim);
+  color: var(--qj-muted);
   font-size: var(--fs-meta);
 }
 .main {
@@ -569,14 +571,14 @@ onUnmounted(() => {
     display: inline-flex;
     width: 40px;
     height: 40px;
-    border: 1px solid var(--qj-chrome-border);
-    background: transparent;
-    color: var(--qj-chrome-text-strong);
+    border: 1px solid var(--qj-border);
+    background: var(--qj-surface);
+    color: var(--qj-text-2);
   }
   .mobile-menu-trigger:hover {
-    color: var(--qj-accent-bright);
+    color: var(--qj-accent);
     border-color: var(--qj-accent-strong);
-    background: var(--qj-chrome-hover);
+    background: var(--qj-accent-bg);
   }
   .header-right {
     gap: var(--sp-2);

@@ -27,13 +27,17 @@
     --qj-accent-bright: #22d3ee;
     --qj-accent-bright-2: #67e8f9;
     --qj-accent-ink: #0e2a33;
-    --qj-chrome: #0b1220;
-    --qj-chrome-2: #111c30;
-    --qj-chrome-hover: #1b2739;
-    --qj-chrome-border: #24334a;
-    --qj-chrome-text: #94a3b8;
-    --qj-chrome-text-dim: #64748b;
-    --qj-chrome-text-strong: #e2e8f0;
+    /* v3：操作台回到浅色（深色面长时间阅读疲劳） */
+    --qj-chrome: #f2f6fb;
+    --qj-chrome-2: #ffffff;
+    --qj-chrome-hover: #e6eef8;
+    --qj-chrome-border: #dde4ee;
+    --qj-chrome-text: #4e5969;
+    --qj-chrome-text-dim: #666d78;
+    --qj-chrome-text-strong: #1f2329;
+    --qj-chrome-active-bg: #d9f2f7;
+    --qj-chrome-active-text: #0b4f5c;
+    --qj-chrome-active-icon: #0891b2;
     --qj-success-text: #15803d;
     --qj-success-bg: #ecfaf0;
     --qj-warning-text: #a14a08;
@@ -66,29 +70,30 @@
   h2.section:first-of-type { margin-top: 0; }
   .note { color: var(--qj-muted); font-size: var(--fs-meta); margin: -6px 0 12px; }
 
-  /* ---- 深色操作台样张 ---- */
+  /* ---- 操作台样张（v3 浅色） ---- */
   .chrome-demo { display: grid; grid-template-columns: 220px 1fr; border-radius: 12px; overflow: hidden; border: 1px solid var(--qj-chrome-border); box-shadow: var(--shadow-3); }
   .chrome-side {
     background-color: var(--qj-chrome);
-    background-image: linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.07) 1px, transparent 1px);
+    background-image: linear-gradient(rgba(15,23,42,.028) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,.028) 1px, transparent 1px);
     background-size: 32px 32px;
     padding: 10px 8px;
+    border-right: 1px solid var(--qj-chrome-border);
   }
   .chrome-logo { display: flex; align-items: center; gap: 10px; padding: 4px 10px 14px; border-bottom: 1px solid var(--qj-chrome-border); margin-bottom: 10px; }
   .chrome-logo__mark {
     width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: #04121a;
     background: linear-gradient(140deg, var(--qj-accent-bright) 0%, var(--qj-accent-strong) 55%, #155e75 100%);
-    box-shadow: 0 0 0 1px rgba(34,211,238,.25), 0 4px 14px rgba(8,145,178,.28);
+    box-shadow: 0 0 0 1px rgba(8,145,178,.22), 0 3px 10px rgba(8,145,178,.22);
   }
   .chrome-logo span { color: var(--qj-chrome-text-strong); font-weight: 600; font-size: var(--fs-card); letter-spacing: .4px; }
   .chrome-item { display: flex; align-items: center; gap: 9px; height: 42px; padding: 0 12px; border-radius: 8px; color: var(--qj-chrome-text); font-size: var(--fs-body); margin-bottom: 2px; }
-  .chrome-item.is-active { background: var(--qj-accent-ink); color: var(--qj-accent-bright); font-weight: 600; box-shadow: inset 3px 0 0 0 var(--qj-accent-bright); }
+  .chrome-item.is-active { background: var(--qj-chrome-active-bg); color: var(--qj-chrome-active-text); font-weight: 600; box-shadow: inset 3px 0 0 0 var(--qj-chrome-active-icon); }
   .chrome-item:not(.is-active):hover { background: var(--qj-chrome-hover); color: var(--qj-chrome-text-strong); }
-  .chrome-main { background: var(--qj-surface); }
+  .chrome-main { background: #eef1f6; }
   .chrome-top { height: 56px; background: var(--qj-chrome-2); border-bottom: 1px solid var(--qj-chrome-border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
-  .chrome-live { display: flex; align-items: center; gap: 6px; color: var(--qj-accent-bright-2); font-size: var(--fs-meta); }
-  .chrome-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--qj-accent-bright); box-shadow: 0 0 0 3px rgba(34,211,238,.16); }
-  .chrome-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--qj-accent-bright-2); font-size: var(--fs-sub); font-weight: 600; background: linear-gradient(150deg, #164e63 0%, #0e2a33 100%); border: 1px solid rgba(34,211,238,.35); }
+  .chrome-live { display: flex; align-items: center; gap: 6px; color: var(--qj-accent); font-size: var(--fs-meta); }
+  .chrome-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--qj-accent-strong); box-shadow: 0 0 0 3px rgba(8,145,178,.14); }
+  .chrome-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--qj-chrome-active-text); font-size: var(--fs-sub); font-weight: 600; background: var(--qj-chrome-active-bg); border: 1px solid #a5e8f2; }
   .chrome-body { padding: 18px 20px; }
   .chrome-body h3 { margin: 0 0 6px; font-size: var(--fs-title); }
   .chrome-body p { margin: 0; color: var(--qj-muted); font-size: var(--fs-meta); }
@@ -238,12 +243,12 @@
 <body>
 <div class="wrap">
   <div class="banner">
-    <strong>设计稿预览 v2 · 科技感</strong>
-    <span>深色操作台 + 浅色内容区；深墨为主色、青色点睛。用真实令牌渲染，确认后即按此改实际页面。</span>
+    <strong>设计稿预览 v3 · 全浅色科技风</strong>
+    <span>深色操作台已撤掉（长时间阅读疲劳）；科技感改由「墨色主调 + 青色点睛 + 结构线 + 网格纹理」承担。</span>
   </div>
 
-  <h2 class="section">0 · 深色操作台（v2 的骨架）</h2>
-  <p class="note">左侧导航与顶栏合为深色面（#0b1220 / #111c30）+ 32px 网格纹理；激活项左侧 3px 亮青指示条；实时指示用亮青呼吸点。</p>
+  <h2 class="section">0 · 操作台（v3 浅色）</h2>
+  <p class="note">侧栏 / 顶栏回到浅色面，靠 1px 结构线与激活态色块建立层级；青色只做指示器（激活条、实时点）。</p>
   <div class="chrome-demo">
     <div class="chrome-side">
       <div class="chrome-logo">
@@ -253,29 +258,29 @@
         <span>Huoqu</span>
       </div>
       <div class="chrome-item is-active">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4zM4 10h16"/></svg>数据看板
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2"><path d="M4 5h16v14H4zM4 10h16"/></svg><span style="color:#0b4f5c">数据看板</span>
       </div>
       <div class="chrome-item">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>客户管理
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666d78" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>客户管理
       </div>
       <div class="chrome-item">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新建取件
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666d78" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新建取件
       </div>
       <div class="chrome-item">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>取件任务
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666d78" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>取件任务
       </div>
     </div>
     <div class="chrome-main">
       <div class="chrome-top">
-        <span style="color:var(--qj-chrome-text-dim);font-size:var(--fs-meta)">Huoqu · 深色操作台</span>
+        <span style="color:var(--qj-muted);font-size:var(--fs-meta)">Huoqu · 浅色操作台</span>
         <div style="display:flex;align-items:center;gap:12px">
           <span class="chrome-live"><i></i>12 ms</span>
           <div class="chrome-avatar">系</div>
         </div>
       </div>
-      <div class="chrome-body">
-        <h3>内容区保持浅色</h3>
-        <p>表格、对账、Excel 导出这些长时段盯屏场景仍在白底上，保证可读性。</p>
+      <div class="chrome-body" style="background:#fff">
+        <h3>内容区同样浅色</h3>
+        <p>侧栏 #f2f6fb 与白底亮度比仅 1.09:1 —— 不再有明暗跳跃；层级由结构线和激活态色块表达。</p>
       </div>
     </div>
   </div>

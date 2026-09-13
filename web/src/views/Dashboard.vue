@@ -333,21 +333,21 @@ async function renderCharts() {
   // 取件员重量排行：横向柱状图（青色，强调"数据对比"）
   const ws = [...workers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0))
   await initChart(workerChartEl.value, {
-    color: ['#0891b2'],
+    color: ['#155e75'],
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 90, right: 40, top: 20, bottom: 30 },
     xAxis: { type: 'value', name: 'kg' },
     yAxis: { type: 'category', data: ws.map((w) => w.name), inverse: true },
     series: [{
       type: 'bar', data: ws.map((w) => w.weight), barMaxWidth: 22,
-      itemStyle: { borderRadius: [0, 4, 4, 0], color: '#0891b2' },
+      itemStyle: { borderRadius: [0, 4, 4, 0], color: '#155e75' },
     }],
   }, seq)
 
-  // 客户重量占比：环形饼图（墨 → 青 的冷色阶 + 少量状态色）
+  // 客户重量占比：环形饼图（墨 → 青 的冷色阶 + 少量状态色；浅底上都要够深才可辨）
   const topCustomers = [...customers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0)).slice(0, 8)
   await initChart(customerChartEl.value, {
-    color: ['#0f172a', '#155e75', '#0891b2', '#22d3ee', '#64748b', '#16a34a', '#b45309', '#b91c1c'],
+    color: ['#0f172a', '#155e75', '#0891b2', '#64748b', '#94a3b8', '#15803d', '#b45309', '#b91c1c'],
     tooltip: { trigger: 'item', formatter: '{b}: {c} kg ({d}%)' },
     legend: { bottom: 0, type: 'scroll' },
     series: [{

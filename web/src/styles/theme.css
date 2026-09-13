@@ -30,7 +30,7 @@
   --qj-chrome-2: #ffffff;
   --qj-chrome-hover: #e6eef8;
   --qj-chrome-border: #dde4ee;
-  --qj-chrome-text: #4e5969;        /* 6.73:1 on #f7f9fc */
+  --qj-chrome-text: #4e5969;        /* 6.73:1 on #f2f6fb */
   --qj-chrome-text-dim: #666d78;
   --qj-chrome-text-strong: #1f2329;
   --qj-chrome-glow: inset 3px 0 0 0 var(--qj-accent-strong);
@@ -38,6 +38,19 @@
   --qj-chrome-active-bg: #d9f2f7;
   --qj-chrome-active-text: #0b4f5c; /* 7.87:1 */
   --qj-chrome-active-icon: #0891b2;
+
+  /* ---------- 深色顶栏（v4）----------
+   * 采用「深色只做一条 56px 顶栏」的方案：保留仪表盘质感，
+   * 但深色接触面积从整块侧栏缩到一条细条，避免 v2 那种持续强对比边界。
+   * 顶栏 #1b2739 vs 白底 = 15.04:1，但仅在顶部一条；侧栏回到 #f2f6fb（vs 白底 1.09:1）。
+   */
+  --qj-bar: #1b2739;
+  --qj-bar-2: #223047;
+  --qj-bar-border: #334155;
+  --qj-bar-text: #94a3b8;           /* 5.87:1 */
+  --qj-bar-text-strong: #e2e8f0;    /* 12.20:1 */
+  --qj-bar-accent: #22d3ee;         /* 8.32:1 */
+  --qj-bar-accent-2: #67e8f9;       /* 10.38:1 */
 
   /* ---------- 中性色（内容区保持浅色，保证表格/对账可读） ---------- */
   --qj-bg: #eef1f6;             /* 冷调浅灰，带一点科技冷感 */
@@ -742,10 +755,11 @@ body {
     width: 100%;
     justify-content: flex-end;
   }
-  /* 移动端主操作占据整行，次要动作保持自然宽度 */
+  /* 移动端主操作：保持自然宽度、右对齐（占满整行会在深色顶栏下形成又一条深色带） */
   .page-head__actions > .el-button--primary {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 44px;
+    padding: 0 20px;
   }
   .page-description {
     display: none;

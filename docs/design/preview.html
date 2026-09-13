@@ -38,6 +38,14 @@
     --qj-chrome-active-bg: #d9f2f7;
     --qj-chrome-active-text: #0b4f5c;
     --qj-chrome-active-icon: #0891b2;
+    /* v4：深色只做一条 56px 顶栏 */
+    --qj-bar: #1b2739;
+    --qj-bar-2: #223047;
+    --qj-bar-border: #334155;
+    --qj-bar-text: #94a3b8;
+    --qj-bar-text-strong: #e2e8f0;
+    --qj-bar-accent: #22d3ee;
+    --qj-bar-accent-2: #67e8f9;
     --qj-success-text: #15803d;
     --qj-success-bg: #ecfaf0;
     --qj-warning-text: #a14a08;
@@ -90,10 +98,10 @@
   .chrome-item.is-active { background: var(--qj-chrome-active-bg); color: var(--qj-chrome-active-text); font-weight: 600; box-shadow: inset 3px 0 0 0 var(--qj-chrome-active-icon); }
   .chrome-item:not(.is-active):hover { background: var(--qj-chrome-hover); color: var(--qj-chrome-text-strong); }
   .chrome-main { background: #eef1f6; }
-  .chrome-top { height: 56px; background: var(--qj-chrome-2); border-bottom: 1px solid var(--qj-chrome-border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
-  .chrome-live { display: flex; align-items: center; gap: 6px; color: var(--qj-accent); font-size: var(--fs-meta); }
-  .chrome-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--qj-accent-strong); box-shadow: 0 0 0 3px rgba(8,145,178,.14); }
-  .chrome-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--qj-chrome-active-text); font-size: var(--fs-sub); font-weight: 600; background: var(--qj-chrome-active-bg); border: 1px solid #a5e8f2; }
+  .chrome-top { height: 56px; background: linear-gradient(180deg, var(--qj-bar-2) 0%, var(--qj-bar) 100%); border-bottom: 1px solid var(--qj-bar-border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+  .chrome-live { display: flex; align-items: center; gap: 6px; color: var(--qj-bar-accent-2); font-size: var(--fs-meta); }
+  .chrome-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--qj-bar-accent); box-shadow: 0 0 0 3px rgba(34,211,238,.16); }
+  .chrome-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--qj-chrome-active-text); font-size: var(--fs-sub); font-weight: 600; background: #fff; border: 1px solid var(--qj-bar-border); }
   .chrome-body { padding: 18px 20px; }
   .chrome-body h3 { margin: 0 0 6px; font-size: var(--fs-title); }
   .chrome-body p { margin: 0; color: var(--qj-muted); font-size: var(--fs-meta); }
@@ -243,12 +251,12 @@
 <body>
 <div class="wrap">
   <div class="banner">
-    <strong>设计稿预览 v3 · 全浅色科技风</strong>
-    <span>深色操作台已撤掉（长时间阅读疲劳）；科技感改由「墨色主调 + 青色点睛 + 结构线 + 网格纹理」承担。</span>
+    <strong>设计稿预览 v4 · 科技感（深色只占顶栏一条）</strong>
+    <span>侧栏/内容区浅色，深色仅顶部 56px —— 用「深色面积」换科技感，而不是用「深色对比」。</span>
   </div>
 
-  <h2 class="section">0 · 操作台（v3 浅色）</h2>
-  <p class="note">侧栏 / 顶栏回到浅色面，靠 1px 结构线与激活态色块建立层级；青色只做指示器（激活条、实时点）。</p>
+  <h2 class="section">0 · 操作台（v4）</h2>
+  <p class="note">顶栏 #1b2739（唯一深色面）+ 侧栏 #f2f6fb（浅色）+ 1px 结构线；青色只做指示器（激活条、实时点）。</p>
   <div class="chrome-demo">
     <div class="chrome-side">
       <div class="chrome-logo">
@@ -272,15 +280,15 @@
     </div>
     <div class="chrome-main">
       <div class="chrome-top">
-        <span style="color:var(--qj-muted);font-size:var(--fs-meta)">Huoqu · 浅色操作台</span>
+        <span style="color:var(--qj-bar-text);font-size:var(--fs-meta)">Huoqu · 深色顶栏（唯一深色面）</span>
         <div style="display:flex;align-items:center;gap:12px">
           <span class="chrome-live"><i></i>12 ms</span>
           <div class="chrome-avatar">系</div>
         </div>
       </div>
       <div class="chrome-body" style="background:#fff">
-        <h3>内容区同样浅色</h3>
-        <p>侧栏 #f2f6fb 与白底亮度比仅 1.09:1 —— 不再有明暗跳跃；层级由结构线和激活态色块表达。</p>
+        <h3>侧栏与内容区都是浅色</h3>
+        <p>深色只在视线不常停留的顶部一条（80640 px²），而 v2 的整块深色侧栏是 198000 px² 且正对视线。</p>
       </div>
     </div>
   </div>

@@ -386,11 +386,12 @@ onUnmounted(() => {
 .body {
   background: transparent;
 }
-/* ===== 顶栏：浅色面 + 青色实时指示 ===== */
+/* ===== 顶栏：深色细条（仪表盘质感；深色只占这一条）===== */
 .header {
   height: 56px;
-  background-color: var(--qj-chrome-2);
-  border-bottom: 1px solid var(--qj-chrome-border);
+  background-color: var(--qj-bar);
+  background-image: linear-gradient(180deg, var(--qj-bar-2) 0%, var(--qj-bar) 100%);
+  border-bottom: 1px solid var(--qj-bar-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -410,46 +411,50 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--sp-3);
 }
+/* 深色顶栏内的键盘焦点用亮青环，保证可见 */
+.header :deep(.el-button:focus-visible),
+.header .user-box:focus-visible {
+  box-shadow: var(--qj-focus-chrome);
+}
 .latency {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: var(--fs-meta);
-  color: var(--qj-muted);
+  color: var(--qj-bar-text);
   white-space: nowrap;
 }
 .latency-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--qj-border-strong);
+  background: var(--qj-bar-border);
 }
 .latency.is-online .latency-dot {
-  /* 实时指示：青色点 + 极轻呼吸光晕（浅底上不刺眼） */
-  background: var(--qj-accent-strong);
-  box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.14);
+  background: var(--qj-bar-accent);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
   animation: qj-pulse 2.6s var(--ease) infinite;
 }
 .latency.is-online .latency-text {
-  color: var(--qj-accent);
+  color: var(--qj-bar-accent-2);
 }
 @keyframes qj-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.14); }
-  50% { box-shadow: 0 0 0 5px rgba(8, 145, 178, 0.05); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.06); }
 }
 .bell,
 .shortcut-help {
-  border: 1px solid var(--qj-border);
-  background: var(--qj-surface);
-  color: var(--qj-text-2);
+  border: 1px solid var(--qj-bar-border);
+  background: transparent;
+  color: var(--qj-bar-text);
   width: 34px;
   height: 34px;
 }
 .shortcut-help:hover,
 .bell:hover {
-  color: var(--qj-accent);
-  border-color: var(--qj-accent-strong);
-  background: var(--qj-accent-bg);
+  color: var(--qj-bar-accent);
+  border-color: var(--qj-bar-accent);
+  background: rgba(34, 211, 238, 0.1);
 }
 .help-row {
   display: flex;
@@ -510,19 +515,19 @@ onUnmounted(() => {
   transition: background-color var(--dur-fast) var(--ease);
 }
 .user-box:hover {
-  background: var(--qj-chrome-hover);
+  background: rgba(148, 163, 184, 0.14);
 }
 .user-box:focus-visible {
-  box-shadow: var(--qj-focus);
+  box-shadow: var(--qj-focus-chrome);
 }
 .avatar {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  /* 淡青底 + 深青字（7.87:1），与侧栏激活态同一套语义色 */
-  background: var(--qj-chrome-active-bg);
+  /* 深色顶栏内用白底 + 深青字（9.18:1），是顶栏里唯一的高亮块 */
+  background: #ffffff;
   color: var(--qj-chrome-active-text);
-  border: 1px solid #a5e8f2;
+  border: 1px solid var(--qj-bar-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -531,10 +536,10 @@ onUnmounted(() => {
 }
 .name {
   font-size: var(--fs-body);
-  color: var(--qj-text);
+  color: var(--qj-bar-text-strong);
 }
 .caret {
-  color: var(--qj-muted);
+  color: var(--qj-bar-text);
   font-size: var(--fs-meta);
 }
 .main {
@@ -571,14 +576,14 @@ onUnmounted(() => {
     display: inline-flex;
     width: 40px;
     height: 40px;
-    border: 1px solid var(--qj-border);
-    background: var(--qj-surface);
-    color: var(--qj-text-2);
+    border: 1px solid var(--qj-bar-border);
+    background: transparent;
+    color: var(--qj-bar-text-strong);
   }
   .mobile-menu-trigger:hover {
-    color: var(--qj-accent);
-    border-color: var(--qj-accent-strong);
-    background: var(--qj-accent-bg);
+    color: var(--qj-bar-accent);
+    border-color: var(--qj-bar-accent);
+    background: rgba(34, 211, 238, 0.1);
   }
   .header-right {
     gap: var(--sp-2);

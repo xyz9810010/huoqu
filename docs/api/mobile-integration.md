@@ -338,7 +338,10 @@ Android 与鸿蒙端的 token 获取、通知权限、AGC 配置见 `docs/deploy
 | POST | `/api/v2/customers` | 新建（客服+），Body：`name`(必填) `contact/contactName` `phone/contactPhone` `address` `note/remark` `legacyCustomerId` `importantNote` |
 | PUT | `/api/v2/customers/:id` | 编辑（客服+），支持部分字段，另可传 `mainCsId`；省略字段保持原值 |
 
-v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/legacyCustomerId/importantNote/mainCsId/addressCount`。
+v2 客户列表字段：`id/customerNo/name/contact/contactName/phone/contactPhone/address/note/remark/status/legacyCustomerId/importantNote/mainCsId/addressCount/taskCount/openTaskCount/completedTaskCount/mainCsName`。
+
+> `contactName/contactPhone/remark` 是历史字段别名：v2 与 v1 一样**同时返回主名与别名**，老客户端无需改动。
+> `taskCount/openTaskCount/completedTaskCount/mainCsName` 与 v1 列表完全一致（曾缺失，已补齐）。
 
 ### 9.5 基础资料 / 看板 / 历史记录 / 对账
 
@@ -408,6 +411,53 @@ v2 客户列表字段：`id/customerNo/name/contact/phone/address/note/status/le
 | 任务/客户/通知/取件员/区域/台账 | 见第 2/4/6 节及 v1 直出结构 | 见上表（全部 `{data}` 包装） |
 
 **SSE 实时通道仍用 v1**：`POST /api/v1/events/tickets` + `GET /api/v1/events`（v2 暂未提供 SSE 入口，其余全部业务请求走 v2）。
+
+### 9.10 v2 补齐接口（与 v1 全覆盖）
+
+以下接口为一次性补齐，使 v2 覆盖 v1 的全部业务面（除下方"刻意不提供"的项）。
+响应同样遵守五条铁律；写操作走审计日志；权限与 v1 同名接口完全一致。
+
+| 方法 | 路径 | 角色 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/v2/worker/tasks` | 取件员 | 我的任务（强制只看自己；其它角色返回空列表） |
+| GET | `/api/v2/worker/customer-options` | 取件员 | 录单可选客户（非取件员 403） |
+| GET | `/api/v2/employees/workers` | 登录用户 | 取件员下拉 `{id,userId,name,region}` |
+| PATCH | `/api/v2/customers/:id/status` | 客服+ | 客户停用/启用（body 或 query 的 `status`） |
+| DELETE | `/api/v2/customers/:id` | 客服+ | 删除客户；有进行中任务时 400 |
+| POST | `/api/v2/customers/:id/addresses` | 客服+ | 新增地址 → `{data:{address}}` |
+| PUT | `/api/v2/addresses/:id` | 客服+ | 编辑地址（省缺字段保持原值） |
+| PATCH | `/api/v2/addresses/:id/status` | 客服+ | 地址启用/停用 |
+| GET | `/api/v2/users` | 管理员 | 账号列表（含 `courierName`） |
+| POST | `/api/v2/users` | 管理员 | 新建账号（角色用存储值 `admin/cs/courier`，可绑 `courierId`） |
+| DELETE | `/api/v2/users/:id` | 管理员 | 删除账号；内置 admin 与最后一个管理员受保护 |
+| POST | `/api/v2/users/:id/reset` | 管理员 | 重置口令（≥6 位） |
+| GET | `/api/v2/login-restrictions` | 管理员 | 登录时段限制 |
+| PUT | `/api/v2/login-restrictions/:role` | 管理员 | 仅 `cs` / `courier` 可写 |
+| POST | `/api/v2/records` | 登录用户 | 新建历史记录（幂等键可选；订单号唯一 409） |
+| PUT | `/api/v2/records/:id` | 登录用户 | 有限编辑（财务字段仅客服+） |
+| PUT | `/api/v2/records/:id/status` | 登录用户 | 记录状态流转 |
+| PUT | `/api/v2/records/:id/settle` | 客服+ | 结算 |
+| PUT | `/api/v2/records/:id/courier` | 登录用户 | 改派/认领 |
+| DELETE | `/api/v2/records/:id` | 登录用户 | 删除记录 |
+| POST | `/api/v2/records/:id/images` | 登录用户 | 上传记录图片（`multipart`，字段 `images`，最多 9 张） |
+| GET | `/api/v2/sync/match-center` | 客服+ | 待匹配明细列表 |
+| POST | `/api/v2/sync/match/:id` | 客服+ | 补票号并按运单号回填重量 |
+| GET | `/api/v2/dashboard/workers` | 客服+ | 取件员排行 |
+| GET | `/api/v2/dashboard/cs` | 客服+ | 客服数据 |
+| GET | `/api/v2/dashboard/customers` | 客服+ | 客户排行（前 20） |
+| GET | `/api/v2/dashboard/trends` | 客服+ | 近 N 天（`days`，默认 30）重量趋势 |
+| PUT | `/api/v2/areas/:id/workers` | 客服+ | 区域取件员分配（`defaultWorkerIds`/`backupWorkerIds`） |
+| PUT | `/api/v2/tasks/:id/status` | 登录用户 | 任务状态直改（沿用任务可见性） |
+| PUT | `/api/v2/tasks/:id/items/:itemId` | 登录用户 | 明细编辑；换票号会重置匹配状态与重量 |
+| GET | `/api/v2/track` | 免登录 | 自助查单（`q` 或 `phone`+`surname`），时间为 ISO8601 |
+
+**刻意不提供 v2 的项**（非疏漏）：
+
+- `/api/health`：探活用，无需版本化。
+- `/api/backup`、`/api/export.xlsx`、`/api/import*`：后台桌面端的运维/导出功能，移动端不用。
+- `/api/push/register|unregister`：**已废弃**，返回 410，替代品是 v2 `/api/v2/push/devices`。
+- `/api/machine/weigh`：过机设备接口，用 `X-Machine-Key` 而非登录态，不属于 App 面。
+- `/api/v1/events`、`/api/v1/notifications*`：SSE 与历史别名，按 §9.7 仍走 v1 入口。
 
 ### 9.8 幂等键（防重复建单，Android / HarmonyOS 必读）
 

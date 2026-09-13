@@ -827,6 +827,82 @@ function mountApiV2Routes(app, deps) {
     ok(res, { employee: result.data });
   });
 
+  // ---- 用户账号（管理员；等价 v1 /api/users 系列）----
+  // 与 employees 的区别：这里直接管理登录账号本身（含绑定取件员），角色用存储值 admin/cs/courier。
+  app.get('/api/v2/users', requireAuth, requireAdmin, (req, res) => {
+    const rows = db.prepare('SELECT * FROM users ORDER BY role, name').all();
+    const items = rows.map(u => Object.assign(auth.publicUser(u), {
+      courierName: (() => {
+        const c = u.courier_id ? db.prepare('SELECT name FROM couriers WHERE id = ?').get(u.courier_id) : null;
+        return c ? c.name : '';
+      })()
+    }));
+    ok(res, { items, total: items.length });
+  });
+
+  app.post('/api/v2/users', requireAuth, requireAdmin, (req, res) => {
+    const { username, password, role, courierId, name } = req.body || {};
+    const uname = String(username || '').trim();
+    if (!uname) return fail(res, 400, '请输入用户名');
+    if (!password || String(password).length < 6) return fail(res, 400, '密码至少6位');
+    if (db.prepare('SELECT id FROM users WHERE username = ?').get(uname)) return fail(res, 400, '用户名已存在');
+    if (!['admin', 'courier', 'cs'].includes(role)) return fail(res, 400, '角色不正确');
+    const salt = auth.createSalt();
+    const id = randomUUID();
+    // 取件员账号姓名留空时，自动取绑定的取件员姓名
+    let finalName = String(name || '').trim();
+    if (finalName === '' && role === 'courier' && courierId) {
+      const c = db.prepare('SELECT name FROM couriers WHERE id = ?').get(courierId);
+      if (c) finalName = c.name;
+    }
+    // 客服（派单员）不绑定取件员
+    db.prepare('INSERT INTO users (id,username,password_hash,salt,role,courier_id,name) VALUES (?,?,?,?,?,?,?)')
+      .run(id, uname, auth.hashPassword(password, salt), salt, role,
+        role === 'cs' ? null : (courierId || null), finalName);
+    audit(req.user, '创建用户', 'user', id, uname);
+    ok(res, { user: auth.publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)) }, 201);
+  });
+
+  app.delete('/api/v2/users/:id', requireAuth, requireAdmin, (req, res) => {
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!u) return fail(res, 404, '用户不存在');
+    if (u.role === 'admin' && u.username === 'admin') return fail(res, 400, '不能删除内置管理员');
+    if (u.role === 'admin' && db.prepare('SELECT COUNT(*) n FROM users WHERE role=?').get('admin').n <= 1) {
+      return fail(res, 400, '系统至少需要一个管理员');
+    }
+    db.transaction(() => {
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+      // 客户主客服引用指向已删账号时清空，避免悬空引用
+      db.prepare('UPDATE customers SET main_cs_id=? WHERE main_cs_id=?').run('', u.id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+    })();
+    audit(req.user, '删除用户', 'user', u.id, u.username);
+    ok(res, { ok: true });
+  });
+
+  app.post('/api/v2/users/:id/reset', requireAuth, requireAdmin, (req, res) => {
+    const { password } = req.body || {};
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!u) return fail(res, 404, '用户不存在');
+    if (!password || String(password).length < 6) return fail(res, 400, '新密码至少6位');
+    const salt = auth.createSalt();
+    db.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE id = ?')
+      .run(auth.hashPassword(password, salt), salt, u.id);
+    audit(req.user, '重置用户密码', 'user', u.id, u.username);
+    ok(res, { ok: true });
+  });
+
+  // ---- 登录时间限制（管理员；等价 v1 /api/login-restrictions）----
+  app.get('/api/v2/login-restrictions', requireAuth, requireAdmin, (req, res) => {
+    ok(res, { items: loginPolicy.listRestrictions() });
+  });
+
+  app.put('/api/v2/login-restrictions/:role', requireAuth, requireAdmin, (req, res) => {
+    const role = String(req.params.role || '');
+    if (role !== 'cs' && role !== 'courier') return fail(res, 400, '仅支持 cs / courier 角色');
+    ok(res, { restriction: loginPolicy.saveRestriction(role, req.body || {}) });
+  });
+
   // ============ 操作日志（仅管理员） ============
   app.get('/api/v2/logs', requireAuth, requireAdmin, (req, res) => {
     const { page, pageSize } = pageOf(req.query);

@@ -1080,3 +1080,57 @@ test('v2 删除客户：有进行中任务时拒绝', async () => {
   assert.equal(removed.status, 400);
   assert.match(String(removed.body.error), /进行中的任务/);
 });
+
+// ============ v1↔v2 补齐：用户账号管理 与 登录时段 ============
+test('v2 用户账号：列表/创建/重置密码/删除 与 登录时段限制', async () => {
+  const uname = `v2-user-${Date.now()}`;
+
+  const created = await request('POST', '/api/v2/users', {
+    username: uname, password: 'strong-password-7', role: 'cs', name: 'v2 账号客服'
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const userId = created.body.data.user.id;
+  assert.equal(created.body.data.user.username, uname);
+  assert.equal(created.body.data.user.role, 'cs');
+  assert.equal('password_hash' in created.body.data.user, false, '不得回传口令散列');
+
+  // 重复用户名 / 口令过短 / 角色不合法
+  assert.equal((await request('POST', '/api/v2/users', { username: uname, password: 'strong-password-7', role: 'cs' })).status, 400);
+  assert.equal((await request('POST', '/api/v2/users', { username: `${uname}-b`, password: '123', role: 'cs' })).status, 400);
+  assert.equal((await request('POST', '/api/v2/users', { username: `${uname}-c`, password: 'strong-password-7', role: 'nope' })).status, 400);
+
+  // 列表含 courierName 字段（与 v1 publicUser 扩展一致）
+  const list = await request('GET', '/api/v2/users');
+  assert.equal(list.status, 200);
+  const row = list.body.data.items.find(u => u.id === userId);
+  assert.ok(row, '新建用户应出现在列表');
+  assert.equal('courierName' in row, true);
+
+  // 重置密码后可用新密码登录
+  const reset = await request('POST', `/api/v2/users/${userId}/reset`, { password: 'new-strong-password-8' });
+  assert.equal(reset.status, 200);
+  const relogin = await request('POST', '/api/v2/auth/login', { username: uname, password: 'new-strong-password-8' }, false);
+  assert.equal(relogin.status, 200);
+  assert.equal((await request('POST', `/api/v2/users/${userId}/reset`, { password: '123' })).status, 400);
+  assert.equal((await request('POST', '/api/v2/users/not-exist/reset', { password: 'strong-password-7' })).status, 404);
+
+  // 删除：内置 admin 受保护
+  const adminRow = list.body.data.items.find(u => u.username === 'admin');
+  assert.ok(adminRow);
+  const delAdmin = await request('DELETE', `/api/v2/users/${adminRow.id}`);
+  assert.equal(delAdmin.status, 400);
+  assert.match(String(delAdmin.body.error), /内置管理员|至少需要一个管理员/);
+
+  assert.equal((await request('DELETE', `/api/v2/users/${userId}`)).status, 200);
+  assert.equal((await request('DELETE', `/api/v2/users/${userId}`)).status, 404);
+
+  // 登录时段限制：读写闭环 + 非法角色
+  const restrictions = await request('GET', '/api/v2/login-restrictions');
+  assert.equal(restrictions.status, 200);
+  assert.ok(Array.isArray(restrictions.body.data.items));
+  const saved = await request('PUT', '/api/v2/login-restrictions/cs', {
+    weekdays: '1,2,3,4,5', startTime: '08:00', endTime: '20:00', enabled: false
+  });
+  assert.equal(saved.status, 200);
+  assert.equal((await request('PUT', '/api/v2/login-restrictions/admin', {})).status, 400);
+});

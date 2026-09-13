@@ -84,7 +84,7 @@ async function submit() {
   margin: 0 auto 18px;
   border-radius: 16px;
   background: var(--qj-primary-btn);
-  color: #fff;
+  color: var(--el-color-white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,6 +112,7 @@ async function submit() {
 .login-btn {
   width: 100%;
   height: 48px;
+  min-height: 44px;
   font-size: 16px;
   letter-spacing: 6px;
   border-radius: var(--r-control);

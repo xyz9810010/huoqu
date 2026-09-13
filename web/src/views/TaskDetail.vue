@@ -160,7 +160,13 @@
 
       <!-- 摄像头扫码（安全上下文可用时提供） -->
       <div v-if="itemForm.entryMethod === 'scan'" class="scan-block">
-        <div v-show="scanning" id="qr-reader" class="qr-reader" />
+        <div v-show="scanning" class="qr-wrap">
+          <div id="qr-reader" class="qr-reader" />
+          <!-- 取景引导框：库不设 qrbox 时不会有自带框，这里自绘一个纯视觉提示 -->
+          <div class="qr-guide" aria-hidden="true">
+            <span class="qr-guide__box" />
+          </div>
+        </div>
         <div class="scan-actions">
           <el-button v-if="!scanning" type="primary" :icon="Camera" @click="startScan">打开摄像头扫码</el-button>
           <el-button v-else @click="stopScan">停止扫码</el-button>
@@ -601,13 +607,16 @@ onUnmounted(() => {
 .scan-block {
   margin-top: var(--sp-3);
 }
+.qr-wrap {
+  position: relative;
+  border-radius: var(--r-control);
+  overflow: hidden;
+  background: var(--qj-chrome);
+}
 .qr-reader {
   width: 100%;
-  /* 一维码很宽，取景框太窄会导致横向压缩解不出；给一个下限并允许横向滚动 */
+  /* 一维码很宽，取景框太窄会导致横向压缩解不出 */
   min-width: 280px;
-  border-radius: var(--r-control);
-  overflow-x: auto;
-  background: var(--qj-chrome);
 }
 .qr-reader :deep(video) {
   width: 100% !important;
@@ -615,9 +624,21 @@ onUnmounted(() => {
   border-radius: var(--r-control);
   display: block;
 }
-/* 库自带的取景框提示层随容器走 */
-.qr-reader :deep(#qr-shaded-region) {
+/* 自绘取景引导框（纯视觉，不参与识别） */
+.qr-guide {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.qr-guide__box {
+  display: block;
+  width: 84%;
+  height: 46%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
   border-radius: var(--r-control);
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.28);
 }
 .scan-actions {
   margin-top: var(--sp-2);

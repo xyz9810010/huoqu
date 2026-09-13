@@ -14,16 +14,33 @@ export interface ScannerOptions {
   onError: (message: string) => void
   /** 一组制式试扫失败、切换到下一组时回调，便于向用户解释 */
   onFormatChange?: (label: string) => void
+  /**
+   * 允许识别到的条码类型（如只要面单码、不要商品条码）。
+   * 目前把两类都接受：取件员既可能扫面单，也可能扫商品条码录入。
+   */
+  onFormatDetected?: (formatName: string) => void
 }
 
 const LIB_URL = '/html5-qrcode.min.js'
 
-// 快递/物流面单常见制式：一维为主，兼顾二维码
+// 条码制式集合。
+// 关键教训：商品条码是 EAN-13 / UPC-A，与面单的 Code128 完全不同的制式。
+// 实测（同一张真实图片）：只启用 Code128 那组时，EAN-13 报
+// "No MultiFormat Readers were able to detect the code."；把 EAN/UPC 加进来后立刻可解。
+// 因此第一组就必须覆盖「面单码 + 商品码」，不能让用户等切换。
 const FORMAT_SETS: { label: string; names: string[] }[] = [
-  { label: '常用面单码（Code128 / Code39 / ITF / 二维码）', names: ['CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'QR_CODE'] },
-  { label: '全部支持制式', names: ['CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'QR_CODE', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'DATA_MATRIX', 'PDF_417'] },
+  {
+    label: '面单码 + 商品码（Code128 / Code39 / ITF / EAN-13 / UPC / 二维码）',
+    names: [
+      'CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR',
+      'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E',
+      'QR_CODE', 'DATA_MATRIX', 'PDF_417',
+    ],
+  },
+  // 理论上用不到；万一某个制式在特定机型上初始化异常，退到最常用的一维/二维码
+  { label: '常用码（Code128 / Code39 / ITF / 二维码）', names: ['CODE_128', 'CODE_39', 'ITF', 'QR_CODE'] },
 ]
-const FORMAT_SWITCH_MS = 7000
+const FORMAT_SWITCH_MS = 9000
 
 /** 摄像头只在「安全上下文」可用：HTTPS 或 localhost/127.0.0.1；局域网 http://IP 不行。 */
 export function cameraSupport(): { ok: boolean; reason: string } {
@@ -89,13 +106,22 @@ function makeScanner(Ctor: any, elementId: string, formatNames: string[]): any {
   })
 }
 
-/** 扫描窗：整帧。给固定小窗会把一维码裁断（实测 400px 窗无法识别 500px 宽的 Code128） */
+/**
+ * 扫描配置。
+ *
+ * 关键教训（两次踩坑，务必保留）：
+ * 1) 不要设 qrbox！库会把 qrbox 区域裁剪后再缩放交给解码器，
+ *    这会破坏 EAN-13 这类条码两侧必要的静区（quiet zone）。
+ *    实测同一台假摄像头下的 EAN-13：
+ *      qrbox 92%x72%  → 识别不到
+ *      qrbox 500x300  → 识别不到
+ *      不设 qrbox     → 识别成功
+ *    一维码（面单 Code128 与商品 EAN-13）都对裁剪很敏感，直接扫整帧最稳。
+ * 2) 也不要给固定小窗：400px 宽的窗口装不下 500px 宽的 Code128，会被裁断。
+ */
 const SCAN_CONFIG = {
   fps: 10,
-  qrbox: (vw: number, vh: number) => ({
-    width: Math.max(200, Math.floor(vw * 0.92)),
-    height: Math.max(140, Math.floor(vh * 0.72)),
-  }),
+  // 明确不传 qrbox：整帧识别
 }
 
 export async function startScanner(elementId: string, opts: ScannerOptions): Promise<ScannerHandle> {

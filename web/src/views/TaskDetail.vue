@@ -151,12 +151,23 @@
       <EmptyState v-if="!(task.exceptions || []).length" title="暂无异常记录" description="取件员上报的异常会显示在这里" />
     </el-card>
     <!-- 录单 -->
-    <el-dialog v-model="itemVisible" title="扫码/录单" width="420px">
-      <el-radio-group v-model="itemForm.entryMethod">
+    <el-dialog v-model="itemVisible" title="扫码/录单" width="420px" @closed="stopScan">
+      <el-radio-group v-model="itemForm.entryMethod" @change="onEntryMethodChange">
         <el-radio-button value="scan">扫码</el-radio-button>
         <el-radio-button value="manual">手输票号</el-radio-button>
         <el-radio-button value="no_waybill">无票号</el-radio-button>
       </el-radio-group>
+
+      <!-- 摄像头扫码（安全上下文可用时提供） -->
+      <div v-if="itemForm.entryMethod === 'scan'" class="scan-block">
+        <div v-show="scanning" id="qr-reader" class="qr-reader" />
+        <div class="scan-actions">
+          <el-button v-if="!scanning" type="primary" :icon="Camera" @click="startScan">打开摄像头扫码</el-button>
+          <el-button v-else @click="stopScan">停止扫码</el-button>
+        </div>
+        <p class="scan-hint">{{ scanHint }}</p>
+      </div>
+
       <div style="margin-top:16px">
         <el-input v-if="itemForm.entryMethod !== 'no_waybill'" v-model="itemForm.waybillNo" placeholder="票号"
                   @keyup.enter="addItem" />
@@ -244,7 +255,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { ArrowLeft, Location, Phone } from '@element-plus/icons-vue'
+import { ArrowLeft, Camera, Location, Phone } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
@@ -253,6 +264,8 @@ import http from '../api'
 import { useAuthStore } from '../stores/auth'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { cameraSupport, startScanner } from '../services/scanner'
+import type { ScannerHandle } from '../services/scanner'
 import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../services/realtime-events'
 
 const route = useRoute()
@@ -283,6 +296,50 @@ const itemForm = reactive<any>({ entryMethod: 'scan', waybillNo: '', pieces: 1 }
 const exceptionForm = reactive<any>({ type: '', description: '' })
 const updateForm = reactive<any>({ taskType: 'normal', rushShipTime: '', rushReason: '', scheduledTime: '' })
 const exceptionTypes = ['客户取消', '到场无货', '联系不上', '地址错误', '客户要求改时间', '货物/包装异常', '其他']
+
+// ---- 摄像头扫码 ----
+const scanning = ref(false)
+const scanError = ref('')
+let scanHandle: ScannerHandle | null = null
+const scanSupport = cameraSupport()
+const scanHint = computed(() => {
+  if (scanError.value) return scanError.value
+  if (!scanSupport.ok) {
+    return `${scanSupport.reason}请改用「手输票号」，或让管理员用 HTTPS 访问本站后再扫码。`
+  }
+  return scanning.value ? '把条码/二维码对准取景框，识别后会自动填入票号。' : '扫码需允许浏览器使用摄像头。'
+})
+
+function onEntryMethodChange() {
+  if (itemForm.entryMethod !== 'scan') void stopScan()
+}
+
+async function startScan() {
+  if (scanning.value) return
+  scanError.value = ''
+  scanning.value = true
+  try {
+    scanHandle = await startScanner('qr-reader', {
+      onDetected: (text) => {
+        itemForm.waybillNo = text
+        ElMessage.success('已识别：' + text)
+        void stopScan()
+      },
+      onError: (msg) => { scanError.value = msg },
+    })
+  } catch {
+    scanning.value = false // 失败原因已通过 scanHint 呈现
+  }
+}
+
+async function stopScan() {
+  const handle = scanHandle
+  scanHandle = null
+  scanning.value = false
+  if (handle) {
+    try { await handle.stop() } catch { /* 忽略重复停止 */ }
+  }
+}
 
 const isCs = computed(() => ['cs', 'admin'].includes(auth.role))
 const isWorker = computed(() => auth.role === 'worker')
@@ -483,7 +540,10 @@ const liveRefresh = createRealtimeRefreshSubscription({
   predicate: event => taskIdFromRealtimeEvent(event) === taskId.value,
   refresh: load,
 })
-onUnmounted(() => liveRefresh.dispose())
+onUnmounted(() => {
+  liveRefresh.dispose()
+  void stopScan() // 离开页面必须释放摄像头，否则指示灯常亮
+})
 </script>
 
 <style scoped>
@@ -528,6 +588,31 @@ onUnmounted(() => liveRefresh.dispose())
   flex-wrap: wrap;
   gap: var(--sp-2);
   justify-content: flex-end;
+}
+/* 摄像头扫码区 */
+.scan-block {
+  margin-top: var(--sp-3);
+}
+.qr-reader {
+  width: 100%;
+  border-radius: var(--r-control);
+  overflow: hidden;
+  background: var(--qj-chrome);
+}
+.qr-reader :deep(video) {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: var(--r-control);
+  display: block;
+}
+.scan-actions {
+  margin-top: var(--sp-2);
+}
+.scan-hint {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  color: var(--qj-muted);
 }
 .bar-text {
   flex: 1;

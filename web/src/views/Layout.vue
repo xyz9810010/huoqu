@@ -572,21 +572,30 @@ onUnmounted(() => {
   .aside {
     display: none;
   }
+  /* 手机端顶栏与左侧导航同色同纹理，整块操作台连成一片 */
   .header {
     height: 56px;
     padding: 0 var(--sp-3);
+    background-color: var(--qj-chrome);
+    background-image: var(--qj-grid-chrome);
+    background-size: var(--qj-grid-size);
+    border-bottom: 1px solid var(--qj-chrome-border);
+  }
+  .header :deep(.el-button:focus-visible),
+  .header .user-box:focus-visible {
+    box-shadow: var(--qj-focus);
   }
   .mobile-menu-trigger {
     display: inline-flex;
     width: 40px;
     height: 40px;
-    border: 1px solid rgba(15, 47, 56, 0.32);
-    background: rgba(255, 255, 255, 0.55);
-    color: var(--qj-bar-text-strong);
+    border: 1px solid var(--qj-chrome-border);
+    background: var(--qj-surface);
+    color: var(--qj-chrome-text-strong);
   }
   .mobile-menu-trigger:hover {
-    border-color: var(--qj-bar-text-strong);
-    background: #ffffff;
+    border-color: var(--qj-primary-btn);
+    background: var(--qj-btn-bg);
   }
   .header-right {
     gap: var(--sp-2);
@@ -596,11 +605,37 @@ onUnmounted(() => {
   .shortcut-help {
     display: none;
   }
-  .latency-text {
-    display: none;
+  /* 顶栏回到浅色面，延时文字改为深色并保留显示 */
+  .latency,
+  .latency.is-online .latency-text {
+    color: var(--qj-chrome-text);
+  }
+  .latency.is-online .latency-text {
+    color: var(--qj-accent);
+    font-weight: 600;
+  }
+  .latency-dot {
+    background: var(--qj-chrome-text-dim);
+  }
+  .bell {
+    border-color: var(--qj-chrome-border);
+    background: var(--qj-surface);
+    color: var(--qj-chrome-text-strong);
+  }
+  .bell:hover {
+    color: var(--qj-accent);
+    border-color: var(--qj-accent-strong);
+    background: var(--qj-accent-bg);
+  }
+  .user-box:hover {
+    background: var(--qj-chrome-hover);
   }
   .user-box {
     padding: 2px;
+  }
+  /* 顶栏浅色后，头像改深青描边（白底在浅面上不够跳） */
+  .avatar {
+    border-color: var(--qj-chrome-active-icon);
   }
   .main {
     padding: var(--sp-3);

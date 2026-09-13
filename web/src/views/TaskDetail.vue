@@ -300,6 +300,7 @@ const exceptionTypes = ['客户取消', '到场无货', '联系不上', '地址�
 // ---- 摄像头扫码 ----
 const scanning = ref(false)
 const scanError = ref('')
+const scanFormatHint = ref('')
 let scanHandle: ScannerHandle | null = null
 const scanSupport = cameraSupport()
 const scanHint = computed(() => {
@@ -307,7 +308,11 @@ const scanHint = computed(() => {
   if (!scanSupport.ok) {
     return `${scanSupport.reason}请改用「手输票号」，或让管理员用 HTTPS 访问本站后再扫码。`
   }
-  return scanning.value ? '把条码/二维码对准取景框，识别后会自动填入票号。' : '扫码需允许浏览器使用摄像头。'
+  if (scanning.value) {
+    const base = '把条码完整放进取景框（一维码要横向放平），识别后会自动填入票号。'
+    return scanFormatHint.value ? `${base}当前制式：${scanFormatHint.value}` : base
+  }
+  return '扫码需允许浏览器使用摄像头。近距离若对不上焦，把手机往后退 10–15 厘米。'
 })
 
 function onEntryMethodChange() {
@@ -317,6 +322,7 @@ function onEntryMethodChange() {
 async function startScan() {
   if (scanning.value) return
   scanError.value = ''
+  scanFormatHint.value = ''
   scanning.value = true
   try {
     scanHandle = await startScanner('qr-reader', {
@@ -326,6 +332,7 @@ async function startScan() {
         void stopScan()
       },
       onError: (msg) => { scanError.value = msg },
+      onFormatChange: (label) => { scanFormatHint.value = label },
     })
   } catch {
     scanning.value = false // 失败原因已通过 scanHint 呈现
@@ -336,6 +343,7 @@ async function stopScan() {
   const handle = scanHandle
   scanHandle = null
   scanning.value = false
+  scanFormatHint.value = ''
   if (handle) {
     try { await handle.stop() } catch { /* 忽略重复停止 */ }
   }
@@ -595,8 +603,10 @@ onUnmounted(() => {
 }
 .qr-reader {
   width: 100%;
+  /* 一维码很宽，取景框太窄会导致横向压缩解不出；给一个下限并允许横向滚动 */
+  min-width: 280px;
   border-radius: var(--r-control);
-  overflow: hidden;
+  overflow-x: auto;
   background: var(--qj-chrome);
 }
 .qr-reader :deep(video) {
@@ -604,6 +614,10 @@ onUnmounted(() => {
   height: auto !important;
   border-radius: var(--r-control);
   display: block;
+}
+/* 库自带的取景框提示层随容器走 */
+.qr-reader :deep(#qr-shaded-region) {
+  border-radius: var(--r-control);
 }
 .scan-actions {
   margin-top: var(--sp-2);

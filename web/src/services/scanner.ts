@@ -9,16 +9,21 @@ export interface ScannerHandle {
   stop(): Promise<void>
 }
 
+export interface CameraOption {
+  deviceId: string
+  label: string
+  facing: 'back' | 'front' | 'unknown'
+}
+
 export interface ScannerOptions {
   onDetected: (text: string) => void
   onError: (message: string) => void
   /** 一组制式试扫失败、切换到下一组时回调，便于向用户解释 */
   onFormatChange?: (label: string) => void
-  /**
-   * 允许识别到的条码类型（如只要面单码、不要商品条码）。
-   * 目前把两类都接受：取件员既可能扫面单，也可能扫商品条码录入。
-   */
-  onFormatDetected?: (formatName: string) => void
+  /** 可用摄像头列表（授权后才拿得到标签） */
+  onCameras?: (cameras: CameraOption[], activeDeviceId: string) => void
+  /** 指定用哪颗摄像头；不传则由浏览器按 facingMode 选 */
+  deviceId?: string
 }
 
 const LIB_URL = '/html5-qrcode.min.js'
@@ -86,15 +91,50 @@ function describeCameraError(err: any): string {
   return '无法启动摄像头'
 }
 
-/** 高分辨率 + 连续对焦：一维码很细，低分辨率或失焦都解不出。
- *  注意：html5-qrcode 对 videoConstraints 有自己的校验 —— facingMode 只接受
- *  字符串或 { exact: ... }，写成 { ideal: ... } 会直接抛
- *  "'facingMode' should be string or object with exact as key."，导致相机根本起不来。 */
-const VIDEO_CONSTRAINTS = {
-  facingMode: 'environment',
-  width: { ideal: 1920 },
-  height: { ideal: 1080 },
-} as any
+/**
+ * 列出可用摄像头。
+ *
+ * 手机通常有 3~6 颗（广角/超广/长焦/微距/前置），浏览器不会都给你 ——
+ * 用 facingMode:'environment' 只会挑一颗。想切换必须自己枚举 + 用 deviceId 精确指定。
+ * 注意：deviceId 与标签只有在用户授权后才有值，所以要在取到流之后再调用。
+ */
+export async function listCameras(): Promise<CameraOption[]> {
+  if (!navigator.mediaDevices?.enumerateDevices) return []
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  const cams = devices.filter((d) => d.kind === 'videoinput')
+  const options = cams.map((d, i) => {
+    const label = (d.label || '').trim()
+    return {
+      deviceId: d.deviceId,
+      label: label || `摄像头 ${i + 1}`,
+      facing: describeFacing(label),
+    } as CameraOption
+  })
+  // 后置优先（扫码主要用后置），且把常见的多摄排列稳定下来
+  const order = { back: 0, unknown: 1, front: 2 } as const
+  return options.sort((a, b) => order[a.facing] - order[b.facing])
+}
+
+function describeFacing(label: string): CameraOption['facing'] {
+  const s = label.toLowerCase()
+  if (/back|rear|environment|后置|背面/.test(s)) return 'back'
+  if (/front|user|face|前置|正面/.test(s)) return 'front'
+  return 'unknown'
+}
+
+/**
+ * 取流约束。
+ *
+ * 重要：html5-qrcode 对 videoConstraints 有严格校验 ——
+ *   · facingMode 只接受字符串或 { exact: ... }，写成 { ideal: ... } 直接抛错；
+ *   · 过高的 width/height 在部分摄像头上会被拒（表现为"相机打不开"），
+ *     所以只用 ideal，让浏览器在能力范围内取最接近的。
+ * deviceId 指定某颗摄像头时用 exact。
+ */
+function videoConstraintsFor(deviceId?: string): any {
+  if (deviceId) return { deviceId: { exact: deviceId } }
+  return { facingMode: 'environment' }
+}
 
 function makeScanner(Ctor: any, elementId: string, formatNames: string[]): any {
   const F = (window as any).Html5QrcodeSupportedFormats
@@ -163,7 +203,7 @@ export async function startScanner(elementId: string, opts: ScannerOptions): Pro
     const set = FORMAT_SETS[index]
     scanner = makeScanner(Ctor, elementId, set.names)
     await scanner.start(
-      VIDEO_CONSTRAINTS,
+      videoConstraintsFor(opts.deviceId),
       SCAN_CONFIG,
       (decoded: string) => {
         const raw = String(decoded || '').trim()
@@ -193,30 +233,64 @@ export async function startScanner(elementId: string, opts: ScannerOptions): Pro
   try {
     await startWithSet(0)
   } catch (err: any) {
-    // 再退一步：去掉分辨率约束，只保留后置摄像头，排除个别机型不吃宽高约束
-    try {
-      scanner = makeScanner(Ctor, elementId, FORMAT_SETS[0].names)
-      await scanner.start(
-        { facingMode: 'environment' },
-        SCAN_CONFIG,
-        (decoded: string) => {
-          const raw = String(decoded || '').trim()
-          if (raw) { detected = true; opts.onDetected(raw) }
-        },
-        () => undefined,
-      )
-    } catch (retryErr: any) {
-      const msg = describeCameraError(retryErr ?? err)
+    // 指定的摄像头打不开（被占用/已移除）时，退回默认后置再试一次，避免整块功能不可用
+    if (opts.deviceId) {
+      try {
+        scanner = makeScanner(Ctor, elementId, FORMAT_SETS[0].names)
+        await scanner.start(
+          { facingMode: 'environment' },
+          SCAN_CONFIG,
+          (decoded: string) => {
+            const raw = String(decoded || '').trim()
+            if (raw) { detected = true; opts.onDetected(raw) }
+          },
+          () => undefined,
+        )
+      } catch (retryErr: any) {
+        const msg = describeCameraError(retryErr ?? err)
+        opts.onError(msg)
+        throw new Error(msg)
+      }
+    } else {
+      const msg = describeCameraError(err)
       opts.onError(msg)
       throw new Error(msg)
     }
   }
 
-  return {
+  // 取到流之后 deviceId 与标签才可读，此时再上报摄像头列表。
+  // 注意：这一步只影响"能否显示摄像头选择器"，绝不能让它反过来把扫码判成失败。
+  const handle: ScannerHandle = {
     async stop() {
       stopped = true
       if (switchTimer !== undefined) window.clearTimeout(switchTimer)
       await stopCurrent()
     },
+  }
+  try {
+    await reportCameras(opts)
+  } catch {
+    /* 枚举失败不影响扫码本身 */
+  }
+  return handle
+}
+
+/** 上报可用摄像头列表与当前实际生效的 deviceId（授权后才有标签）。自身不抛错。 */
+async function reportCameras(opts: ScannerOptions): Promise<void> {
+  if (!opts.onCameras) return
+  try {
+    const cameras = await listCameras()
+    let active = opts.deviceId || ''
+    if (!active) {
+      // 没指定时，读一下库实际用的那颗，便于界面显示正确的当前项
+      const video = document.querySelector<HTMLVideoElement>('#qr-reader video')
+      const src = video && video.srcObject
+      const track = src instanceof MediaStream ? src.getVideoTracks()[0] : null
+      const settings = track && typeof track.getSettings === 'function' ? track.getSettings() : undefined
+      active = (settings && settings.deviceId) || ''
+    }
+    opts.onCameras(cameras, active)
+  } catch {
+    /* 拿不到列表就不显示选择器 */
   }
 }

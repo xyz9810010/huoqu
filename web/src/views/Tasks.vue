@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHead title="取件任务" description="按时间与状态筛选，点击任意行进入任务详情">
+    <PageHead title="取件任务" description="按时间与状态筛选，点击任意行进入任务详情" nowrap>
       <template #actions>
         <el-button type="primary" @click="router.push('/dispatch')">
           <el-icon><Plus /></el-icon>新建取件
@@ -15,9 +15,7 @@
                 @click="pickTimeRange(r.key)">
           {{ r.label }}
         </button>
-      </div>
-
-      <div class="qj-pills">
+        <span class="pill-sep" aria-hidden="true" />
         <button v-for="tab in statusTabs" :key="tab.key" type="button"
                 class="qj-pill" :class="{ 'is-active': isActiveTab(tab.key) }"
                 @click="pickTab(tab.key)">
@@ -29,7 +27,7 @@
     </div>
 
     <div class="toolbar">
-      <el-select v-model="taskType" class="type-filter" placeholder="全部类型" clearable
+      <el-select v-model="taskType" class="type-filter" placeholder="类型" clearable
                  style="width:150px" @change="onFilterChange">
         <el-option label="普通" value="normal" />
         <el-option label="指定时间" value="scheduled" />
@@ -283,6 +281,15 @@ onUnmounted(() => {
 .task-type {
   margin-bottom: var(--sp-1);
 }
+/* 时间与状态之间的细分隔线 */
+.pill-sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--qj-border-strong);
+  align-self: center;
+}
 .list-card {
   margin-bottom: var(--sp-4);
 }
@@ -306,10 +313,41 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .toolbar :deep(.el-select),
+  /* 手机端：时间+状态胶囊收成一行可横向滑动，省掉一整行高度 */
+  .filter-bar {
+    gap: 0;
+  }
+  .filter-bar .qj-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* 右侧渐隐提示"还能滑" */
+    mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+    padding-bottom: 2px;
+  }
+  .filter-bar .qj-pills::-webkit-scrollbar {
+    display: none;
+  }
+  .filter-bar .qj-pill {
+    height: 34px;
+    padding: 0 12px;
+    flex: none;
+  }
+  .pill-sep {
+    height: 16px;
+    margin: 0 4px;
+  }
+  /* 类型筛选保留但收窄，避免多占一行 */
+  .toolbar .type-filter {
+    flex: 0 0 84px;
+    width: 84px !important;
+  }
+  /* 关键：给搜索框一个小的 flex 基准宽度，否则行内 width:240px 会成为换行依据 */
   .toolbar :deep(.el-input) {
-    flex: 1 1 100%;
-    width: auto !important;
+    flex: 1 1 110px;
+    width: 110px !important;
+    min-width: 0;
   }
   .toolbar .el-button {
     /* 查询等次要动作保持自然宽度，不占满整行 */

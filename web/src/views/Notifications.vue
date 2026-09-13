@@ -1,9 +1,9 @@
 <template>
   <div class="notifications-page">
-    <PageHead title="通知中心" description="任务、异常和系统动态都汇总在这里">
+    <PageHead title="通知中心" description="任务、异常和系统动态都汇总在这里" nowrap>
       <template #actions>
-        <el-button @click="router.push('/notification-settings')">
-          <el-icon><Setting /></el-icon>消息设置
+        <el-button class="settings-btn" aria-label="消息设置" @click="router.push('/notification-settings')">
+          <el-icon><Setting /></el-icon><span class="settings-btn__text">消息设置</span>
         </el-button>
         <el-button type="primary" :disabled="unreadTotal === 0" @click="readAll">全部已读</el-button>
       </template>
@@ -218,11 +218,26 @@ onUnmounted(() => liveRefresh.dispose())
   border: 0;
 }
 @media (max-width: 640px) {
+  /* 筛选行收成一行：胶囊左、条数右，避免换行多占一行 */
+  .filter-bar {
+    flex-wrap: nowrap;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-2);
+  }
   .filter-bar .qj-pill {
-    min-height: 40px;
+    height: 34px;
+    padding: 0 12px;
+  }
+  .summary {
+    flex: none;
+  }
+  /* 消息设置在手机上只留图标，给「全部已读」让出空间，保证页头一行放得下 */
+  .settings-btn__text {
+    display: none;
   }
   .notification-row {
     grid-template-columns: 8px minmax(0, 1fr);
+    padding: var(--sp-3) var(--sp-1);
   }
   .notification-meta {
     grid-column: 2;

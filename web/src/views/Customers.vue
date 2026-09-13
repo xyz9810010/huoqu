@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHead title="客户管理" description="维护客户档案、取件地址与派单入口">
+    <PageHead title="客户管理" description="维护客户档案、取件地址与派单入口" nowrap>
       <template #actions>
         <el-button type="primary" @click="openCreate">
           <el-icon><Plus /></el-icon>新增客户
@@ -10,8 +10,8 @@
 
     <div class="toolbar">
       <el-input v-model="search" placeholder="搜索名称 / 电话 / 原系统 ID" clearable style="width:260px"
-                @keyup.enter="load" @clear="load" />
-      <el-select v-model="status" placeholder="全部状态" clearable style="width:140px" @change="load">
+                class="search-input" @keyup.enter="load" @clear="load" />
+      <el-select v-model="status" class="status-select" placeholder="状态" clearable style="width:140px" @change="load">
         <el-option label="正常" value="active" />
         <el-option label="停用" value="disabled" />
       </el-select>
@@ -190,19 +190,27 @@ onMounted(load)
   font-size: var(--fs-meta);
 }
 @media (max-width: 768px) {
-  .toolbar :deep(.el-input) {
-    flex: 1 1 100%;
-    width: auto !important;
+  /* 手机端：搜索 + 状态 + 查询 收成一行，不再各占一行 */
+  .toolbar {
+    flex-wrap: nowrap;
+    gap: var(--sp-2);
   }
-  .toolbar :deep(.el-select) {
-    flex: 1 1 calc(50% - var(--sp-1));
-    width: auto !important;
-    min-width: 120px;
+  /* 关键：给搜索框一个小的 flex 基准宽度，否则行内 width:260px 会成为换行依据 */
+  .toolbar :deep(.el-input) {
+    flex: 1 1 110px;
+    width: 110px !important;
+    min-width: 0;
+  }
+  /* 状态只占固定窄位；空间让给搜索框 */
+  .toolbar .status-select {
+    flex: 0 0 80px;
+    width: 80px !important;
   }
   .toolbar .el-button {
-    flex: 1 1 calc(50% - var(--sp-1));
+    flex: 0 0 auto;
     margin-left: 0;
     min-height: 44px;
+    padding: 0 14px;
   }
 }
 </style>

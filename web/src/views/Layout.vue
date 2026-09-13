@@ -432,15 +432,15 @@ onUnmounted(() => {
 }
 .latency.is-online .latency-dot {
   background: var(--qj-bar-accent);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+  box-shadow: 0 0 0 3px rgba(165, 243, 252, 0.18);
   animation: qj-pulse 2.6s var(--ease) infinite;
 }
 .latency.is-online .latency-text {
   color: var(--qj-bar-accent-2);
 }
 @keyframes qj-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16); }
-  50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.06); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(165, 243, 252, 0.18); }
+  50% { box-shadow: 0 0 0 6px rgba(165, 243, 252, 0.07); }
 }
 .bell,
 .shortcut-help {
@@ -454,7 +454,7 @@ onUnmounted(() => {
 .bell:hover {
   color: var(--qj-bar-accent);
   border-color: var(--qj-bar-accent);
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(165, 243, 252, 0.12);
 }
 .help-row {
   display: flex;
@@ -583,7 +583,7 @@ onUnmounted(() => {
   .mobile-menu-trigger:hover {
     color: var(--qj-bar-accent);
     border-color: var(--qj-bar-accent);
-    background: rgba(34, 211, 238, 0.1);
+    background: rgba(165, 243, 252, 0.12);
   }
   .header-right {
     gap: var(--sp-2);

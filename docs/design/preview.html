@@ -14,10 +14,10 @@
     --qj-surface-subtle: #f8fafc;
     --qj-border: #e3e8ef;
     --qj-border-strong: #c9ced6;
-    /* v2：深墨为主 + 青色点睛 */
+    /* v5：墨色做层级；实色按钮改低饱和青绿（饱和 26%，白字 5.98:1） */
     --qj-primary: #0f172a;
-    --qj-primary-btn: #111c30;
-    --qj-primary-btn-hover: #1e293b;
+    --qj-primary-btn: #3f6b68;
+    --qj-primary-btn-hover: #355b58;
     --qj-primary-text: #0f172a;
     --qj-primary-bg: #eef2f7;
     --qj-primary-bg-hover: #e2e8f0;
@@ -38,13 +38,13 @@
     --qj-chrome-active-bg: #d9f2f7;
     --qj-chrome-active-text: #0b4f5c;
     --qj-chrome-active-icon: #0891b2;
-    /* v4：深色只做一条 56px 顶栏 */
-    --qj-bar: #1b2739;
-    --qj-bar-2: #223047;
-    --qj-bar-border: #334155;
-    --qj-bar-text: #94a3b8;
-    --qj-bar-text-strong: #e2e8f0;
-    --qj-bar-accent: #22d3ee;
+    /* v5：深色只做一条 56px 顶栏，并提亮降饱和（#164e63 → #2a6472） */
+    --qj-bar: #2a6472;
+    --qj-bar-2: #336f7d;
+    --qj-bar-border: #1e4c58;
+    --qj-bar-text: #d8e3ea;
+    --qj-bar-text-strong: #ffffff;
+    --qj-bar-accent: #a5f3fc;
     --qj-bar-accent-2: #67e8f9;
     --qj-success-text: #15803d;
     --qj-success-bg: #ecfaf0;
@@ -251,11 +251,11 @@
 <body>
 <div class="wrap">
   <div class="banner">
-    <strong>设计稿预览 v4 · 科技感（深色只占顶栏一条）</strong>
-    <span>侧栏/内容区浅色，深色仅顶部 56px —— 用「深色面积」换科技感，而不是用「深色对比」。</span>
+    <strong>设计稿预览 v5 · 科技感（低饱和版）</strong>
+    <span>顶栏提亮降饱和 #2a6472；按钮改低饱和青绿 #3f6b68（饱和 26%、白字 5.98:1）—— 治疗「看久了累」。</span>
   </div>
 
-  <h2 class="section">0 · 操作台（v4）</h2>
+  <h2 class="section">0 · 操作台（v5）</h2>
   <p class="note">顶栏 #1b2739（唯一深色面）+ 侧栏 #f2f6fb（浅色）+ 1px 结构线；青色只做指示器（激活条、实时点）。</p>
   <div class="chrome-demo">
     <div class="chrome-side">
@@ -530,9 +530,10 @@
   <div class="swatch-grid">
     <div class="swatch"><div class="swatch__chip" style="background:#0b1220"></div><div class="swatch__name">--qj-chrome</div><div class="swatch__val">#0b1220 · 深色操作台</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#0f172a"></div><div class="swatch__name">--qj-primary</div><div class="swatch__val">#0f172a · 主色（深墨）</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#111c30"></div><div class="swatch__name">--qj-primary-btn</div><div class="swatch__val">#111c30 · 主按钮底 · 白字 17:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#3f6b68"></div><div class="swatch__name">--qj-primary-btn</div><div class="swatch__val">#3f6b68 · 主按钮底 · 白字 5.98:1 · 饱和 26%</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#2a6472"></div><div class="swatch__name">--qj-bar</div><div class="swatch__val">#2a6472 · 顶栏（提亮降饱和）</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#0891b2"></div><div class="swatch__name">--qj-accent-strong</div><div class="swatch__val">#0891b2 · 青色描边/指示条</div></div>
-    <div class="swatch"><div class="swatch__chip" style="background:#22d3ee"></div><div class="swatch__name">--qj-accent-bright</div><div class="swatch__val">#22d3ee · 深色面上的亮青 10.36:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#a5f3fc"></div><div class="swatch__name">--qj-bar-accent</div><div class="swatch__val">#a5f3fc · 顶栏内亮点</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#0e7490"></div><div class="swatch__name">--qj-accent</div><div class="swatch__val">#0e7490 · 亮底青字 5.36:1</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#1f2329"></div><div class="swatch__name">--qj-text</div><div class="swatch__val">#1f2329 · 15.78:1</div></div>
     <div class="swatch"><div class="swatch__chip" style="background:#4e5969"></div><div class="swatch__name">--qj-text-2</div><div class="swatch__val">#4e5969 · 7.10:1</div></div>

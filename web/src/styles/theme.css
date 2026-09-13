@@ -4,10 +4,12 @@
  */
 
 :root {
-  /* ---------- 主色：深墨色（不再是亮蓝，"深色操作台"的骨架） ---------- */
-  --qj-primary: #0f172a;        /* 品牌主色：深墨 */
-  --qj-primary-btn: #111c30;    /* 实色按钮底（白字 17.0:1） */
-  --qj-primary-btn-hover: #1e293b;
+  /* ---------- 主色：墨色（承担文字与结构层级，不再用于大面积填充） ---------- */
+  --qj-primary: #0f172a;        /* 品牌主色：深墨（文字/强调） */
+  /* 实色按钮底：柔和青绿，饱和度压到 26%（原近黑 #111c30 对比 17:1 过重；
+   * 高饱和青绿 #0f766e 也偏刺眼）。最终白字 5.98:1，久看舒适。 */
+  --qj-primary-btn: #3f6b68;
+  --qj-primary-btn-hover: #355b58;
   --qj-primary-hover: #1e293b;
   --qj-primary-text: #0f172a;   /* 深墨文字令牌 */
   --qj-primary-bg: #eef2f7;     /* 浅墨底（用于浅底按钮/选中底） */
@@ -39,18 +41,17 @@
   --qj-chrome-active-text: #0b4f5c; /* 7.87:1 */
   --qj-chrome-active-icon: #0891b2;
 
-  /* ---------- 深色顶栏（v4）----------
-   * 采用「深色只做一条 56px 顶栏」的方案：保留仪表盘质感，
-   * 但深色接触面积从整块侧栏缩到一条细条，避免 v2 那种持续强对比边界。
-   * 顶栏 #1b2739 vs 白底 = 15.04:1，但仅在顶部一条；侧栏回到 #f2f6fb（vs 白底 1.09:1）。
+  /* ---------- 深色顶栏（v5：提亮 + 降饱和，久看不刺眼）----------
+   * 顶栏从 #164e63 提到 #2a6472（白底对比 9.11 → 6.64），并与按钮同族但更浅，
+   * 保证层次：顶栏(最深) > 按钮 > 浅色侧栏/内容区。
    */
-  --qj-bar: #1b2739;
-  --qj-bar-2: #223047;
-  --qj-bar-border: #334155;
-  --qj-bar-text: #94a3b8;           /* 5.87:1 */
-  --qj-bar-text-strong: #e2e8f0;    /* 12.20:1 */
-  --qj-bar-accent: #22d3ee;         /* 8.32:1 */
-  --qj-bar-accent-2: #67e8f9;       /* 10.38:1 */
+  --qj-bar: #2a6472;
+  --qj-bar-2: #336f7d;
+  --qj-bar-border: #1e4c58;
+  --qj-bar-text: #d8e3ea;           /* 5.0:1 */
+  --qj-bar-text-strong: #ffffff;    /* 6.64:1 */
+  --qj-bar-accent: #a5f3fc;
+  --qj-bar-accent-2: #67e8f9;       /* 4.57:1 */
 
   /* ---------- 中性色（内容区保持浅色，保证表格/对账可读） ---------- */
   --qj-bg: #eef1f6;             /* 冷调浅灰，带一点科技冷感 */
@@ -296,16 +297,16 @@ body {
   --el-button-active-border-color: var(--qj-primary-btn-hover);
 }
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled) {
-  background-image: linear-gradient(180deg, #1c2b45 0%, var(--qj-primary-btn) 100%) !important;
+  background-image: linear-gradient(180deg, #487673 0%, var(--qj-primary-btn) 100%) !important;
   background-color: var(--qj-primary-btn) !important;
-  border-color: #24334a !important;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 1px 2px rgba(2, 6, 23, 0.18);
+  border-color: #355b58 !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 1px 2px rgba(53, 91, 88, 0.16);
 }
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):hover,
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):focus {
-  background-image: linear-gradient(180deg, #24344f 0%, var(--qj-primary-btn-hover) 100%) !important;
+  background-image: linear-gradient(180deg, #3d6461 0%, var(--qj-primary-btn-hover) 100%) !important;
   background-color: var(--qj-primary-btn-hover) !important;
-  border-color: var(--qj-accent-strong) !important;
+  border-color: #2c4d4a !important;
 }
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):focus-visible {
   box-shadow: var(--qj-focus);

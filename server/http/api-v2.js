@@ -13,7 +13,7 @@ const { createUploader } = require('./uploads');
 const { utcText } = require('../time');
 const { taskVisibleTo, enrichTaskDetail, courierActiveTaskCount, workerStatsWindow } = require('./task-views');
 const views = require('./views');
-const { rowCourier, employeeView, customerListView, maskName, locateTrackTarget } = views;
+const { rowCourier, employeeView, customerListView, maskName, locateTrackTarget, findWaybillWeight } = views;
 const fc = require('../security/field-crypto');
 const loginPolicy = require('../security/login-policy');
 const { createEmployeeService } = require('../operations/employees');
@@ -91,7 +91,8 @@ function addressView(address) {
 function mountApiV2Routes(app, deps) {
   const {
     db, auth, tasks, notificationService, notificationRepository,
-    subscriptionStore, preferenceStore, providerConfigStore, providerRegistry, uploadsDir
+    subscriptionStore, preferenceStore, providerConfigStore, providerRegistry, uploadsDir,
+    businessNotificationPublisher
   } = deps;
   const { imageUpload } = createUploader(uploadsDir);
   const broadcast = deps.broadcast || (() => {});
@@ -1087,6 +1088,210 @@ function mountApiV2Routes(app, deps) {
     }
     const total = items.length;
     ok(res, { items: items.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize });
+  });
+
+  // ---- 记录写操作（等价 v1 /api/records* ；权限规则完全一致）----
+  const RECORD_STATUSES = ['待取', '已取', '已完成', '已取消'];
+  // 取件员只能操作自己名下"未结束"的记录；客服/管理员不受限（与 v1 注释同义）
+  function recordWritable(req, res, row) {
+    if (req.user.role !== 'courier') return true;
+    if (row.courier_id !== req.user.courier_id) { fail(res, 403, '无权操作该记录'); return false; }
+    if (row.status === '已完成' || row.status === '已取消') {
+      fail(res, 403, '订单已完成/已取消，操作权限已回收');
+      return false;
+    }
+    return true;
+  }
+
+  app.post('/api/v2/records', requireAuth, withIdempotency((req, res) => {
+    const {
+      date, courierId, customer, customerId, pieces, address = '', region = '', note = '', status = '待取', orderNo = '',
+      goods = '', weight = 0, volume = 0, trackingNo = '', amountReceivable = 0, amountPayable = 0, settled = '未结算',
+      pickupPhone = '', appointmentTime = ''
+    } = req.body || {};
+    if (!date) return fail(res, 400, '请选择日期');
+    // 客户：优先用客户档案（customerId），否则用自由文本
+    let custId = '';
+    let custFinal = '';
+    if (customerId) {
+      const cu = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
+      if (cu) { custId = cu.id; custFinal = fc.decryptField(cu.name); }
+    }
+    if (!custFinal) custFinal = String(customer || '').trim();
+    if (!custFinal) return fail(res, 400, '请输入客户名称');
+    const p = parseInt(pieces, 10) || 0;
+    if (req.user.role === 'courier' && p <= 0) return fail(res, 400, '请输入有效的取件件数');
+    if (p < 0) return fail(res, 400, '件数不能为负数');
+    const weightFinal = num(weight);
+    const volumeFinal = num(volume);
+    if (!Number.isFinite(weightFinal) || weightFinal < 0) return fail(res, 400, '重量不能为负数');
+    if (!Number.isFinite(volumeFinal) || volumeFinal < 0) return fail(res, 400, '体积不能为负数');
+    const addressFinal = String(address || '').trim();
+    if ((req.user.role === 'admin' || req.user.role === 'cs') && !addressFinal) return fail(res, 400, '请输入取件地址');
+    if (!RECORD_STATUSES.includes(status)) return fail(res, 400, '状态不正确');
+    if (!['未结算', '已结算'].includes(settled)) return fail(res, 400, '结算状态不正确');
+    const settledFinal = req.user.role === 'courier' ? '未结算' : settled; // 取件员登记固定为未结算
+    const orderFinal = String(orderNo || '').trim();
+    const trackingFinal = String(trackingNo || '').trim();
+    if (orderFinal && db.prepare('SELECT id FROM records WHERE order_no = ?').get(orderFinal)) {
+      return fail(res, 409, '订单号已存在，请勿重复录入：' + orderFinal);
+    }
+    const canAssign = req.user.role === 'admin' || req.user.role === 'cs';
+    const cid = canAssign ? (courierId || null) : (req.user.courier_id || null);
+    const id = randomUUID();
+    const regionFinal = String(region || '').trim() ||
+      (() => { const c = cid ? db.prepare('SELECT region FROM couriers WHERE id=?').get(cid) : null; return c ? c.region : ''; })();
+    db.prepare(`INSERT INTO records (id,date,courier_id,customer,customer_id,pieces,address,region,note,status,order_no,goods,weight,volume,tracking_no,amount_receivable,amount_payable,settled,pickup_phone,appointment_time,dispatcher_id,dispatcher_name)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, date, cid, fc.encryptField(custFinal), custId, p, fc.encryptField(addressFinal), regionFinal,
+        fc.encryptField(String(note || '')), status, orderFinal, String(goods || '').trim(), weightFinal, volumeFinal,
+        trackingFinal, num(amountReceivable), num(amountPayable), settledFinal,
+        fc.encryptField(String(pickupPhone || '').trim()), String(appointmentTime || '').trim(),
+        req.user.id, req.user.name || req.user.username);
+    db.prepare('INSERT INTO record_status_log (id,record_id,status,note,user_name) VALUES (?,?,?,?,?)')
+      .run(randomUUID(), id, status, String(note || ''), req.user.name || req.user.username);
+    const created = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(id));
+    broadcast({ type: 'record.created', record: created, actorId: req.user.id, actor: req.user.name || req.user.username });
+    if (businessNotificationPublisher) {
+      businessNotificationPublisher.recordAssigned(created, {
+        id: req.user.id, name: req.user.name || req.user.username
+      }, randomUUID());
+    }
+    ok(res, { record: created }, 201);
+  }));
+
+  app.put('/api/v2/records/:id', requireAuth, (req, res) => {
+    const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
+    if (!r) return fail(res, 404, '记录不存在');
+    if (!recordWritable(req, res, r)) return undefined;
+    const b = req.body || {};
+    // 允许补录：件数、面单号、地址、区域、品名、备注、取件电话（不允许改财务结算/状态/客户/取件员）
+    const pieces = parseInt(b.pieces, 10);
+    if (!pieces || pieces <= 0) return fail(res, 400, '请输入取件件数');
+    const trackingNo = b.trackingNo != null ? String(b.trackingNo).trim() : (r.tracking_no || '');
+    const decRec = {
+      address: fc.decryptField(r.address), note: fc.decryptField(r.note), pickup_phone: fc.decryptField(r.pickup_phone)
+    };
+    const address = b.address != null ? String(b.address).trim() : (decRec.address || '');
+    const region = b.region != null ? String(b.region).trim() : (r.region || '');
+    const goods = b.goods != null ? String(b.goods).trim() : (r.goods || '');
+    const note = b.note != null ? String(b.note).trim() : (decRec.note || '');
+    const pickupPhone = b.pickupPhone != null ? String(b.pickupPhone).trim() : (decRec.pickup_phone || '');
+    const isStaff = req.user.role === 'admin' || req.user.role === 'cs';
+    const amountReceivable = (isStaff && b.amountReceivable != null) ? num(b.amountReceivable) : (r.amount_receivable || 0);
+    const amountPayable = (isStaff && b.amountPayable != null) ? num(b.amountPayable) : (r.amount_payable || 0);
+    db.prepare('UPDATE records SET pieces=?, tracking_no=?, address=?, region=?, goods=?, note=?, pickup_phone=?, amount_receivable=?, amount_payable=? WHERE id=?')
+      .run(pieces, trackingNo, fc.encryptField(address), region, goods, fc.encryptField(note),
+        fc.encryptField(pickupPhone), amountReceivable, amountPayable, r.id);
+    const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
+    broadcast({ type: 'record.updated', record: updated, action: 'edit', actorId: req.user.id, actor: req.user.name || req.user.username });
+    ok(res, { record: updated });
+  });
+
+  app.put('/api/v2/records/:id/status', requireAuth, (req, res) => {
+    const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
+    if (!r) return fail(res, 404, '记录不存在');
+    const status = req.body && req.body.status;
+    if (!RECORD_STATUSES.includes(status)) return fail(res, 400, '状态不正确');
+    if (!recordWritable(req, res, r)) return undefined;
+    const completedAt = status === '已完成' ? nowStr() : (r.completed_at || '');
+    db.prepare('UPDATE records SET status = ?, completed_at = ? WHERE id = ?').run(status, completedAt, r.id);
+    db.prepare('INSERT INTO record_status_log (id,record_id,status,note,user_name) VALUES (?,?,?,?,?)')
+      .run(randomUUID(), r.id, status, String((req.body && req.body.note) || ''), req.user.name || req.user.username);
+    const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
+    broadcast({ type: 'record.updated', record: updated, action: 'status', actorId: req.user.id, actor: req.user.name || req.user.username });
+    if (businessNotificationPublisher) {
+      businessNotificationPublisher.recordStatusChanged(updated, {
+        id: req.user.id, name: req.user.name || req.user.username
+      }, randomUUID());
+    }
+    ok(res, { record: updated });
+  });
+
+  app.put('/api/v2/records/:id/settle', requireAuth, requireStaff, (req, res) => {
+    const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
+    if (!r) return fail(res, 404, '记录不存在');
+    const settled = req.body && req.body.settled;
+    if (!['未结算', '已结算'].includes(settled)) return fail(res, 400, '结算状态不正确');
+    db.prepare('UPDATE records SET settled = ? WHERE id = ?').run(settled, r.id);
+    const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
+    broadcast({ type: 'record.updated', record: updated, action: 'settle', actorId: req.user.id, actor: req.user.name || req.user.username });
+    ok(res, { record: updated });
+  });
+
+  app.put('/api/v2/records/:id/courier', requireAuth, (req, res) => {
+    const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
+    if (!r) return fail(res, 404, '记录不存在');
+    const courierId = req.body && req.body.courierId;
+    if (req.user.role === 'courier') {
+      // 取件员只能认领「未分配」订单给自己
+      if (r.courier_id) return fail(res, 403, '该订单已分配，无法认领');
+      if (courierId !== req.user.courier_id) return fail(res, 403, '只能认领给自己');
+    }
+    const finalCid = (courierId === '' || courierId === null || courierId === undefined) ? null : courierId;
+    db.prepare('UPDATE records SET courier_id = ? WHERE id = ?').run(finalCid, r.id);
+    const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
+    broadcast({ type: 'record.updated', record: updated, action: 'assign', actorId: req.user.id, actor: req.user.name || req.user.username });
+    if (businessNotificationPublisher) {
+      businessNotificationPublisher.recordAssigned(updated, {
+        id: req.user.id, name: req.user.name || req.user.username
+      }, randomUUID());
+    }
+    ok(res, { record: updated });
+  });
+
+  app.delete('/api/v2/records/:id', requireAuth, (req, res) => {
+    const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
+    if (!r) return fail(res, 404, '记录不存在');
+    if (!recordWritable(req, res, r)) return undefined;
+    db.prepare('DELETE FROM records WHERE id = ?').run(r.id);
+    broadcast({ type: 'record.deleted', id: r.id, actorId: req.user.id, actor: req.user.name || req.user.username });
+    ok(res, { ok: true });
+  });
+
+  // 记录图片上传（multipart，字段名 images，最多 9 张）
+  app.post('/api/v2/records/:id/images', requireAuth, (req, res, next) => {
+    const r = db.prepare('SELECT * FROM records WHERE id = ?').get(req.params.id);
+    if (!r) return fail(res, 404, '记录不存在');
+    if (!recordWritable(req, res, r)) return undefined;
+    req.recordRow = r;
+    next();
+  }, imageUpload.array('images', 9), (req, res) => {
+    const r = req.recordRow;
+    const type = (req.body && req.body.type) === 'pickup' ? 'pickup' : 'goods';
+    const files = (req.files || []).map(f => f.filename);
+    if (!files.length) return fail(res, 400, '请选择图片');
+    const col = type === 'pickup' ? 'pickup_images' : 'goods_images';
+    const parseImages = (v) => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } };
+    db.prepare(`UPDATE records SET ${col} = ? WHERE id = ?`)
+      .run(JSON.stringify(parseImages(r[col]).concat(files)), r.id);
+    const updated = rowRecord(db.prepare('SELECT * FROM records WHERE id = ?').get(r.id));
+    broadcast({ type: 'record.updated', record: updated, action: 'image', actorId: req.user.id, actor: req.user.name || req.user.username });
+    ok(res, { record: updated });
+  });
+
+  // ============ 重量匹配中心（等价 v1 /api/sync/*）============
+  app.get('/api/v2/sync/match-center', requireAuth, requireStaff, (req, res) => {
+    const rows = db.prepare(`SELECT i.*,t.task_no,t.customer_name_snap FROM pickup_items i
+      JOIN pickup_tasks t ON t.id=i.task_id WHERE i.match_status IN ('pending','no_waybill') ORDER BY i.created_at DESC`).all();
+    const items = rows.map(row => ({
+      id: row.id, taskId: row.task_id, taskNo: row.task_no,
+      customerName: fc.decryptField(row.customer_name_snap), waybillNo: row.waybill_no,
+      pieces: row.pieces, entryMethod: row.entry_method, matchStatus: row.match_status
+    }));
+    ok(res, { items, total: items.length });
+  });
+
+  app.post('/api/v2/sync/match/:id', requireAuth, requireStaff, (req, res) => {
+    const item = db.prepare('SELECT * FROM pickup_items WHERE id=?').get(req.params.id);
+    if (!item) return fail(res, 404, '货物明细不存在');
+    const waybillNo = String((req.body && req.body.waybillNo) || '').trim();
+    if (!waybillNo) return fail(res, 400, '请输入票号');
+    const found = findWaybillWeight(db, waybillNo, nowStr());
+    db.prepare(`UPDATE pickup_items SET waybill_no=?,entry_method='manual',final_weight=?,weight_source=?,match_status=?,updated_at=? WHERE id=?`)
+      .run(waybillNo, found.matched ? found.finalWeight : num(item.final_weight),
+        found.matched ? 'waybill_sync' : '', found.matched ? 'matched' : 'pending', utcText(), item.id);
+    ok(res, { matched: found.matched, finalWeight: found.finalWeight });
   });
 
   // ============ 对账 / 提成 ============

@@ -191,6 +191,7 @@ mountApiV2Routes(app, {
   db,
   auth,
   tasks,
+  businessNotificationPublisher,
   notificationService,
   notificationRepository,
   subscriptionStore,

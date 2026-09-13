@@ -86,22 +86,12 @@ function mountApiRoutes(app, deps) {
   const { upload, imageUpload } = createUploader(uploadsDir);
 
   // 过机/导入的最终重量统一落入 waybill_weights，供任务明细按票号自动匹配；
-  // 历史数据（仅存在于 records 表）在匹配时兜底回填。
+  // 过机/导入等直接写入运单重量的场景仍需要 upsert；匹配读取走 views.findWaybillWeight（v1/v2 共用）。
   const upsertWaybillWeight = db.prepare(`INSERT INTO waybill_weights
     (waybill_no, customer_id, final_weight, ship_date, updated_at) VALUES (?,?,?,?,?)
     ON CONFLICT(waybill_no) DO UPDATE SET customer_id=excluded.customer_id,
     final_weight=excluded.final_weight, ship_date=excluded.ship_date, updated_at=excluded.updated_at`);
-  const findWaybillWeight = (waybillNo) => {
-    const row = db.prepare('SELECT * FROM waybill_weights WHERE waybill_no=?').get(waybillNo);
-    if (row) return { finalWeight: num(row.final_weight), matched: true };
-    const legacy = db.prepare(`SELECT customer_id, weight AS final_weight, date AS ship_date
-      FROM records WHERE tracking_no=? AND weight>0 ORDER BY date DESC LIMIT 1`).get(waybillNo);
-    if (legacy) {
-      upsertWaybillWeight.run(waybillNo, legacy.customer_id || '', num(legacy.final_weight), legacy.ship_date || '', nowStr());
-      return { finalWeight: num(legacy.final_weight), matched: true };
-    }
-    return { finalWeight: 0, matched: false };
-  };
+  const findWaybillWeight = (waybillNo) => views.findWaybillWeight(db, waybillNo, nowStr());
 
 
 // ---------- 工具 ----------

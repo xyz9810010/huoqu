@@ -1134,3 +1134,122 @@ test('v2 用户账号：列表/创建/重置密码/删除 与 登录时段限制
   assert.equal(saved.status, 200);
   assert.equal((await request('PUT', '/api/v2/login-restrictions/admin', {})).status, 400);
 });
+
+// ============ v1↔v2 补齐：历史记录（records）写操作 ============
+test('v2 记录：创建/编辑/状态/结算/删除 与权限回收', async () => {
+  const created = await request('POST', '/api/v2/records', {
+    date: '2026-09-01', customer: 'v2 记录客户', pieces: 3, address: '记录测试地址',
+    orderNo: `V2ORD-${Date.now()}`, goods: '测试货物', trackingNo: `V2TRK-${Date.now()}`,
+    amountReceivable: 100, amountPayable: 60, settled: '未结算'
+  }, true, { 'X-Idempotency-Key': `rec-${Date.now()}` });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const recordId = created.body.data.record.id;
+  assert.equal('data' in created.body, true);
+  assert.equal(created.body.data.record.pieces, 3);
+
+  // 缺少日期 / 状态不合法 / 结算状态不合法
+  assert.equal((await request('POST', '/api/v2/records', { customer: 'x', pieces: 1 })).status, 400);
+  assert.equal((await request('POST', '/api/v2/records', { date: '2026-09-01', customer: 'x', pieces: 1, status: '乱写' })).status, 400);
+  assert.equal((await request('POST', '/api/v2/records', { date: '2026-09-01', customer: 'x', pieces: 1, settled: '乱写' })).status, 400);
+
+  // 编辑：件数与备注
+  const edited = await request('PUT', `/api/v2/records/${recordId}`, { pieces: 5, note: '改过' });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.data.record.pieces, 5);
+  assert.equal(edited.body.data.record.note, '改过');
+  assert.equal((await request('PUT', `/api/v2/records/${recordId}`, { pieces: 0 })).status, 400);
+
+  // 状态流转
+  const moved = await request('PUT', `/api/v2/records/${recordId}/status`, { status: '已取', note: '已取走' });
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.data.record.status, '已取');
+  assert.equal((await request('PUT', `/api/v2/records/${recordId}/status`, { status: '乱写' })).status, 400);
+
+  // 结算（客服/管理员）
+  const settled = await request('PUT', `/api/v2/records/${recordId}/settle`, { settled: '已结算' });
+  assert.equal(settled.status, 200);
+  assert.equal(settled.body.data.record.settled, '已结算');
+  assert.equal((await request('PUT', `/api/v2/records/${recordId}/settle`, { settled: '乱写' })).status, 400);
+
+  // 列表能看到
+  const list = await request('GET', '/api/v2/records?page=1&pageSize=100');
+  assert.equal(list.status, 200);
+  assert.ok(list.body.data.items.some(r => r.id === recordId));
+  // 分页包装一致性
+  assert.equal(typeof list.body.data.total, 'number');
+  assert.equal(list.body.data.page, 1);
+
+  // 删除
+  assert.equal((await request('DELETE', `/api/v2/records/${recordId}`)).status, 200);
+  assert.equal((await request('DELETE', `/api/v2/records/${recordId}`)).status, 404);
+  assert.equal((await request('PUT', '/api/v2/records/not-exist', { pieces: 1 })).status, 404);
+});
+
+// 取件员：权限回收规则必须与 v1 一致
+test('v2 记录：取件员不可操作他人记录，完成后权限回收', async () => {
+  const uname = `v2-rec-worker-${Date.now()}`;
+  const emp = await request('POST', '/api/v2/employees', {
+    username: uname, password: 'strong-password-7', name: 'v2 记录取件员', role: 'courier'
+  });
+  assert.equal(emp.status, 201);
+  const workerLogin = await request('POST', '/api/v2/auth/login', { username: uname, password: 'strong-password-7' }, false);
+  const workerToken = workerLogin.body.data.token;
+  const workerCourierId = workerLogin.body.data.user.courierId;
+
+  // 管理员建一条记录并指派给该取件员
+  const created = await request('POST', '/api/v2/records', {
+    date: '2026-09-02', customer: 'v2 权限客户', pieces: 1, address: '权限地址',
+    courierId: workerCourierId
+  }, true, { 'X-Idempotency-Key': `recperm-${Date.now()}` });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const recordId = created.body.data.record.id;
+
+  const saved = token;
+  token = workerToken;
+  // 自己的、未结束 → 可以改
+  assert.equal((await request('PUT', `/api/v2/records/${recordId}`, { pieces: 2 })).status, 200);
+  // 置为已完成（管理员态下操作，因为取件员完成后权限即回收）
+  token = saved;
+  assert.equal((await request('PUT', `/api/v2/records/${recordId}/status`, { status: '已完成' })).status, 200);
+  token = workerToken;
+  const afterDone = await request('PUT', `/api/v2/records/${recordId}`, { pieces: 3 });
+  assert.equal(afterDone.status, 403);
+  assert.match(String(afterDone.body.error), /权限已回收/);
+  assert.equal((await request('DELETE', `/api/v2/records/${recordId}`)).status, 403);
+  token = saved;
+});
+
+// ============ v1↔v2 补齐：重量匹配中心 ============
+test('v2 匹配中心：待匹配列表与补票号', async () => {
+  const center = await request('GET', '/api/v2/sync/match-center');
+  assert.equal(center.status, 200);
+  assert.ok(Array.isArray(center.body.data.items));
+
+  // 建一条无票号明细，使其进入匹配中心
+  const customerName = `v2 匹配客户 ${Date.now()}`;
+  const cust = await request('POST', '/api/v2/customers', { name: customerName, address: '匹配地址' });
+  const customerId = cust.body.data.customer.id;
+  const detail = await request('GET', `/api/v2/customers/${customerId}`);
+  const addressId = detail.body.data.customer.addresses[0].id;
+  const task = await request('POST', '/api/v2/tasks', { customerId, addressId, taskType: 'normal' }, true,
+    { 'X-Idempotency-Key': `match-task-${Date.now()}` });
+  assert.equal([200, 201].includes(task.status), true, JSON.stringify(task.body));
+  const taskId = task.body.data.task.id;
+  const item = await request('POST', `/api/v2/tasks/${taskId}/items`, {
+    entryMethod: 'manual', pieces: 2, goodsName: '待匹配货物'
+  });
+  assert.equal([200, 201].includes(item.status), true, JSON.stringify(item.body));
+
+  const after = await request('GET', '/api/v2/sync/match-center');
+  const target = after.body.data.items.find(i => i.taskId === taskId);
+  assert.ok(target, '新录入的明细应出现在匹配中心');
+
+  // 补票号：未登记过重量时应 matched=false 且状态转 pending
+  const matched = await request('POST', `/api/v2/sync/match/${target.id}`, { waybillNo: `V2-MATCH-${Date.now()}` });
+  assert.equal(matched.status, 200);
+  assert.equal(matched.body.data.matched, false);
+  assert.equal(matched.body.data.finalWeight, 0);
+  // 空票号 → 400
+  assert.equal((await request('POST', `/api/v2/sync/match/${target.id}`, { waybillNo: '  ' })).status, 400);
+  assert.equal((await request('POST', '/api/v2/sync/match/not-exist', { waybillNo: 'x' })).status, 404);
+});

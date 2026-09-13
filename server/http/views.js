@@ -87,6 +87,27 @@ function maskName(name) {
 }
 
 /**
+ * 按运单号取最终重量：新表 waybill_weights 优先，旧 records 兜底并回填。
+ * v1 与 v2 共用，避免两套匹配算法产生不一致。
+ */
+function findWaybillWeight(db, waybillNo, nowText) {
+  const numOf = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+  const row = db.prepare('SELECT * FROM waybill_weights WHERE waybill_no=?').get(waybillNo);
+  if (row) return { finalWeight: numOf(row.final_weight), matched: true };
+  const legacy = db.prepare(`SELECT customer_id, weight AS final_weight, date AS ship_date
+    FROM records WHERE tracking_no=? AND weight>0 ORDER BY date DESC LIMIT 1`).get(waybillNo);
+  if (legacy) {
+    db.prepare(`INSERT INTO waybill_weights
+      (waybill_no, customer_id, final_weight, ship_date, updated_at) VALUES (?,?,?,?,?)
+      ON CONFLICT(waybill_no) DO UPDATE SET customer_id=excluded.customer_id,
+      final_weight=excluded.final_weight, ship_date=excluded.ship_date, updated_at=excluded.updated_at`)
+      .run(waybillNo, legacy.customer_id || '', numOf(legacy.final_weight), legacy.ship_date || '', nowText);
+    return { finalWeight: numOf(legacy.final_weight), matched: true };
+  }
+  return { finalWeight: 0, matched: false };
+}
+
+/**
  * 客户自助查单的数据定位（免登录）。
  * 新任务模型优先（业务订单号 / 任务号 / 明细面单号），旧 records 兜底，兼顾迁移后的老单。
  * 返回 { task } 或 { legacy } 或 {}；不负责渲染，渲染由各自 API 决定（v1 本地时间文本、v2 ISO8601）。
@@ -134,5 +155,6 @@ module.exports = {
   customerOrderStats,
   customerListView,
   maskName,
+  findWaybillWeight,
   locateTrackTarget
 };

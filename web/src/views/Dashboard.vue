@@ -1,29 +1,33 @@
 <template>
   <div>
-    <div class="toolbar">
-      <h2 class="page-title">经营看板</h2>
-      <div class="spacer" />
-      <el-radio-group v-model="mode" size="small">
-        <el-radio-button value="table">列表</el-radio-button>
-        <el-radio-button value="chart">图表</el-radio-button>
-      </el-radio-group>
-      <el-radio-group v-model="range" size="small" @change="loadAll">
-        <el-radio-button value="today">今天</el-radio-button>
-        <el-radio-button value="yesterday">昨天</el-radio-button>
-        <el-radio-button value="week">本周</el-radio-button>
-        <el-radio-button value="month">本月</el-radio-button>
-      </el-radio-group>
-      <el-button :icon="Refresh" circle @click="loadAll" />
-    </div>
+    <PageHead title="数据看板" description="今日经营指标、取件员负荷与出货趋势">
+      <template #actions>
+        <el-radio-group v-model="mode" size="default">
+          <el-radio-button value="table">列表</el-radio-button>
+          <el-radio-button value="chart">图表</el-radio-button>
+        </el-radio-group>
+        <el-radio-group v-model="range" size="default" @change="loadAll">
+          <el-radio-button value="today">今天</el-radio-button>
+          <el-radio-button value="yesterday">昨天</el-radio-button>
+          <el-radio-button value="week">本周</el-radio-button>
+          <el-radio-button value="month">本月</el-radio-button>
+        </el-radio-group>
+        <el-button :icon="Refresh" circle aria-label="刷新数据" @click="loadAll" />
+      </template>
+    </PageHead>
+
+    <SkeletonBlock v-if="loading && !loaded" :rows="3" class="block" />
 
     <div class="stat-grid">
       <div v-for="m in metrics" :key="m.label" class="stat-card">
-        <div class="stat-icon" :style="{ background: m.tint, color: m.color }">
+        <div class="stat-icon" :style="{ background: m.tint, color: m.ink }">
           <el-icon><component :is="m.icon" /></el-icon>
         </div>
-        <div>
+        <div class="stat-body">
           <div class="stat-label">{{ m.label }}</div>
-          <div class="stat-value">{{ m.value }}</div>
+          <div class="stat-value" :class="{ 'is-zero': !m.value }">
+            {{ m.display }}<span v-if="m.unit && m.value" class="stat-unit">{{ m.unit }}</span>
+          </div>
           <div class="stat-sub">{{ m.sub }}</div>
         </div>
       </div>
@@ -52,7 +56,9 @@
         <div v-if="attention.syncFailed" class="attn warn">
           <el-icon><RefreshRight /></el-icon><b>{{ attention.syncFailed }}</b> 次同步失败
         </div>
-        <span v-if="!hasAttention" class="all-clear">✓ 暂无需要关注的项</span>
+        <span v-if="!hasAttention" class="all-clear">
+          <el-icon><CircleCheck /></el-icon> 暂无需要关注的项
+        </span>
       </div>
     </el-card>
 
@@ -66,24 +72,24 @@
             </template>
             <el-table class="desktop-table" :data="workers">
               <el-table-column type="index" label="#" width="52" />
-              <el-table-column prop="name" label="取件员" min-width="110">
+              <el-table-column prop="name" label="取件员" min-width="118">
                 <template #default="{ row }">
                   <div class="worker-cell">
                     <span class="avatar-mini">{{ row.name?.slice(0, 1) }}</span>{{ row.name }}
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column prop="pickupCount" label="取件次数" width="90" />
+              <el-table-column prop="pickupCount" label="取件次数" width="92" />
               <el-table-column prop="customerCount" label="客户数" width="80" />
               <el-table-column prop="pieces" label="件数" width="80" />
-              <el-table-column label="最终重量" width="110">
-                <template #default="{ row }"><b class="num">{{ row.weight }}</b> kg</template>
+              <el-table-column label="最终重量" width="112">
+                <template #default="{ row }"><b class="qj-num">{{ row.weight }}</b> kg</template>
               </el-table-column>
               <el-table-column prop="assistCount" label="协助" width="70" />
               <el-table-column prop="pending" label="待取" width="70">
                 <template #default="{ row }">
-                  <el-tag v-if="row.pending" type="warning" size="small">{{ row.pending }}</el-tag>
-                  <span v-else>0</span>
+                  <span v-if="row.pending" class="qj-badge qj-badge--pending qj-num">{{ row.pending }}</span>
+                  <span v-else class="qj-num qj-muted">0</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -91,11 +97,11 @@
               <div v-for="(row, index) in workers" :key="row.id || row.name" class="mobile-item">
                 <div class="mobile-item__head">
                   <div class="worker-cell"><span class="rank">{{ index + 1 }}</span><span class="mobile-item__title">{{ row.name }}</span></div>
-                  <strong class="weight">{{ row.weight || 0 }} kg</strong>
+                  <strong class="weight qj-num">{{ row.weight || 0 }} kg</strong>
                 </div>
                 <div class="metric-line"><span>取件 {{ row.pickupCount || 0 }} 次</span><span>客户 {{ row.customerCount || 0 }}</span><span>件数 {{ row.pieces || 0 }}</span><span>待取 {{ row.pending || 0 }}</span></div>
               </div>
-              <el-empty v-if="!workers.length" description="暂无取件员数据" />
+              <EmptyState v-if="!workers.length" title="暂无取件员数据" description="该时间段内还没有取件记录" />
             </div>
           </el-card>
         </el-col>
@@ -106,20 +112,20 @@
               <div class="block-title"><el-icon><User /></el-icon>客服数据</div>
             </template>
             <el-table class="desktop-table" :data="cs">
-              <el-table-column prop="name" label="客服" min-width="90" />
-              <el-table-column prop="customerCount" label="负责客户" width="90" />
-              <el-table-column prop="shipCustomerCount" label="发货客户" width="90" />
-              <el-table-column prop="taskCount" label="取件任务" width="90" />
+              <el-table-column prop="name" label="客服" min-width="96" />
+              <el-table-column prop="customerCount" label="负责客户" width="92" />
+              <el-table-column prop="shipCustomerCount" label="发货客户" width="92" />
+              <el-table-column prop="taskCount" label="取件任务" width="92" />
               <el-table-column label="重量" width="100">
-                <template #default="{ row }"><b class="num">{{ row.weight }}</b> kg</template>
+                <template #default="{ row }"><b class="qj-num">{{ row.weight }}</b> kg</template>
               </el-table-column>
             </el-table>
             <div class="mobile-list mobile-list--inset dashboard-mobile-list">
               <div v-for="row in cs" :key="row.id || row.name" class="mobile-item">
-                <div class="mobile-item__head"><span class="mobile-item__title">{{ row.name }}</span><strong class="weight">{{ row.weight || 0 }} kg</strong></div>
+                <div class="mobile-item__head"><span class="mobile-item__title">{{ row.name }}</span><strong class="weight qj-num">{{ row.weight || 0 }} kg</strong></div>
                 <div class="metric-line"><span>负责客户 {{ row.customerCount || 0 }}</span><span>发货客户 {{ row.shipCustomerCount || 0 }}</span><span>任务 {{ row.taskCount || 0 }}</span></div>
               </div>
-              <el-empty v-if="!cs.length" description="暂无客服数据" />
+              <EmptyState v-if="!cs.length" title="暂无客服数据" description="客服派单量会显示在这里" />
             </div>
           </el-card>
 
@@ -131,14 +137,14 @@
               <el-table-column type="index" label="#" width="52" />
               <el-table-column prop="name" label="客户" min-width="130" show-overflow-tooltip />
               <el-table-column label="重量" width="110">
-                <template #default="{ row }"><b class="num">{{ row.weight }}</b> kg</template>
+                <template #default="{ row }"><b class="qj-num">{{ row.weight }}</b> kg</template>
               </el-table-column>
             </el-table>
             <div class="mobile-list mobile-list--inset dashboard-mobile-list">
               <div v-for="(row, index) in customers.slice(0, 8)" :key="row.id || row.name" class="mobile-item ranking-row">
-                <span class="rank">{{ index + 1 }}</span><span class="mobile-item__title">{{ row.name }}</span><strong class="weight">{{ row.weight || 0 }} kg</strong>
+                <span class="rank">{{ index + 1 }}</span><span class="mobile-item__title">{{ row.name }}</span><strong class="weight qj-num">{{ row.weight || 0 }} kg</strong>
               </div>
-              <el-empty v-if="!customers.length" description="暂无客户数据" />
+              <EmptyState v-if="!customers.length" title="暂无客户数据" description="出货重量排行会显示在这里" />
             </div>
           </el-card>
         </el-col>
@@ -154,16 +160,16 @@
             <template #default="{ row }">
               <div class="trend-row">
                 <div class="trend-bar" :style="{ width: barWidth(row.weight) }" />
-                <b class="num">{{ row.weight }}</b>
+                <b class="qj-num">{{ row.weight }}</b>
               </div>
             </template>
           </el-table-column>
         </el-table>
         <div class="mobile-list mobile-list--inset dashboard-mobile-list trend-mobile-list">
           <div v-for="row in trends.weight" :key="row.date" class="mobile-item ranking-row">
-            <span class="mobile-item__title">{{ row.date }}</span><strong class="weight">{{ row.weight || 0 }} kg</strong>
+            <span class="mobile-item__title">{{ row.date }}</span><strong class="weight qj-num">{{ row.weight || 0 }} kg</strong>
           </div>
-          <el-empty v-if="!trends.weight.length" description="暂无趋势数据" />
+          <EmptyState v-if="!trends.weight.length" title="暂无趋势数据" description="有取件记录后这里会显示 30 天走势" />
         </div>
       </el-card>
     </template>
@@ -211,6 +217,9 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { Refresh } from '@element-plus/icons-vue'
 import type { ECharts } from 'echarts/core'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import EmptyState from '../components/EmptyState.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
 import { createRealtimeRefreshSubscription, isTaskRealtimeEvent } from '../services/realtime-events'
 
 const mode = ref<'table' | 'chart'>('table')
@@ -221,6 +230,8 @@ const cs = ref<any[]>([])
 const customers = ref<any[]>([])
 const trends = reactive<any>({ weight: [] })
 const attention = reactive<any>({})
+const loading = ref(false)
+const loaded = ref(false)
 
 const trendChartEl = ref<HTMLElement>()
 const workerChartEl = ref<HTMLElement>()
@@ -238,12 +249,12 @@ async function getEchartsSetup() {
 const liveRefresh = createRealtimeRefreshSubscription({ predicate: isTaskRealtimeEvent, refresh: loadAll, delayMs: 250 })
 
 const metrics = computed(() => [
-  { label: '发货客户数', value: board.shipCustomerCount ?? 0, sub: '原系统出货口径', icon: 'OfficeBuilding', tint: 'var(--tint-blue)', color: '#3370ff' },
-  { label: '最终出货重量 (kg)', value: board.finalWeight ?? 0, sub: '唯一重量口径', icon: 'ScaleToOriginal', tint: 'var(--tint-green)', color: '#16a34a' },
-  { label: '取件客户数', value: board.pickupCustomerCount ?? 0, sub: '实际完成去重', icon: 'User', tint: 'var(--tint-sky)', color: '#0ea5e9' },
-  { label: '取件次数', value: board.pickupCount ?? 0, sub: '已完成任务', icon: 'Van', tint: 'var(--tint-amber)', color: '#f59e0b' },
-  { label: '取件件数', value: board.pieces ?? 0, sub: '现场实录入', icon: 'Box', tint: 'var(--tint-violet)', color: '#8b5cf6' },
-  { label: '待取任务', value: board.pendingCount ?? 0, sub: '待取 / 取件中', icon: 'List', tint: 'var(--tint-red)', color: '#ef4444' },
+  { label: '发货客户数', value: board.shipCustomerCount ?? 0, display: String(board.shipCustomerCount ?? 0), unit: '', sub: '原系统出货口径', icon: 'OfficeBuilding', tint: 'var(--tint-blue)', ink: 'var(--tint-blue-ink)' },
+  { label: '最终出货重量', value: board.finalWeight ?? 0, display: String(board.finalWeight ?? 0), unit: 'kg', sub: '唯一重量口径', icon: 'ScaleToOriginal', tint: 'var(--tint-green)', ink: 'var(--tint-green-ink)' },
+  { label: '取件客户数', value: board.pickupCustomerCount ?? 0, display: String(board.pickupCustomerCount ?? 0), unit: '', sub: '实际完成去重', icon: 'User', tint: 'var(--tint-sky)', ink: 'var(--tint-sky-ink)' },
+  { label: '取件次数', value: board.pickupCount ?? 0, display: String(board.pickupCount ?? 0), unit: '', sub: '已完成任务', icon: 'Van', tint: 'var(--tint-amber)', ink: 'var(--tint-amber-ink)' },
+  { label: '取件件数', value: board.pieces ?? 0, display: String(board.pieces ?? 0), unit: '', sub: '现场实录入', icon: 'Box', tint: 'var(--tint-violet)', ink: 'var(--tint-violet-ink)' },
+  { label: '待取任务', value: board.pendingCount ?? 0, display: String(board.pendingCount ?? 0), unit: '', sub: '待取 / 取件中', icon: 'List', tint: 'var(--tint-red)', ink: 'var(--tint-red-ink)' },
 ])
 
 const hasAttention = computed(() =>
@@ -259,14 +270,26 @@ function barWidth(w: number) {
 }
 
 async function loadAll() {
-  const b: any = await http.get('/dashboard/board', { params: { range: range.value } })
-  Object.assign(board, b)
-  workers.value = await http.get('/dashboard/workers', { params: { range: range.value } })
-  cs.value = await http.get('/dashboard/cs', { params: { range: 'month' } })
-  customers.value = await http.get('/dashboard/customers', { params: { range: 'month' } })
-  const t: any = await http.get('/dashboard/trends', { params: { days: 30 } })
-  trends.weight = t.weight
-  Object.assign(attention, await http.get('/dashboard/attention'))
+  loading.value = true
+  try {
+    const [b, w, c, cu, t, a] = await Promise.all([
+      http.get('/dashboard/board', { params: { range: range.value } }),
+      http.get('/dashboard/workers', { params: { range: range.value } }),
+      http.get('/dashboard/cs', { params: { range: 'month' } }),
+      http.get('/dashboard/customers', { params: { range: 'month' } }),
+      http.get('/dashboard/trends', { params: { days: 30 } }),
+      http.get('/dashboard/attention'),
+    ])
+    Object.assign(board, b)
+    workers.value = w as any
+    cs.value = c as any
+    customers.value = cu as any
+    trends.weight = (t as any).weight
+    Object.assign(attention, a)
+    loaded.value = true
+  } finally {
+    loading.value = false
+  }
   if (mode.value === 'chart') {
     await nextTick()
     renderCharts()
@@ -295,6 +318,7 @@ async function renderCharts() {
 
   // 出货重量趋势：折线图
   await initChart(trendChartEl.value, {
+    color: ['#3370ff'],
     tooltip: { trigger: 'axis' },
     grid: { left: 55, right: 20, top: 30, bottom: 30 },
     xAxis: { type: 'category', data: trends.weight.map((t: any) => t.date), boundaryGap: false },
@@ -309,6 +333,7 @@ async function renderCharts() {
   // 取件员重量排行：横向柱状图
   const ws = [...workers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0))
   await initChart(workerChartEl.value, {
+    color: ['#3370ff'],
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 90, right: 40, top: 20, bottom: 30 },
     xAxis: { type: 'value', name: 'kg' },
@@ -322,6 +347,7 @@ async function renderCharts() {
   // 客户重量占比：环形饼图
   const topCustomers = [...customers.value].sort((a, b) => (b.weight || 0) - (a.weight || 0)).slice(0, 8)
   await initChart(customerChartEl.value, {
+    color: ['#3370ff', '#0ea5e9', '#16a34a', '#d97706', '#8b5cf6', '#dc2626', '#0d9488', '#64748b'],
     tooltip: { trigger: 'item', formatter: '{b}: {c} kg ({d}%)' },
     legend: { bottom: 0, type: 'scroll' },
     series: [{
@@ -334,13 +360,14 @@ async function renderCharts() {
 
   // 客服重量：柱状图
   await initChart(csChartEl.value, {
+    color: ['#16a34a'],
     tooltip: { trigger: 'axis' },
     grid: { left: 55, right: 20, top: 30, bottom: 30 },
     xAxis: { type: 'category', data: cs.value.map((c) => c.name) },
     yAxis: { type: 'value', name: 'kg' },
     series: [{
       type: 'bar', data: cs.value.map((c) => c.weight), barMaxWidth: 30,
-      itemStyle: { borderRadius: [4, 4, 0, 0], color: '#34c724' },
+      itemStyle: { borderRadius: [4, 4, 0, 0], color: '#16a34a' },
     }],
   }, seq)
 }
@@ -370,83 +397,69 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.page-title {
-  margin: 0;
-}
-.spacer {
-  flex: 1;
-}
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-bottom: 16px;
-}
-@media (min-width: 1400px) {
-  .stat-grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
-}
-@media (max-width: 760px) {
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  /* 170px 下限保证 1440px 容器 + 220px 侧栏下仍能排满 6 列，窄屏自动降列 */
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
 }
 .block {
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
 }
 .attention {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--sp-2);
 }
 .attn {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--r-control);
+  font-size: var(--fs-sub);
   border: 1px solid transparent;
 }
 .attn.danger {
-  background: var(--tint-red);
-  color: #dc2626;
-  border-color: #fbd5d5;
+  background: var(--qj-danger-bg);
+  color: var(--qj-danger-text);
+  border-color: #f6d0d0;
 }
 .attn.warn {
-  background: var(--tint-amber);
-  color: #d97706;
-  border-color: #fde3c4;
+  background: var(--qj-warning-bg);
+  color: var(--qj-warning-text);
+  border-color: #f6e0c4;
 }
 .attn.info {
-  background: var(--tint-blue);
-  color: #2563eb;
+  background: var(--qj-primary-bg);
+  color: var(--qj-primary-text);
   border-color: #d6e2ff;
 }
 .all-clear {
-  color: #16a34a;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--qj-success-text);
+  font-size: var(--fs-body);
 }
 .worker-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .avatar-mini {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: var(--tint-blue);
-  color: #3370ff;
+  background: var(--qj-primary-bg);
+  color: var(--qj-primary-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
-}
-.num {
-  font-variant-numeric: tabular-nums;
+  flex: none;
 }
 .rank {
   width: 24px;
@@ -456,27 +469,26 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--tint-blue);
-  color: var(--el-color-primary);
-  font-size: 12px;
+  background: var(--qj-primary-bg);
+  color: var(--qj-primary-text);
+  font-size: var(--fs-meta);
   font-weight: 600;
 }
 .weight {
   flex: none;
   color: var(--qj-text);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-body);
 }
 .metric-line,
 .ranking-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
 }
 .metric-line {
   flex-wrap: wrap;
   color: var(--qj-text-2);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .ranking-row .mobile-item__title {
   flex: 1;
@@ -488,17 +500,23 @@ onUnmounted(() => {
 .trend-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
 }
 .trend-bar {
   height: 16px;
-  border-radius: 4px;
-  background: #3370ff;
+  border-radius: var(--r-badge);
+  background: var(--qj-primary);
   min-width: 2px;
-  transition: width 0.4s ease;
+  transition: width var(--dur-base) var(--ease);
 }
 .chart-box {
   height: 320px;
   width: 100%;
+}
+@media (max-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-3);
+  }
 }
 </style>

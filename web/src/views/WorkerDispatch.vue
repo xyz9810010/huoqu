@@ -1,8 +1,10 @@
 <template>
   <div class="worker-dispatch">
-    <div class="toolbar">
-      <el-button :icon="ArrowLeft" circle @click="router.back()" />
-      <h2 class="page-title" style="margin:0">新增订单</h2>
+    <div class="dispatch-head">
+      <button type="button" class="back-btn" aria-label="返回" @click="router.back()">
+        <el-icon :size="18"><ArrowLeft /></el-icon>
+      </button>
+      <PageHead title="新增订单" description="选已有客户或手动填写，登记货物明细后进入待取件" />
     </div>
 
     <el-card shadow="never" class="card">
@@ -71,6 +73,7 @@ import { useRouter } from 'vue-router'
 import { ArrowLeft, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
 
 const router = useRouter()
 const mode = ref('customer')
@@ -151,13 +154,42 @@ onMounted(() => { searchCustomer('') })
 </script>
 
 <style scoped>
-.worker-dispatch { max-width: 640px; margin: 0 auto; }
-.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.card { padding: 8px; }
-.mode-switch { width: 100%; margin-bottom: 12px; }
+.worker-dispatch { max-width: 680px; margin: 0 auto; }
+.dispatch-head { display: flex; align-items: center; gap: var(--sp-2); }
+.dispatch-head :deep(.page-head) { flex: 1; min-width: 0; }
+.back-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--qj-border);
+  background: var(--qj-surface);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--qj-text-2);
+  padding: 0;
+  margin-bottom: var(--sp-4);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.back-btn:hover {
+  border-color: var(--qj-primary);
+  color: var(--qj-primary-text);
+  background: var(--qj-primary-bg);
+}
+.card { padding: var(--sp-2); }
+.mode-switch { width: 100%; margin-bottom: var(--sp-3); }
 .mode-switch :deep(.el-radio-button) { flex: 1; }
 .mode-switch :deep(.el-radio-button__inner) { width: 100%; }
-.form { margin-top: 6px; }
-.item-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
-.sched-row { display: flex; gap: 8px; width: 100%; align-items: center; }
+.form { margin-top: var(--sp-1); }
+.item-row { display: flex; gap: 6px; align-items: center; margin-bottom: var(--sp-2); }
+.sched-row { display: flex; gap: var(--sp-2); width: 100%; align-items: center; }
+@media (max-width: 768px) {
+  .item-row { flex-wrap: wrap; }
+  .item-row :deep(.el-input) { flex: 1 1 calc(50% - 3px) !important; }
+  .sched-row { flex-wrap: wrap; }
+  .sched-row :deep(.el-select) { flex: 1 1 100%; width: auto !important; }
+  .sched-row :deep(.el-date-editor) { flex: 1 1 100%; }
+}
 </style>

@@ -1,12 +1,10 @@
 <template>
   <div class="providers-page">
-    <div class="page-head">
-      <div>
-        <h2 class="page-title">消息推送</h2>
-        <p class="page-description">集中配置浏览器与系统级推送通道。配置通过测试后才能启用。</p>
-      </div>
-      <el-button :loading="loading" @click="load"><el-icon><Refresh /></el-icon>刷新状态</el-button>
-    </div>
+    <PageHead title="消息推送" description="集中配置浏览器与系统级推送通道，配置通过测试后才能启用">
+      <template #actions>
+        <el-button :loading="loading" @click="load"><el-icon><Refresh /></el-icon>刷新状态</el-button>
+      </template>
+    </PageHead>
 
     <el-alert type="info" :closable="false" show-icon class="flow-tip">
       <template #title>统一接入流程：填写凭据并保存 → 连接测试 → 启用通道</template>
@@ -23,7 +21,7 @@
                 <span>{{ provider.platforms.join(' · ') || '通用平台' }}</span>
               </div>
             </div>
-            <el-tag :type="statusMeta(provider).type" effect="plain">{{ statusMeta(provider).label }}</el-tag>
+            <StatusBadge :tone="statusMeta(provider).tone" :label="statusMeta(provider).label" />
           </div>
         </template>
 
@@ -62,7 +60,8 @@
             @click="setEnabled(provider, false)">停用</el-button>
         </div>
       </el-card>
-      <el-empty v-if="!loading && !providers.length" description="暂无已安装的推送适配器" />
+      <EmptyState v-if="!loading && !providers.length" title="暂无已安装的推送适配器"
+                  description="服务端安装推送适配器后，这里会自动出现对应的配置表单" />
     </div>
   </div>
 </template>
@@ -70,7 +69,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { canEnableProvider, createProviderDraft, validateProviderCredentials } from '../services/provider-form'
 import type { PushProvider } from '../types/notifications'
 
@@ -136,12 +139,12 @@ async function setEnabled(provider: PushProvider, enabled: boolean) {
   } finally { busy[provider.code] = '' }
 }
 
-function statusMeta(provider: PushProvider): { label: string; type: 'success' | 'warning' | 'danger' | 'info' } {
-  if (provider.enabled) return { label: '运行中', type: 'success' }
-  if (provider.healthStatus === 'failed') return { label: '测试失败', type: 'danger' }
-  if (provider.healthStatus === 'healthy') return { label: '测试通过', type: 'warning' }
-  if (provider.configured) return { label: '待测试', type: 'warning' }
-  return { label: '未配置', type: 'info' }
+function statusMeta(provider: PushProvider): { label: string; tone: 'done' | 'pending' | 'danger' | 'cancel' } {
+  if (provider.enabled) return { label: '运行中', tone: 'done' }
+  if (provider.healthStatus === 'failed') return { label: '测试失败', tone: 'danger' }
+  if (provider.healthStatus === 'healthy') return { label: '测试通过', tone: 'pending' }
+  if (provider.configured) return { label: '待测试', tone: 'pending' }
+  return { label: '未配置', tone: 'cancel' }
 }
 
 function formatTime(value: string): string {
@@ -153,25 +156,26 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-description { margin: 6px 0 0; color: var(--qj-muted); font-size: 13px; }
-.flow-tip { margin-bottom: 16px; }
-.provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; min-height: 160px; }
-.provider-card { align-self: start; }
+.flow-tip { margin-bottom: var(--sp-4); }
+.provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: var(--sp-4); min-height: 160px; align-items: stretch; }
+.provider-card { display: flex; flex-direction: column; }
+.provider-card :deep(.el-card__body) { display: flex; flex-direction: column; flex: 1; }
 .provider-head, .provider-identity, .provider-actions, .health-row { display: flex; align-items: center; }
-.provider-head { justify-content: space-between; gap: 12px; }
+.provider-head { justify-content: space-between; gap: var(--sp-3); }
 .provider-identity { gap: 11px; min-width: 0; }
 .provider-identity strong, .provider-identity span { display: block; }
-.provider-identity strong { font-size: 15px; }
-.provider-identity span { margin-top: 3px; color: var(--qj-muted); font-size: 12px; text-transform: uppercase; }
-.provider-icon { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: var(--el-color-primary); background: var(--tint-blue); font-size: 18px; flex: none; }
+.provider-identity strong { font-size: var(--fs-card); color: var(--qj-text); }
+.provider-identity span { margin-top: 3px; color: var(--qj-muted); font-size: var(--fs-meta); text-transform: uppercase; }
+.provider-icon { width: 36px; height: 36px; border-radius: var(--r-control); display: grid; place-items: center; color: var(--qj-primary-text); background: var(--tint-blue); font-size: 18px; flex: none; }
+.provider-card :deep(.el-form) { flex: 1; }
 .provider-card :deep(.el-form-item) { margin-bottom: 17px; }
-.provider-card :deep(.el-form-item__label) { color: var(--qj-text-2); font-size: 13px; }
-.provider-card :deep(.el-form-item__label i) { margin-left: 7px; color: var(--el-color-danger); font-size: 11px; font-style: normal; font-weight: 400; }
-.field-state { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--el-color-success); font-size: 11px; }
-.field-hint { margin-top: 6px; color: var(--qj-muted); font-size: 12px; line-height: 1.5; }
-.health-row { min-height: 30px; flex-wrap: wrap; gap: 6px 14px; padding: 9px 11px; margin: 4px 0 16px; border: 1px solid var(--qj-border); border-radius: 7px; background: #fafbfc; color: var(--qj-muted); font-size: 11px; }
-.health-error { color: var(--el-color-danger); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.provider-actions { gap: 8px; flex-wrap: wrap; }
+.provider-card :deep(.el-form-item__label) { color: var(--qj-text-2); font-size: var(--fs-sub); }
+.provider-card :deep(.el-form-item__label i) { margin-left: 7px; color: var(--qj-danger-text); font-size: 11px; font-style: normal; font-weight: 400; }
+.field-state { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--qj-success-text); font-size: 11px; }
+.field-hint { margin-top: var(--sp-1); color: var(--qj-muted); font-size: var(--fs-meta); line-height: 1.5; }
+.health-row { min-height: 30px; flex-wrap: wrap; gap: 6px 14px; padding: 9px 11px; margin: var(--sp-1) 0 var(--sp-4); border: 1px solid var(--qj-border); border-radius: var(--r-badge); background: var(--qj-surface-subtle); color: var(--qj-muted); font-size: 11px; }
+.health-error { color: var(--qj-danger-text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.provider-actions { gap: var(--sp-2); flex-wrap: wrap; padding-top: var(--sp-3); border-top: 1px solid var(--qj-border); }
 @media (max-width: 640px) {
   .provider-actions {
     display: grid;

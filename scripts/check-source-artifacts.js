@@ -16,20 +16,23 @@ function findForbidden(root = projectRoot) {
   const forbidden = [];
   const sourceDir = path.join(root, 'web', 'src');
 
+  // 统一用 POSIX 分隔符：Windows 的 path.relative 会返回反斜杠，导致输出与断言不稳定
+  const rel = (fullPath) => path.relative(root, fullPath).split(path.sep).join('/');
+
   function walk(dir) {
     if (!fs.existsSync(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(fullPath);
       if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.js.map'))) {
-        forbidden.push(path.relative(root, fullPath));
+        forbidden.push(rel(fullPath));
       }
     }
   }
 
   walk(sourceDir);
   const buildInfo = path.join(root, 'web', 'tsconfig.tsbuildinfo');
-  if (fs.existsSync(buildInfo)) forbidden.push(path.relative(root, buildInfo));
+  if (fs.existsSync(buildInfo)) forbidden.push(rel(buildInfo));
 
   for (const entry of forbiddenRootEntries) {
     if (fs.existsSync(path.join(root, entry))) forbidden.push(entry);

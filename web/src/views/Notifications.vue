@@ -1,39 +1,45 @@
 <template>
   <div class="notifications-page">
-    <div class="page-head">
-      <div>
-        <h2 class="page-title">通知中心</h2>
-        <p class="page-description">任务、异常和系统动态都汇总在这里。</p>
-      </div>
-      <div class="head-actions">
-        <el-button @click="router.push('/notification-settings')"><el-icon><Setting /></el-icon>消息设置</el-button>
-        <el-button type="primary" plain :disabled="unreadTotal === 0" @click="readAll">全部已读</el-button>
-      </div>
-    </div>
+    <PageHead title="通知中心" description="任务、异常和系统动态都汇总在这里">
+      <template #actions>
+        <el-button @click="router.push('/notification-settings')">
+          <el-icon><Setting /></el-icon>消息设置
+        </el-button>
+        <el-button type="primary" :disabled="unreadTotal === 0" @click="readAll">全部已读</el-button>
+      </template>
+    </PageHead>
 
-    <el-card>
+    <el-card shadow="never">
       <div class="filter-bar">
-        <el-radio-group v-model="filter" size="small" @change="changeFilter">
-          <el-radio-button value="all">全部</el-radio-button>
-          <el-radio-button value="unread">未读</el-radio-button>
-        </el-radio-group>
-        <span class="summary">{{ total }} 条通知<span v-if="unreadTotal"> · {{ unreadTotal }} 条未读</span></span>
+        <div class="qj-pills">
+          <button type="button" class="qj-pill" :class="{ 'is-active': filter === 'all' }" @click="filter = 'all'; changeFilter()">全部</button>
+          <button type="button" class="qj-pill" :class="{ 'is-active': filter === 'unread' }" @click="filter = 'unread'; changeFilter()">未读</button>
+        </div>
+        <span class="summary qj-num">{{ total }} 条通知<span v-if="unreadTotal"> · {{ unreadTotal }} 条未读</span></span>
       </div>
 
-      <div v-loading="loading" class="notification-list">
+      <SkeletonBlock v-if="loading && !list.length" :rows="4" />
+
+      <div v-else class="notification-list">
         <button v-for="item in list" :key="item.id" type="button" class="notification-row"
           :class="{ unread: !item.read, actionable: Boolean(item.data?.route) }" @click="openNotification(item)">
-          <span class="unread-dot" :class="item.priority"></span>
+          <span class="unread-dot" :class="item.priority" aria-hidden="true" />
           <span class="notification-content">
-            <span class="notification-title">{{ item.title }}</span>
+            <span class="notification-title">
+              <span v-if="!item.read" class="sr-only">未读：</span>{{ item.title }}
+            </span>
             <span v-if="item.body" class="notification-body">{{ item.body }}</span>
           </span>
-          <span class="notification-meta"><time>{{ formatTime(item.createdAt) }}</time>
+          <span class="notification-meta">
+            <time class="qj-num">{{ formatTime(item.createdAt) }}</time>
             <el-icon v-if="item.data?.route"><ArrowRight /></el-icon>
           </span>
         </button>
-        <el-empty v-if="!loading && !list.length" :description="filter === 'unread' ? '没有未读通知' : '暂无通知'" />
       </div>
+
+      <EmptyState v-if="!loading && !list.length"
+                  :title="filter === 'unread' ? '没有未读通知' : '暂无通知'"
+                  :description="filter === 'unread' ? '所有通知都已读完了' : '派单、状态变更与异常上报都会出现在这里'" />
 
       <el-pagination v-if="total > pageSize" v-model:current-page="page" :page-size="pageSize"
         :total="total" layout="prev, pager, next" @current-change="load" />
@@ -44,7 +50,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Setting } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import EmptyState from '../components/EmptyState.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
 import { refreshUnread } from '../stores/notif'
 import type { NotificationItem } from '../types/notifications'
 import { createRealtimeRefreshSubscription, notificationFromRealtimeEvent } from '../services/realtime-events'
@@ -111,26 +121,112 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
-.page-description { margin: 6px 0 0; color: var(--qj-muted); font-size: 13px; }
-.head-actions { display: flex; gap: 8px; }
-.filter-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--qj-border); }
-.summary { color: var(--qj-muted); font-size: 12px; }
-.notification-list { min-height: 180px; }
-.notification-row { width: 100%; border: 0; border-bottom: 1px solid var(--qj-border); background: transparent; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 16px 4px; text-align: left; color: inherit; font: inherit; }
-.notification-row:last-child { border-bottom: 0; }
-.notification-row.actionable { cursor: pointer; }
-.notification-row.actionable:hover { background: #fafbfc; }
-.unread-dot { width: 7px; height: 7px; border-radius: 50%; background: transparent; }
-.notification-row.unread .unread-dot { background: var(--el-color-primary); }
-.notification-row.unread .unread-dot.high { background: var(--el-color-warning); }
-.notification-content, .notification-title, .notification-body { display: block; min-width: 0; }
-.notification-title { font-size: 14px; font-weight: 500; color: var(--qj-text); }
-.notification-row.unread .notification-title { font-weight: 650; }
-.notification-body { margin-top: 5px; color: var(--qj-text-2); font-size: 13px; line-height: 1.55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.notification-meta { display: flex; align-items: center; gap: 8px; color: var(--qj-muted); font-size: 12px; }
+.filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--qj-border);
+  flex-wrap: wrap;
+}
+.summary {
+  color: var(--qj-muted);
+  font-size: var(--fs-meta);
+}
+.notification-list {
+  min-height: 180px;
+}
+.notification-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--qj-border);
+  background: transparent;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-4) var(--sp-1);
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.notification-row:last-child {
+  border-bottom: 0;
+}
+.notification-row.actionable {
+  cursor: pointer;
+}
+.notification-row.actionable:hover {
+  background: var(--qj-surface-subtle);
+}
+.notification-row:focus-visible {
+  box-shadow: var(--qj-focus);
+}
+.unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+.notification-row.unread .unread-dot {
+  background: var(--qj-primary);
+}
+.notification-row.unread .unread-dot.high {
+  background: #d97706;
+}
+.notification-content,
+.notification-title,
+.notification-body {
+  display: block;
+  min-width: 0;
+}
+.notification-title {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--qj-text);
+}
+.notification-row.unread .notification-title {
+  font-weight: 650;
+}
+.notification-body {
+  margin-top: 5px;
+  color: var(--qj-text-2);
+  font-size: var(--fs-sub);
+  line-height: 1.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notification-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--qj-muted);
+  font-size: var(--fs-meta);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 @media (max-width: 640px) {
-  .head-actions { width: 100%; }
-  .notification-row { grid-template-columns: 8px minmax(0, 1fr); }
-  .notification-meta { grid-column: 2; justify-content: flex-start; }
+  .filter-bar .qj-pill {
+    min-height: 40px;
+  }
+  .notification-row {
+    grid-template-columns: 8px minmax(0, 1fr);
+  }
+  .notification-meta {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
 }
 </style>

@@ -1,85 +1,75 @@
 <template>
   <div>
-    <h2 class="page-title" style="margin-bottom:16px">员工管理</h2>
+    <PageHead title="员工管理" description="开通账号、分配角色，并设置客服 / 取件员的可登录时段">
+      <template #actions>
+        <el-button type="primary" @click="openCreate">
+          <el-icon><Plus /></el-icon>新增员工
+        </el-button>
+      </template>
+    </PageHead>
+
     <div class="toolbar">
-      <el-select v-model="role" placeholder="角色筛选" clearable style="width:140px" @change="load">
+      <el-select v-model="role" placeholder="全部角色" clearable style="width:150px" @change="load">
         <el-option label="老板" value="boss" />
         <el-option label="客服" value="cs" />
         <el-option label="取件员" value="worker" />
         <el-option label="管理员" value="admin" />
       </el-select>
-      <el-button type="success" @click="openCreate">新增员工</el-button>
     </div>
-    <el-table class="desktop-table" :data="list">
-      <el-table-column prop="employeeNo" label="工号" width="90" />
-      <el-table-column prop="username" label="用户名" width="120" />
-      <el-table-column prop="name" label="姓名" width="120" />
-      <el-table-column prop="phone" label="电话" width="130" />
-      <el-table-column label="角色" width="90">
-        <template #default="{ row }">
-          <el-tag>{{ roleLabel(row.role) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '正常' : '停用' }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="180">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" @click="toggleStatus(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
 
-    <div class="mobile-list">
-      <article v-for="row in list" :key="row.id" class="mobile-item">
-        <div class="mobile-item__head">
-          <div>
-            <div class="mobile-item__title">{{ row.name || row.username }}</div>
-            <div class="mobile-item__sub">{{ row.employeeNo || '未设置工号' }} · {{ row.username }}</div>
+    <el-card shadow="never" class="list-card">
+      <el-table v-if="list.length" class="desktop-table" :data="list">
+        <el-table-column prop="employeeNo" label="工号" width="100" class-name="cell-nowrap" />
+        <el-table-column prop="username" label="用户名" width="130" class-name="cell-nowrap" />
+        <el-table-column prop="name" label="姓名" width="130" />
+        <el-table-column prop="phone" label="电话" width="140" class-name="cell-nowrap" />
+        <el-table-column label="角色" width="100">
+          <template #default="{ row }">
+            <StatusBadge tone="plain" :label="roleLabel(row.role)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <StatusBadge :tone="row.status === 'active' ? 'done' : 'cancel'"
+                         :label="row.status === 'active' ? '正常' : '停用'" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="170">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" @click="toggleStatus(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="mobile-list">
+        <article v-for="row in list" :key="row.id" class="mobile-item">
+          <div class="mobile-item__head">
+            <div>
+              <div class="mobile-item__title">{{ row.name || row.username }}</div>
+              <div class="mobile-item__sub qj-num">{{ row.employeeNo || '未设置工号' }} · {{ row.username }}</div>
+            </div>
+            <StatusBadge :tone="row.status === 'active' ? 'done' : 'cancel'"
+                         :label="row.status === 'active' ? '正常' : '停用'" />
           </div>
-          <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
-            {{ row.status === 'active' ? '正常' : '停用' }}
-          </el-tag>
-        </div>
-        <div class="mobile-field"><span class="mobile-field__label">角色</span><span class="mobile-field__value">{{ roleLabel(row.role) }}</span></div>
-        <div class="mobile-field"><span class="mobile-field__label">电话</span><span class="mobile-field__value">{{ row.phone || '—' }}</span></div>
-        <div class="mobile-item__actions">
-          <el-button @click="openEdit(row)">编辑</el-button>
-          <el-button @click="toggleStatus(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button>
-        </div>
-      </article>
-      <el-empty v-if="!list.length" description="暂无员工" />
-    </div>
+          <div class="mobile-field"><span class="mobile-field__label">角色</span><span class="mobile-field__value">{{ roleLabel(row.role) }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">电话</span><span class="mobile-field__value">{{ row.phone || '—' }}</span></div>
+          <div class="mobile-item__actions">
+            <el-button @click="openEdit(row)">编辑</el-button>
+            <el-button @click="toggleStatus(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button>
+          </div>
+        </article>
+      </div>
 
-    <el-dialog v-model="visible" :title="form.id ? '编辑员工' : '新增员工'" width="460px">
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="用户名" required><el-input v-model="form.username" :disabled="!!form.id" /></el-form-item>
-        <el-form-item label="密码" :required="!form.id">
-          <el-input v-model="form.password" placeholder="编辑时留空表示不修改" />
-        </el-form-item>
-        <el-form-item label="姓名" required><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
-        <el-form-item label="工号"><el-input v-model="form.employeeNo" /></el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="form.role">
-            <el-option label="老板" value="boss" />
-            <el-option label="客服" value="cs" />
-            <el-option label="取件员" value="worker" />
-            <el-option label="管理员" value="admin" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" @click="submit">保存</el-button>
+      <EmptyState v-if="!list.length" title="暂无员工" description="新增员工后即可为其开通登录账号">
+        <el-button type="primary" @click="openCreate">新增员工</el-button>
+      </EmptyState>
+    </el-card>
+
+    <el-card shadow="never" class="block">
+      <template #header>
+        <div class="block-title"><el-icon><Clock /></el-icon>登录时间限制（客服 / 取件员）</div>
       </template>
-    </el-dialog>
-
-    <el-card shadow="never" style="max-width:760px;margin-top:20px">
-      <template #header>登录时间限制（客服 / 取件员，管理员可编辑）</template>
       <div v-for="r in restrictions" :key="r.role" class="login-restrict-row">
         <div class="lr-head">
           <span class="lr-role">{{ r.role === 'cs' ? '客服' : '取件员' }}</span>
@@ -93,19 +83,47 @@
           <div class="lr-label">允许时间段（留空 = 全天不限）</div>
           <div class="lr-time">
             <el-input v-model="r.startTime" placeholder="08:00" style="width:120px" @change="saveRestriction(r)" />
-            <span style="margin:0 6px">~</span>
+            <span class="lr-sep">~</span>
             <el-input v-model="r.endTime" placeholder="20:00" style="width:120px" @change="saveRestriction(r)" />
           </div>
         </template>
       </div>
     </el-card>
+
+    <el-dialog v-model="visible" :title="form.id ? '编辑员工' : '新增员工'" width="460px">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="用户名" required><el-input v-model="form.username" :disabled="!!form.id" /></el-form-item>
+        <el-form-item label="密码" :required="!form.id">
+          <el-input v-model="form.password" placeholder="编辑时留空表示不修改" />
+        </el-form-item>
+        <el-form-item label="姓名" required><el-input v-model="form.name" /></el-form-item>
+        <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="工号"><el-input v-model="form.employeeNo" /></el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="form.role" style="width:100%">
+            <el-option label="老板" value="boss" />
+            <el-option label="客服" value="cs" />
+            <el-option label="取件员" value="worker" />
+            <el-option label="管理员" value="admin" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="visible = false">取消</el-button>
+        <el-button type="primary" @click="submit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Clock, Plus } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const list = ref<any[]>([])
 const role = ref('')
@@ -177,25 +195,46 @@ onMounted(() => { load(); loadRestrictions() })
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
+.list-card {
+  margin-bottom: var(--sp-4);
 }
-.login-restrict-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-.login-restrict-row:last-child { border-bottom: none; }
-.lr-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.lr-role { font-weight: 600; }
-.lr-label { font-size: 13px; color: #86909c; margin: 8px 0 6px; }
-.lr-time { display: flex; align-items: center; }
+.block {
+  margin-bottom: var(--sp-4);
+}
+.login-restrict-row {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--qj-border);
+}
+.login-restrict-row:last-child {
+  border-bottom: none;
+}
+.lr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.lr-role {
+  font-weight: 600;
+  color: var(--qj-text);
+}
+.lr-label {
+  font-size: var(--fs-sub);
+  color: var(--qj-muted);
+  margin: var(--sp-2) 0 6px;
+}
+.lr-time {
+  display: flex;
+  align-items: center;
+}
+.lr-sep {
+  margin: 0 6px;
+  color: var(--qj-muted);
+}
 @media (max-width: 768px) {
   .toolbar :deep(.el-select) {
     flex: 1;
     width: auto !important;
-  }
-  .toolbar .el-button {
-    flex: 1;
-    margin-left: 0;
   }
 }
 </style>

@@ -1,30 +1,30 @@
 <template>
   <div>
-    <h2 class="page-title" style="margin-bottom:16px">待匹配中心</h2>
-    <el-card shadow="never">
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
+    <PageHead title="待匹配中心" description="补齐票号或等待原系统回填最终重量" />
+
+    <el-card shadow="never" class="list-card">
+      <el-alert type="info" :closable="false" show-icon class="tip"
                 title="无票号记录补票号后自动获取最终重量；有票号但暂无重量会自动匹配原系统同步结果。" />
-      <el-table class="desktop-table" :data="list">
-        <el-table-column prop="taskNo" label="任务号" width="150" />
-        <el-table-column prop="customerName" label="客户" min-width="120" />
-        <el-table-column prop="waybillNo" label="票号" width="150">
+      <el-table v-if="list.length" class="desktop-table" :data="list">
+        <el-table-column prop="taskNo" label="任务号" width="164" class-name="cell-nowrap" />
+        <el-table-column prop="customerName" label="客户" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="waybillNo" label="票号" width="160" class-name="cell-nowrap">
           <template #default="{ row }">{{ row.waybillNo || '（无票号）' }}</template>
         </el-table-column>
-        <el-table-column prop="pieces" label="件数" width="70" />
-        <el-table-column prop="entryMethod" label="录入方式" width="90">
+        <el-table-column prop="pieces" label="件数" width="80" />
+        <el-table-column prop="entryMethod" label="录入方式" width="100">
           <template #default="{ row }">{{ entryMethodLabel(row.entryMethod) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.matchStatus === 'pending' ? 'warning' : 'info'">
-              {{ row.matchStatus === 'pending' ? '待重量' : '待补票号' }}
-            </el-tag>
+            <StatusBadge :tone="row.matchStatus === 'pending' ? 'pending' : 'plain'"
+                         :label="row.matchStatus === 'pending' ? '待重量' : '待补票号'" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130">
+        <el-table-column label="操作" width="150">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="openMatch(row)">补票号</el-button>
-            <el-button size="small" type="primary" link @click="router.push('/tasks/' + row.taskId)">查看</el-button>
+            <el-button size="small" @click="router.push('/tasks/' + row.taskId)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -33,21 +33,21 @@
           <div class="mobile-item__head">
             <div>
               <div class="mobile-item__title">{{ row.customerName || '未命名客户' }}</div>
-              <div class="mobile-item__sub">{{ row.taskNo }} · {{ row.waybillNo || '无票号' }}</div>
+              <div class="mobile-item__sub qj-num">{{ row.taskNo }} · {{ row.waybillNo || '无票号' }}</div>
             </div>
-            <el-tag size="small" :type="row.matchStatus === 'pending' ? 'warning' : 'info'">
-              {{ row.matchStatus === 'pending' ? '待重量' : '待补票号' }}
-            </el-tag>
+            <StatusBadge :tone="row.matchStatus === 'pending' ? 'pending' : 'plain'"
+                         :label="row.matchStatus === 'pending' ? '待重量' : '待补票号'" />
           </div>
           <div class="mobile-field"><span class="mobile-field__label">件数</span><span class="mobile-field__value">{{ row.pieces || 0 }}</span></div>
           <div class="mobile-field"><span class="mobile-field__label">录入方式</span><span class="mobile-field__value">{{ entryMethodLabel(row.entryMethod) }}</span></div>
           <div class="mobile-item__actions">
             <el-button type="primary" @click="openMatch(row)">补票号</el-button>
-            <el-button type="primary" link @click="router.push('/tasks/' + row.taskId)">查看任务</el-button>
+            <el-button @click="router.push('/tasks/' + row.taskId)">查看任务</el-button>
           </div>
         </article>
-        <el-empty v-if="!list.length" description="暂无待匹配记录" />
       </div>
+      <EmptyState v-if="!list.length" title="暂无待匹配记录"
+                  description="所有票号都已匹配到最终重量，或还没有需要补票号的货物" />
     </el-card>
 
     <el-dialog v-model="matchVisible" title="补票号" width="360px">
@@ -65,6 +65,9 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const router = useRouter()
 const list = ref<any[]>([])
@@ -101,3 +104,12 @@ async function doMatch() {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.list-card {
+  margin-bottom: var(--sp-4);
+}
+.tip {
+  margin-bottom: var(--sp-3);
+}
+</style>

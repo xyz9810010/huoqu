@@ -1,51 +1,60 @@
 <template>
   <div>
-    <h2 class="page-title" style="margin-bottom:16px">区域管理</h2>
-    <div class="toolbar">
-      <el-button type="success" @click="openCreate">新增区域</el-button>
-    </div>
-    <el-table class="desktop-table" :data="list">
-      <el-table-column prop="name" label="区域名称" width="120" />
-      <el-table-column prop="code" label="编码" width="90" />
-      <el-table-column label="主取件员" min-width="150">
-        <template #default="{ row }">{{ (row.defaultWorkers || []).map((w: any) => w.name).join('、') }}</template>
-      </el-table-column>
-      <el-table-column label="备用取件员" min-width="150">
-        <template #default="{ row }">{{ (row.backupWorkers || []).map((w: any) => w.name).join('、') }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="150">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="primary" @click="openAssign(row)">设置取件员</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <PageHead title="区域管理" description="维护区域、默认取件员与备用取件员">
+      <template #actions>
+        <el-button type="primary" @click="openCreate">
+          <el-icon><Plus /></el-icon>新增区域
+        </el-button>
+      </template>
+    </PageHead>
 
-    <div class="mobile-list">
-      <article v-for="row in list" :key="row.id" class="mobile-item">
-        <div class="mobile-item__head">
-          <div>
-            <div class="mobile-item__title">{{ row.name }}</div>
-            <div class="mobile-item__sub">{{ row.code || '未设置编码' }}</div>
+    <el-card shadow="never" class="list-card">
+      <el-table v-if="list.length" class="desktop-table" :data="list">
+        <el-table-column prop="name" label="区域名称" width="140" />
+        <el-table-column prop="code" label="编码" width="110" class-name="cell-nowrap" />
+        <el-table-column label="主取件员" min-width="170">
+          <template #default="{ row }">{{ workerNames(row.defaultWorkers) }}</template>
+        </el-table-column>
+        <el-table-column label="备用取件员" min-width="170">
+          <template #default="{ row }">{{ workerNames(row.backupWorkers) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="primary" @click="openAssign(row)">设置取件员</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="mobile-list">
+        <article v-for="row in list" :key="row.id" class="mobile-item">
+          <div class="mobile-item__head">
+            <div>
+              <div class="mobile-item__title">{{ row.name }}</div>
+              <div class="mobile-item__sub qj-num">{{ row.code || '未设置编码' }}</div>
+            </div>
           </div>
-        </div>
-        <div class="mobile-field"><span class="mobile-field__label">默认取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未设置' }}</span></div>
-        <div class="mobile-field"><span class="mobile-field__label">主取件员</span><span class="mobile-field__value">{{ workerNames(row.defaultWorkers) }}</span></div>
-        <div class="mobile-field"><span class="mobile-field__label">备用取件员</span><span class="mobile-field__value">{{ workerNames(row.backupWorkers) }}</span></div>
-        <div class="mobile-item__actions">
-          <el-button @click="openEdit(row)">编辑</el-button>
-          <el-button type="primary" @click="openAssign(row)">设置取件员</el-button>
-        </div>
-      </article>
-      <el-empty v-if="!list.length" description="暂无区域" />
-    </div>
+          <div class="mobile-field"><span class="mobile-field__label">默认取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未设置' }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">主取件员</span><span class="mobile-field__value">{{ workerNames(row.defaultWorkers) }}</span></div>
+          <div class="mobile-field"><span class="mobile-field__label">备用取件员</span><span class="mobile-field__value">{{ workerNames(row.backupWorkers) }}</span></div>
+          <div class="mobile-item__actions">
+            <el-button @click="openEdit(row)">编辑</el-button>
+            <el-button type="primary" @click="openAssign(row)">设置取件员</el-button>
+          </div>
+        </article>
+      </div>
+
+      <EmptyState v-if="!list.length" title="暂无区域" description="新增区域后，派单时会自动推荐区域内的取件员">
+        <el-button type="primary" @click="openCreate">新增区域</el-button>
+      </EmptyState>
+    </el-card>
 
     <el-dialog v-model="visible" :title="form.id ? '编辑区域' : '新增区域'" width="420px">
       <el-form :model="form" label-width="100px">
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="编码"><el-input v-model="form.code" /></el-form-item>
         <el-form-item label="默认取件员">
-          <el-select v-model="form.defaultWorkerId" clearable>
+          <el-select v-model="form.defaultWorkerId" clearable style="width:100%">
             <el-option v-for="w in workers" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
         </el-form-item>
@@ -57,11 +66,11 @@
     </el-dialog>
 
     <el-dialog v-model="assignVisible" title="设置取件员" width="420px">
-      <p>主取件员</p>
+      <div class="assign-label">主取件员</div>
       <el-select v-model="assignForm.defaultWorkerIds" multiple style="width:100%">
         <el-option v-for="w in workers" :key="w.id" :label="w.name" :value="w.id" />
       </el-select>
-      <p>备用取件员</p>
+      <div class="assign-label">备用取件员</div>
       <el-select v-model="assignForm.backupWorkerIds" multiple style="width:100%">
         <el-option v-for="w in workers" :key="w.id" :label="w.name" :value="w.id" />
       </el-select>
@@ -76,7 +85,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const list = ref<any[]>([])
 const workers = ref<any[]>([])
@@ -138,7 +150,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.toolbar {
-  margin-bottom: 16px;
+.list-card {
+  margin-bottom: var(--sp-4);
+}
+.assign-label {
+  margin: var(--sp-3) 0 var(--sp-2);
+  color: var(--qj-text-2);
+  font-size: var(--fs-sub);
+  font-weight: 600;
+}
+.assign-label:first-child {
+  margin-top: 0;
 }
 </style>

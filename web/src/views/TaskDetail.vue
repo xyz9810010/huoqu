@@ -1,22 +1,21 @@
 <template>
   <div>
-    <header class="detail-bar">
+    <header class="detail-head">
       <button type="button" class="back-btn" aria-label="返回" @click="goBack">
-        <el-icon :size="20"><ArrowLeft /></el-icon>
+        <el-icon :size="18"><ArrowLeft /></el-icon>
       </button>
-      <div class="bar-text">
-        <div class="bar-no">{{ task.taskNo || '任务详情' }}</div>
-        <div class="bar-sub">{{ task.customerName }}</div>
-      </div>
-      <el-tag class="bar-tag" size="small" :type="statusType(task.status) as any">{{ statusLabel(task.status) }}</el-tag>
+      <span class="detail-no qj-num">{{ task.taskNo || '任务详情' }}</span>
+      <StatusBadge :status="task.status" />
+      <span v-if="task.taskType === 'rush'" class="qj-badge qj-badge--danger">赶 {{ fmt(task.rushShipTime) }} 出货</span>
+      <span v-else-if="task.taskType === 'scheduled'" class="qj-badge qj-badge--pending">
+        指定时间 {{ fmt(task.scheduledTime) }}
+      </span>
     </header>
 
     <!-- 客户与取件信息 -->
     <el-card shadow="never" class="block info-card">
       <div class="who-line">
         <span class="who">{{ task.customerName || '未命名客户' }}</span>
-        <el-tag v-if="task.taskType === 'rush'" type="danger">🔴 赶 {{ fmt(task.rushShipTime) }} 出货</el-tag>
-        <el-tag v-else-if="task.taskType === 'scheduled'" type="warning">⏰ 指定时间 {{ fmt(task.scheduledTime) }}</el-tag>
       </div>
       <div class="addr-box">
         <el-icon :size="18" class="ic"><Location /></el-icon>
@@ -38,7 +37,7 @@
         <div class="meta"><span>派单时间</span><b>{{ fmt(task.dispatchAt) || '—' }}</b></div>
         <div v-if="task.completedAt" class="meta"><span>完成时间</span><b>{{ fmt(task.completedAt) }}</b></div>
       </div>
-      <div v-if="task.pickupNote" class="note-line">📝 取件备注：{{ task.pickupNote }}</div>
+      <div v-if="task.pickupNote" class="note-line">取件备注：{{ task.pickupNote }}</div>
       <div class="quick-actions">
         <el-button size="small" text type="primary" @click="copyAddr">复制地址</el-button>
         <el-button size="small" text type="primary" @click="copyFull">复制取件信息</el-button>
@@ -74,7 +73,7 @@
     <!-- 客服管理操作 -->
     <el-card v-if="isCs" shadow="never" class="block action-card">
       <template #header>管理操作</template>
-      <div class="grid2">
+      <div class="action-row">
         <el-button v-if="task.status === 'pending' || task.status === 'in_progress'" @click="reassignVisible = true">改派取件员</el-button>
         <el-button v-if="task.status === 'pending' || task.status === 'in_progress'" @click="updateVisible = true">修改时间 / 类型</el-button>
         <el-button v-if="task.status === 'pending' || task.status === 'in_progress'" type="danger" plain @click="cancel">取消任务</el-button>
@@ -93,7 +92,7 @@
       </template>
       <div class="items-table">
         <el-table :data="task.items || []" size="small">
-          <el-table-column prop="waybillNo" label="票号" width="150">
+          <el-table-column prop="waybillNo" label="票号" width="160" class-name="cell-nowrap">
             <template #default="{ row }">{{ row.waybillNo || '（无票号）' }}</template>
           </el-table-column>
           <el-table-column prop="pieces" label="件数" width="80" />
@@ -101,12 +100,10 @@
             <template #default="{ row }">{{ entryMethodLabel(row.entryMethod) }}</template>
           </el-table-column>
           <el-table-column prop="workerName" label="取件员" width="100" />
-          <el-table-column prop="finalWeight" label="最终重量(kg)" width="120" />
-          <el-table-column label="匹配状态" width="110">
+          <el-table-column prop="finalWeight" label="最终重量(kg)" width="124" />
+          <el-table-column label="匹配状态" width="116">
             <template #default="{ row }">
-              <el-tag size="small" :type="matchStatusType(row.matchStatus)">
-                {{ matchStatusLabel(row.matchStatus) }}
-              </el-tag>
+              <StatusBadge tone="plain" :label="matchStatusLabel(row.matchStatus)" />
             </template>
           </el-table-column>
         </el-table>
@@ -116,14 +113,14 @@
           <div class="m-top">
             <span class="m-idx">{{ index + 1 }}</span>
             <span class="m-no">{{ row.waybillNo || '（无票号）' }}</span>
-            <el-tag size="small" :type="matchStatusType(row.matchStatus)">{{ matchStatusLabel(row.matchStatus) }}</el-tag>
+            <StatusBadge tone="plain" :label="matchStatusLabel(row.matchStatus)" />
           </div>
           <div class="m-meta">
             {{ row.pieces || 0 }} 件 · {{ entryMethodLabel(row.entryMethod) }} · {{ row.workerName || '—' }} · {{ row.finalWeight ?? 0 }}kg
           </div>
         </div>
       </div>
-      <div v-else class="no-items">本单尚未录入货物</div>
+      <EmptyState v-else title="本单尚未录入货物" description="取件员扫码或手输票号后会显示在这里" />
     </el-card>
 
     <!-- 现场照片 -->
@@ -132,8 +129,8 @@
       <div class="photos">
         <el-image v-for="p in task.photos" :key="p.id" :src="p.filePath"
                   :preview-src-list="task.photos.map((x: any) => x.filePath)" fit="cover" class="photo-img" />
-        <el-empty v-if="!task.photos?.length" description="暂无照片" :image-size="60" />
       </div>
+      <EmptyState v-if="!task.photos?.length" title="暂无照片" description="完成取件前需上传至少 1 张现场照片" />
     </el-card>
 
     <!-- 协作与异常 -->
@@ -147,11 +144,11 @@
       </div>
       <el-divider content-position="left">异常记录</el-divider>
       <div v-for="e in task.exceptions" :key="e.id" class="exc-row">
-        <el-tag :type="e.resolved ? 'info' : 'danger'" size="small">{{ e.type }}</el-tag>
-        <span class="exc-desc">{{ e.description }}</span>
+        <StatusBadge :tone="e.resolved ? 'plain' : 'danger'" :label="e.resolved ? '已处理' : '未处理'" />
+        <span class="exc-desc">{{ e.type }} · {{ e.description }}</span>
         <el-button v-if="!e.resolved && isCs" size="small" @click="resolveException(e)">处理</el-button>
       </div>
-      <el-empty v-if="!(task.exceptions || []).length" description="暂无异常记录" :image-size="50" />
+      <EmptyState v-if="!(task.exceptions || []).length" title="暂无异常记录" description="取件员上报的异常会显示在这里" />
     </el-card>
     <!-- 录单 -->
     <el-dialog v-model="itemVisible" title="扫码/录单" width="420px">
@@ -176,7 +173,7 @@
       <el-upload :http-request="uploadPhoto" :show-file-list="false" accept="image/*">
         <el-button type="primary">选择图片上传</el-button>
       </el-upload>
-      <div style="margin-top:8px;color:#999">完成取件前至少上传 1 张现场照片</div>
+      <div class="upload-hint">完成取件前至少上传 1 张现场照片</div>
     </el-dialog>
 
     <!-- 改派 -->
@@ -254,6 +251,8 @@ import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
 import http from '../api'
 import { useAuthStore } from '../stores/auth'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../services/realtime-events'
 
 const route = useRoute()
@@ -309,12 +308,6 @@ async function load() {
 function fmt(t: string) {
   return t ? t.replace('T', ' ').slice(0, 16) : ''
 }
-function statusLabel(s: string) {
-  return { pending: '待取', in_progress: '取件中', completed: '已完成', cancelled: '已取消' }[s] || s
-}
-function statusType(s: string) {
-  return { pending: 'warning', in_progress: 'primary', completed: 'success', cancelled: 'info' }[s] || 'info'
-}
 function entryMethodLabel(method: string) {
   const labels: Record<string, string> = { scan: '扫码', manual: '手输', no_waybill: '无票号' }
   return labels[method] || method
@@ -322,10 +315,6 @@ function entryMethodLabel(method: string) {
 function matchStatusLabel(status: string) {
   const labels: Record<string, string> = { matched: '已回填', pending: '待重量', no_waybill: '待补票号' }
   return labels[status] || status
-}
-function matchStatusType(status: string) {
-  const types: Record<string, 'success' | 'warning' | 'info'> = { matched: 'success', pending: 'warning', no_waybill: 'info' }
-  return types[status] || 'info'
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -498,25 +487,25 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
-.detail-bar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
+.detail-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: -20px -24px 16px;
-  padding: 10px 24px;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--qj-border);
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.detail-no {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--qj-text);
+  margin-right: var(--sp-1);
 }
 .back-btn {
   flex: none;
   width: 34px;
   height: 34px;
   border: 1px solid var(--qj-border);
-  background: #fff;
+  background: var(--qj-surface);
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -524,35 +513,29 @@ onUnmounted(() => liveRefresh.dispose())
   cursor: pointer;
   color: var(--qj-text-2);
   padding: 0;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.back-btn:hover {
+  border-color: var(--qj-primary);
+  color: var(--qj-primary-text);
+  background: var(--qj-primary-bg);
 }
 .back-btn:active {
-  background: #f2f3f5;
+  background: var(--qj-info-bg);
+}
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: flex-end;
 }
 .bar-text {
   flex: 1;
   min-width: 0;
   line-height: 1.35;
 }
-.bar-no {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--qj-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bar-sub {
-  font-size: 12px;
-  color: var(--qj-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bar-tag {
-  flex: none;
-}
 .block {
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
 }
 .info-card :deep(.el-card__body) {
   padding: 18px 20px;
@@ -561,7 +544,7 @@ onUnmounted(() => liveRefresh.dispose())
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .who {
   font-size: 19px;
@@ -791,16 +774,17 @@ onUnmounted(() => liveRefresh.dispose())
 .photo-img {
   width: 100% !important;
   height: 96px;
-  border-radius: 8px;
-  background: #f2f3f5;
+  border-radius: var(--r-control);
+  background: var(--qj-info-bg);
+}
+.upload-hint {
+  margin-top: var(--sp-2);
+  color: var(--qj-muted);
+  font-size: var(--fs-meta);
 }
 @media (max-width: 768px) {
-  .detail-bar {
-    margin: -14px -12px 12px;
-    padding: 8px 12px;
-  }
-  .bar-no {
-    font-size: 15px;
+  .detail-no {
+    font-size: var(--fs-card);
   }
   .items-table {
     display: none;
@@ -812,8 +796,16 @@ onUnmounted(() => liveRefresh.dispose())
   .no-items {
     text-align: center;
     color: var(--qj-muted);
-    font-size: 13px;
+    font-size: var(--fs-sub);
     padding: 14px 0;
+  }
+  .action-row {
+    justify-content: stretch;
+  }
+  .action-row .el-button {
+    flex: 1 1 calc(50% - var(--sp-2));
+    margin-left: 0;
+    min-height: 44px;
   }
   .m-item {
     flex-wrap: wrap;

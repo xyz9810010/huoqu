@@ -6,38 +6,37 @@
         <span>Huoqu</span>
       </div>
       <el-menu :default-active="route.path" router class="menu">
-        <template v-for="m in menus" :key="m.path">
-          <el-menu-item :index="m.path">
-            <el-icon><component :is="m.icon" /></el-icon>
-            <span>{{ m.label }}</span>
-          </el-menu-item>
-        </template>
+        <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
+          <el-icon><component :is="m.icon" /></el-icon>
+          <span>{{ m.label }}</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
     <el-container class="body">
+      <!-- 极简顶栏：页面标题由内容区的吸顶页头承担，避免两处重复 -->
       <el-header class="header">
         <div class="header-left">
           <el-button class="mobile-menu-trigger" circle aria-label="打开导航菜单" @click="mobileMenuOpen = true">
             <el-icon><Menu /></el-icon>
           </el-button>
-          <span class="crumb">{{ currentTitle }}</span>
         </div>
         <div class="header-right">
           <el-button circle class="shortcut-help" aria-label="快捷键帮助" @click="showShortcutHelp">
             <el-icon><QuestionFilled /></el-icon>
           </el-button>
           <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
-            <el-button circle class="bell" @click="router.push('/notifications')">
+            <el-button circle class="bell" aria-label="通知中心" @click="router.push('/notifications')">
               <el-icon><Bell /></el-icon>
             </el-button>
           </el-badge>
-          <div class="latency" :class="{ 'is-online': connected }">
+          <div class="latency" :class="{ 'is-online': connected }" role="status"
+               :aria-label="connected ? '服务连接正常，延迟 ' + latency + ' 毫秒' : '正在连接服务'">
             <span class="latency-dot" />
-            <span class="latency-text">{{ latency >= 0 ? latency + ' ms' : '连接中…' }}</span>
+            <span class="latency-text">{{ connected ? latency + ' ms' : '连接中…' }}</span>
           </div>
           <el-dropdown trigger="click" @command="onCommand">
-            <div class="user-box">
+            <div class="user-box" role="button" tabindex="0" :aria-label="'账号菜单：' + (auth.user?.name || '')">
               <div class="avatar">{{ (auth.user?.name || '?').slice(0, 1) }}</div>
               <span class="name">{{ auth.user?.name }}</span>
               <el-icon class="caret"><ArrowDown /></el-icon>
@@ -58,7 +57,7 @@
       </el-main>
     </el-container>
 
-    <el-drawer v-model="mobileMenuOpen" direction="ltr" size="264px" :with-header="false" class="mobile-nav-drawer">
+    <el-drawer v-model="mobileMenuOpen" direction="ltr" size="272px" :with-header="false" class="mobile-nav-drawer">
       <div class="logo mobile-logo">
         <div class="logo-mark"><el-icon :size="18"><Van /></el-icon></div>
         <span>Huoqu</span>
@@ -147,7 +146,6 @@ const allMenus: any[] = [
 ]
 
 const menus = computed(() => allMenus.filter((m) => m.roles.includes(auth.role)))
-const currentTitle = computed(() => String(route.meta.title || menus.value.find((m) => m.path === route.path)?.label || ''))
 
 function onCommand(cmd: string) {
   if (cmd === 'logout') {
@@ -322,8 +320,8 @@ onUnmounted(() => {
 .logo-mark {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  background: var(--el-color-primary);
+  border-radius: var(--r-control);
+  background: var(--qj-primary);
   color: #fff;
   display: flex;
   align-items: center;
@@ -343,45 +341,43 @@ onUnmounted(() => {
 }
 .menu :deep(.el-menu-item) {
   height: 42px;
-  border-radius: 8px;
+  border-radius: var(--r-control);
   margin-bottom: 2px;
   color: var(--qj-text-2);
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .menu :deep(.el-menu-item:hover) {
-  background: #f2f3f5;
+  background: var(--qj-info-bg);
   color: var(--qj-text);
 }
 .menu :deep(.el-menu-item.is-active) {
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
+  background: var(--qj-primary-bg);
+  color: var(--qj-primary-text);
   font-weight: 600;
 }
 .menu :deep(.el-menu-item.is-active .el-icon) {
-  color: var(--el-color-primary);
+  color: var(--qj-primary-text);
+}
+.menu :deep(.el-menu-item:focus-visible) {
+  box-shadow: var(--qj-focus);
 }
 .body {
   background: var(--qj-bg);
 }
 .header {
-  height: 60px;
-  background: #fff;
+  height: 56px;
+  background: var(--qj-surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 var(--sp-6);
   border-bottom: 1px solid var(--qj-border);
-}
-.header-left .crumb {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--qj-text);
 }
 .header-left {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 10px;
+  gap: var(--sp-2);
 }
 .mobile-menu-trigger {
   display: none;
@@ -389,13 +385,13 @@ onUnmounted(() => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--sp-3);
 }
 .latency {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--qj-muted);
   white-space: nowrap;
 }
@@ -403,67 +399,110 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #c9cdd4;
+  background: var(--qj-border-strong);
 }
 .latency.is-online .latency-dot {
-  background: #00b42a;
+  background: #16a34a;
 }
 .latency.is-online .latency-text {
-  color: #00b42a;
+  color: var(--qj-success-text);
 }
-.bell, .shortcut-help {
+.bell,
+.shortcut-help {
   border: 1px solid var(--qj-border);
-  background: #fff;
+  background: var(--qj-surface);
   color: var(--qj-text-2);
+  width: 34px;
+  height: 34px;
 }
-.shortcut-help:hover {
-  color: var(--el-color-primary);
-  border-color: var(--el-color-primary);
-}
-.help-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
-.help-kbd { display: inline-block; min-width: 24px; text-align: center; padding: 2px 8px; border: 1px solid #d0d5dd; border-bottom-width: 2px; border-radius: 6px; background: #f7f8fa; font-family: ui-monospace, monospace; font-weight: 600; color: #182431; }
-.help-row-label { font-size: 14px; color: var(--qj-text); }
-.help-label { width: 64px; font-size: 13px; color: var(--qj-muted); flex: none; }
-.help-copy { flex: 1; font-size: 13px; color: var(--el-color-primary); cursor: pointer; word-break: break-all; }
-.help-copy:hover { text-decoration: underline; }
-.help-tip { margin-top: 12px; font-size: 12px; color: var(--qj-muted); }
+.shortcut-help:hover,
 .bell:hover {
-  color: var(--el-color-primary);
-  border-color: var(--el-color-primary);
+  color: var(--qj-primary-text);
+  border-color: var(--qj-primary);
+  background: var(--qj-primary-bg);
+}
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 0;
+}
+.help-kbd {
+  display: inline-block;
+  min-width: 24px;
+  text-align: center;
+  padding: 2px 8px;
+  border: 1px solid var(--qj-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-badge);
+  background: var(--qj-side);
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  color: var(--qj-text);
+}
+.help-row-label {
+  font-size: var(--fs-body);
+  color: var(--qj-text);
+}
+.help-label {
+  width: 64px;
+  font-size: var(--fs-sub);
+  color: var(--qj-muted);
+  flex: none;
+}
+.help-copy {
+  flex: 1;
+  font-size: var(--fs-sub);
+  color: var(--qj-primary-text);
+  cursor: pointer;
+  word-break: break-all;
+}
+.help-copy:hover {
+  text-decoration: underline;
+}
+.help-tip {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-meta);
+  color: var(--qj-muted);
 }
 .user-box {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 8px;
+  border-radius: var(--r-control);
+  transition: background-color var(--dur-fast) var(--ease);
 }
 .user-box:hover {
-  background: #f2f3f5;
+  background: var(--qj-info-bg);
+}
+.user-box:focus-visible {
+  box-shadow: var(--qj-focus);
 }
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--el-color-primary);
+  /* 白字在 #3370ff 上仅 4.28:1，头像底用深一档的蓝 */
+  background: var(--qj-primary-btn);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-sub);
 }
 .name {
-  font-size: 14px;
+  font-size: var(--fs-body);
   color: var(--qj-text);
 }
 .caret {
   color: var(--qj-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .main {
-  padding: 20px 24px;
+  padding: var(--sp-5) var(--sp-6);
   overflow-y: auto;
 }
 .mobile-nav-drawer :deep(.el-drawer__body) {
@@ -479,7 +518,8 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 @media (max-width: 768px) {
-  .layout, .body {
+  .layout,
+  .body {
     min-width: 0;
   }
   .aside {
@@ -487,27 +527,32 @@ onUnmounted(() => {
   }
   .header {
     height: 56px;
-    padding: 0 12px;
+    padding: 0 var(--sp-3);
   }
   .mobile-menu-trigger {
     display: inline-flex;
-  }
-  .crumb {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    width: 40px;
+    height: 40px;
   }
   .header-right {
-    gap: 8px;
+    gap: var(--sp-2);
   }
-  .header-right .name, .header-right .caret {
+  .header-right .name,
+  .header-right .caret,
+  .shortcut-help {
+    display: none;
+  }
+  .latency-text {
     display: none;
   }
   .user-box {
     padding: 2px;
   }
   .main {
-    padding: 14px 12px;
+    padding: var(--sp-3);
+  }
+  .mobile-menu :deep(.el-menu-item) {
+    height: 48px;
   }
 }
 </style>

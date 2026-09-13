@@ -121,7 +121,8 @@ async function collectStyleFacts(page) {
     }
   })
   if (facts.rootVar !== '#3370ff') problems.push(`主题主色变量异常: ${facts.rootVar}`)
-  if (facts.buttonBg !== 'rgb(51, 112, 255)') problems.push(`主按钮背景异常: ${facts.buttonBg}`)
+  // 主按钮底色比品牌色深一档：白字在 #3370ff 上仅 4.28:1，不满足正文 AA
+  if (facts.buttonBg !== 'rgb(43, 98, 230)') problems.push(`主按钮背景异常: ${facts.buttonBg}`)
   if (!facts.hasMessageCss) problems.push('缺失 el-message 样式')
   if (!facts.hasMessageBoxCss) problems.push('缺失 el-message-box 样式（TaskDetail 弹窗）')
   if (!facts.hasOverlayCss) problems.push('缺失 el-overlay 样式')
@@ -208,13 +209,16 @@ async function collectStyleFacts(page) {
   // 任务列表：状态速览条与行级状态着色（无需筛选即可一眼区分完成与否）
   await page.goto(baseUrl + '/tasks', { waitUntil: 'networkidle' })
   await page.waitForTimeout(400)
-  const tabCount = await page.locator('.status-tab').count()
+  // 状态速览条改为统一设计的 .qj-pill（原先的 .status-tab 已合并到设计令牌层）
+  const tabCount = await page.locator('.qj-pill').count()
+  const statusPillCount = await page.locator('.filter-bar .qj-pill').count()
   const openRows = await page.locator('.task-row--open').count()
   const doneRows = await page.locator('.task-row--done').count()
-  if (tabCount !== 4) problems.push('任务列表状态速览条应为 4 个（全部/待办/已完成/已取消），实际 ' + tabCount)
+  if (tabCount < 4) problems.push('任务列表筛选胶囊不应少于 4 个，实际 ' + tabCount)
+  if (statusPillCount !== 8) problems.push('任务列表应为 4 个时间胶囊 + 4 个状态胶囊，实际 ' + statusPillCount)
   if (openRows < 1) problems.push('任务列表应有待办（未完成）行着色，实际 open 行 ' + openRows)
   if (doneRows < 1) problems.push('任务列表应有已完成行着色，实际 done 行 ' + doneRows)
-  checked.push('/tasks 状态速览条 tabs=' + tabCount + ' openRows=' + openRows + ' doneRows=' + doneRows)
+  checked.push('/tasks 筛选胶囊 pills=' + tabCount + '（状态 ' + statusPillCount + '）openRows=' + openRows + ' doneRows=' + doneRows)
   await page.screenshot({ path: path.join(screenshotDir, 'tasks-status-overview.png') })
   if (taskId) {
     await page.goto(baseUrl + '/tasks/' + taskId, { waitUntil: 'networkidle' })

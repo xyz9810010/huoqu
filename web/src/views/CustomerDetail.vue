@@ -1,19 +1,18 @@
 <template>
   <div>
-    <el-page-header @back="router.back()" :content="customer.name || '客户详情'" style="margin-bottom:16px" />
+    <PageHead :title="customer.name || '客户详情'" :description="'编号 ' + (customer.customerNo || '—')">
+      <template #actions>
+        <el-button @click="goDispatch">派单</el-button>
+        <el-button type="primary" @click="openEdit">编辑</el-button>
+        <el-button :type="customer.status === 'active' ? 'danger' : 'success'" plain @click="toggleStatus">
+          {{ customer.status === 'active' ? '停用' : '启用' }}
+        </el-button>
+      </template>
+    </PageHead>
 
     <el-card shadow="never" class="block">
       <template #header>
-        <div class="card-head">
-          <span>客户资料</span>
-          <div>
-            <el-button size="small" @click="goDispatch">派单</el-button>
-            <el-button size="small" type="primary" @click="openEdit">编辑</el-button>
-            <el-button size="small" :type="customer.status === 'active' ? 'danger' : 'success'" @click="toggleStatus">
-              {{ customer.status === 'active' ? '停用' : '启用' }}
-            </el-button>
-          </div>
-        </div>
+        <div class="block-title"><el-icon><User /></el-icon>客户资料</div>
       </template>
       <el-descriptions class="desktop-descriptions" :column="3" border>
         <el-descriptions-item label="编号">{{ customer.customerNo }}</el-descriptions-item>
@@ -26,9 +25,9 @@
         <el-descriptions-item label="备注" :span="3">{{ customer.remark }}</el-descriptions-item>
         <el-descriptions-item label="订单进度" :span="3">
           <template v-if="customer.taskCount">
-            <el-tag v-if="customer.openTaskCount" type="warning" size="small">待办 {{ customer.openTaskCount }}</el-tag>
-            <el-tag v-else type="success" size="small">全部完成</el-tag>
-            <span class="order-count">已完成 {{ customer.completedTaskCount || 0 }} / {{ customer.taskCount }} 单</span>
+            <span v-if="customer.openTaskCount" class="qj-badge qj-badge--pending">待办 {{ customer.openTaskCount }}</span>
+            <span v-else class="qj-badge qj-badge--done">全部完成</span>
+            <span class="order-count qj-num">已完成 {{ customer.completedTaskCount || 0 }} / {{ customer.taskCount }} 单</span>
           </template>
           <span v-else class="order-count">暂无取件订单</span>
         </el-descriptions-item>
@@ -44,33 +43,33 @@
         <div class="mobile-field"><span class="mobile-field__label">备注</span><span class="mobile-field__value">{{ customer.remark || '—' }}</span></div>
         <div class="mobile-field"><span class="mobile-field__label">订单进度</span><span class="mobile-field__value">
           <template v-if="customer.taskCount">
-            <el-tag v-if="customer.openTaskCount" type="warning" size="small">待办 {{ customer.openTaskCount }}</el-tag>
-            <el-tag v-else type="success" size="small">全部完成</el-tag>
-            <span style="margin-left:6px">已完成 {{ customer.completedTaskCount || 0 }}/{{ customer.taskCount }}</span>
+            <span v-if="customer.openTaskCount" class="qj-badge qj-badge--pending">待办 {{ customer.openTaskCount }}</span>
+            <span v-else class="qj-badge qj-badge--done">全部完成</span>
+            <span class="order-count">已完成 {{ customer.completedTaskCount || 0 }}/{{ customer.taskCount }}</span>
           </template>
           <span v-else>暂无取件订单</span>
         </span></div>
       </div>
     </el-card>
 
-    <el-card shadow="never">
+    <el-card shadow="never" class="block">
       <template #header>
         <div class="card-head">
-          <span>取件地址</span>
-          <el-button size="small" type="success" @click="openAddAddr">新增地址</el-button>
+          <div class="block-title"><el-icon><Location /></el-icon>取件地址</div>
+          <el-button size="small" type="primary" plain @click="openAddAddr">新增地址</el-button>
         </div>
       </template>
-      <el-table class="desktop-table" :data="customer.addresses || []">
-        <el-table-column prop="name" label="取件点名称" width="120" />
-        <el-table-column prop="address" label="完整地址" min-width="180" />
-        <el-table-column prop="contactName" label="联系人" width="90" />
-        <el-table-column prop="contactPhone" label="电话" width="120" />
-        <el-table-column prop="areaId" label="区域" width="90">
-          <template #default="{ row }">{{ areaName(row.areaId) }}</template>
+      <el-table v-if="(customer.addresses || []).length" class="desktop-table" :data="customer.addresses || []">
+        <el-table-column prop="name" label="取件点名称" width="130" />
+        <el-table-column prop="address" label="完整地址" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="contactName" label="联系人" width="96" />
+        <el-table-column prop="contactPhone" label="电话" width="130" class-name="cell-nowrap" />
+        <el-table-column prop="areaId" label="区域" width="100">
+          <template #default="{ row }">{{ areaName(row.areaId) || '—' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="70">
+        <el-table-column label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.isActive ? 'success' : 'info'" size="small">{{ row.isActive ? '启用' : '停用' }}</el-tag>
+            <StatusBadge :tone="row.isActive ? 'done' : 'cancel'" :label="row.isActive ? '启用' : '停用'" />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150">
@@ -87,7 +86,7 @@
               <div class="mobile-item__title">{{ row.name }}</div>
               <div class="mobile-item__sub">{{ row.address }}</div>
             </div>
-            <el-tag :type="row.isActive ? 'success' : 'info'" size="small">{{ row.isActive ? '启用' : '停用' }}</el-tag>
+            <StatusBadge :tone="row.isActive ? 'done' : 'cancel'" :label="row.isActive ? '启用' : '停用'" />
           </div>
           <div class="mobile-field"><span class="mobile-field__label">联系人</span><span class="mobile-field__value">{{ row.contactName || '—' }}</span></div>
           <div class="mobile-field"><span class="mobile-field__label">电话</span><span class="mobile-field__value">{{ row.contactPhone || '—' }}</span></div>
@@ -98,39 +97,47 @@
             <el-button @click="toggleAddr(row)">{{ row.isActive ? '停用' : '启用' }}</el-button>
           </div>
         </article>
-        <el-empty v-if="!(customer.addresses || []).length" description="暂无取件地址" />
       </div>
+      <EmptyState v-if="!(customer.addresses || []).length" title="暂无取件地址"
+                  description="为客户添加取件地址后，派单时可直接选择">
+        <el-button type="primary" @click="openAddAddr">新增地址</el-button>
+      </EmptyState>
     </el-card>
 
-    <el-card shadow="never">
+    <el-card shadow="never" class="block">
       <template #header>
         <div class="card-head">
-          <span>取件订单</span>
-          <el-tag v-if="customer.openTaskCount" type="warning" size="small">待办 {{ customer.openTaskCount }}</el-tag>
+          <div class="block-title"><el-icon><List /></el-icon>取件订单</div>
+          <span v-if="customer.openTaskCount" class="qj-badge qj-badge--pending">待办 {{ customer.openTaskCount }}</span>
         </div>
       </template>
-      <el-table class="desktop-table" :data="tasks" @row-click="(r: any) => router.push('/tasks/' + r.id)" style="cursor:pointer">
-        <el-table-column prop="taskNo" label="任务号" width="150" />
-        <el-table-column label="状态" width="90">
+      <el-table v-if="tasks.length" class="desktop-table" :data="tasks"
+                @row-click="(r: any) => router.push('/tasks/' + r.id)" style="cursor:pointer">
+        <el-table-column prop="taskNo" label="任务号" width="168" class-name="cell-nowrap" />
+        <el-table-column label="状态" width="104">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status) as any">{{ statusLabel(row.status) }}</el-tag>
+            <StatusBadge :status="row.status" />
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="80">
+        <el-table-column label="类型" width="90">
           <template #default="{ row }">
-            <el-tag v-if="row.taskType === 'rush'" type="danger" size="small">加急</el-tag>
-            <el-tag v-else-if="row.taskType === 'scheduled'" type="warning" size="small">预约</el-tag>
-            <span v-else>普通</span>
+            <span v-if="row.taskType === 'rush'" class="qj-badge qj-badge--danger">加急</span>
+            <span v-else-if="row.taskType === 'scheduled'" class="qj-badge qj-badge--pending">预约</span>
+            <span v-else class="qj-badge qj-badge--plain">普通</span>
           </template>
         </el-table-column>
-        <el-table-column prop="defaultWorkerName" label="取件员" width="100" />
+        <el-table-column prop="defaultWorkerName" label="取件员" width="100">
+          <template #default="{ row }">{{ row.defaultWorkerName || '未分配' }}</template>
+        </el-table-column>
         <el-table-column label="地址" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">{{ row.addressPointName || row.address || '—' }}</template>
         </el-table-column>
-        <el-table-column label="派单时间" width="150">
-          <template #default="{ row }">{{ fmtTime(row.dispatchAt) || fmtTime(row.createdAt) || '—' }}</template>
+        <el-table-column label="派单时间" width="152">
+          <template #default="{ row }">
+            <span class="qj-num qj-nowrap">{{ fmtTime(row.dispatchAt) || fmtTime(row.createdAt) || '—' }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column label="操作" width="88">
           <template #default="{ row }">
             <el-button size="small" @click.stop="router.push('/tasks/' + row.id)">查看</el-button>
           </template>
@@ -141,17 +148,18 @@
                  @click="router.push('/tasks/' + row.id)">
           <div class="mobile-item__head">
             <div>
-              <div class="mobile-item__title">{{ row.taskNo }}</div>
+              <div class="mobile-item__title qj-num">{{ row.taskNo }}</div>
               <div class="mobile-item__sub">{{ row.customerName || '客户' }}</div>
             </div>
-            <el-tag :type="statusType(row.status) as any" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <StatusBadge :status="row.status" />
           </div>
           <div class="mobile-field"><span class="mobile-field__label">地址</span><span class="mobile-field__value">{{ row.addressPointName || row.address || '—' }}</span></div>
           <div class="mobile-field"><span class="mobile-field__label">取件员</span><span class="mobile-field__value">{{ row.defaultWorkerName || '未分配' }}</span></div>
           <div class="mobile-field"><span class="mobile-field__label">派单时间</span><span class="mobile-field__value">{{ fmtTime(row.dispatchAt) || fmtTime(row.createdAt) || '—' }}</span></div>
         </article>
-        <el-empty v-if="!tasks.length" description="该客户暂无取件订单" />
       </div>
+      <EmptyState v-if="!tasks.length" title="该客户暂无取件订单"
+                  description="从右上角「派单」创建第一条取件任务" />
     </el-card>
 
     <el-dialog v-model="editVisible" title="编辑客户" width="560px">
@@ -195,7 +203,11 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { List, Location, User } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -217,12 +229,6 @@ async function loadTasks() {
   tasks.value = Array.isArray(data) ? data : data.list || []
 }
 
-function statusLabel(s: string) {
-  return { pending: '待取', in_progress: '取件中', completed: '已完成', cancelled: '已取消' }[s] || s
-}
-function statusType(s: string) {
-  return { pending: 'warning', in_progress: 'primary', completed: 'success', cancelled: 'info' }[s] || 'info'
-}
 function fmtTime(t: string) {
   return t ? t.replace('T', ' ').slice(0, 16) : ''
 }
@@ -292,36 +298,38 @@ onMounted(async () => {
 
 <style scoped>
 .block {
-  margin-bottom: 16px;
+  margin-bottom: var(--sp-4);
 }
 .order-count {
-  margin-left: 8px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
+  margin-left: var(--sp-2);
+  color: var(--qj-text-2);
+  font-size: var(--fs-sub);
 }
 .card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--sp-2);
 }
 .common-mark {
-  margin-top: 6px;
-  color: var(--el-color-warning);
-  font-size: 12px;
+  margin-top: var(--sp-1);
+  color: var(--qj-warning-text);
+  font-size: var(--fs-meta);
 }
 @media (max-width: 768px) {
   .card-head {
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--sp-3);
   }
-  .card-head > div {
+  .card-head > div:last-child {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--sp-1);
   }
   .card-head .el-button {
     margin-left: 0;
+    min-height: 40px;
   }
   .mobile-detail-list {
     gap: 0;

@@ -1,8 +1,8 @@
 <template>
   <div>
-    <h2 class="page-title" style="margin-bottom:16px">新建取件</h2>
-    <el-card shadow="never" style="max-width:760px">
-      <template #header>新建取件</template>
+    <PageHead title="新建取件" description="选择客户与取件地址，指派取件员并确认任务类型" />
+
+    <el-card shadow="never" class="form-card">
       <el-form class="dispatch-form" label-width="110px">
         <el-form-item label="客户" required>
           <el-select v-model="customerId" filterable remote :remote-method="searchCustomer" placeholder="搜索客户名称/电话"
@@ -16,11 +16,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="推荐取件员">
-          <el-input :model-value="recommendName || '暂无'" disabled style="width:200px" />
-          <span style="margin-left:10px;color:#999">可改派</span>
+          <div class="recommend">
+            <el-input :model-value="recommendName || '暂无推荐'" disabled />
+            <span class="recommend-hint">按区域自动带出，可改派</span>
+          </div>
         </el-form-item>
         <el-form-item label="取件员">
-          <el-select v-model="workerId" placeholder="默认使用推荐取件员" clearable style="width:200px">
+          <el-select v-model="workerId" placeholder="默认使用推荐取件员" clearable style="width:100%">
             <el-option v-for="w in workers" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
         </el-form-item>
@@ -33,7 +35,7 @@
         </el-form-item>
         <template v-if="taskType === 'scheduled'">
           <el-form-item label="时间类型">
-            <el-select v-model="scheduledKind" style="width:200px">
+            <el-select v-model="scheduledKind" style="width:100%">
               <el-option label="XX点前取" value="before" />
               <el-option label="XX点后取" value="after" />
               <el-option label="XX点左右取" value="around" />
@@ -41,12 +43,13 @@
           </el-form-item>
           <el-form-item label="指定时间">
             <el-date-picker v-model="scheduledTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss"
-                            placeholder="选择时间" />
+                            placeholder="选择时间" style="width:100%" />
           </el-form-item>
         </template>
         <template v-if="taskType === 'rush'">
           <el-form-item label="赶几点出货" required>
-            <el-date-picker v-model="rushShipTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择出货时间" />
+            <el-date-picker v-model="rushShipTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss"
+                            placeholder="选择出货时间" style="width:100%" />
           </el-form-item>
           <el-form-item label="加急原因" required>
             <el-input v-model="rushReason" type="textarea" placeholder="如：客户下午航班" />
@@ -54,7 +57,7 @@
         </template>
         <el-form-item label="取件备注"><el-input v-model="pickupNote" type="textarea" /></el-form-item>
         <el-form-item label="内部备注"><el-input v-model="internalNote" type="textarea" /></el-form-item>
-        <el-form-item>
+        <el-form-item class="submit-item">
           <el-button type="primary" :loading="saving" @click="submit">确认派单</el-button>
         </el-form-item>
       </el-form>
@@ -67,6 +70,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,6 +166,26 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.form-card {
+  max-width: 720px;
+}
+.recommend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+.recommend-hint {
+  flex: none;
+  color: var(--qj-muted);
+  font-size: var(--fs-meta);
+}
+.submit-item :deep(.el-form-item__content) {
+  justify-content: flex-end;
+}
+.submit-item .el-button {
+  min-width: 140px;
+}
 @media (max-width: 560px) {
   .dispatch-form :deep(.el-form-item) {
     display: block;
@@ -188,6 +212,13 @@ onMounted(async () => {
     width: 100%;
     padding-left: 8px;
     padding-right: 8px;
+  }
+  .recommend {
+    flex-wrap: wrap;
+  }
+  .submit-item .el-button {
+    width: 100%;
+    min-height: 44px;
   }
 }
 </style>

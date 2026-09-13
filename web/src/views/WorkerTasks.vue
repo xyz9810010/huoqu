@@ -1,56 +1,57 @@
 <template>
   <div @touchstart="onTouchStart" @touchend="onTouchEnd">
-    <div class="header-sticky">
-      <div class="toolbar">
-        <h2 class="page-title" style="margin:0">我的任务</h2>
-        <span class="count">{{ activeLabel }} {{ shown.length }} 单</span>
-        <el-button type="primary" size="small" @click="router.push('/worker/dispatch')">新增订单</el-button>
-        <el-button :icon="Refresh" circle @click="load" />
-      </div>
+    <PageHead title="我的任务" sticky>
+      <template #actions>
+        <span class="count qj-num">{{ activeLabel }} {{ shown.length }} 单</span>
+        <el-button type="primary" @click="router.push('/worker/dispatch')">新增订单</el-button>
+        <el-button :icon="Refresh" circle aria-label="刷新任务" @click="load" />
+      </template>
+    </PageHead>
 
-      <el-tabs v-model="active" class="status-tabs" @tab-change="onTab">
-        <el-tab-pane v-for="s in statuses" :key="s.value" :name="s.value"
-                     :label="`${s.label} ${counts[s.value]}`" />
-      </el-tabs>
-    </div>
+    <el-tabs v-model="active" class="status-tabs" @tab-change="onTab">
+      <el-tab-pane v-for="s in statuses" :key="s.value" :name="s.value"
+                   :label="`${s.label} ${counts[s.value]}`" />
+    </el-tabs>
 
     <Transition name="slide" mode="out-in">
       <div :key="active">
         <el-card v-for="t in shown" :key="t.id" shadow="never" class="task-card"
-             :class="{ rush: t.taskType === 'rush' }">
-      <div class="task-head">
-        <div class="left">
-          <el-tag size="small" :type="statusType(t.status) as any">{{ statusLabel(t.status) }}</el-tag>
-          <el-tag v-if="t.taskType === 'rush'" type="danger" size="small">🔴 赶 {{ fmt(t.rushShipTime) }} 出货</el-tag>
-          <el-tag v-else-if="t.taskType === 'scheduled'" type="warning" size="small">指定时间 {{ fmt(t.scheduledTime) }}</el-tag>
-        </div>
-        <div class="time">{{ timeTitle(t) }} {{ fmt(timeOf(t)) }}</div>
-      </div>
-      <div class="cust-line">
-        <span class="customer">{{ t.customerName }}</span>
-        <span class="task-no">{{ t.taskNo }}</span>
-      </div>
-      <div class="addr">
-        <div><b v-if="t.areaName">{{ t.areaName }}</b> {{ t.address }}</div>
-        <div>联系人：{{ t.contact }}　电话：{{ t.phone }}</div>
-        <div v-if="t.pickupNote" class="note">备注：{{ t.pickupNote }}</div>
-      </div>
-      <div class="actions">
-        <template v-if="t.status === 'pending' || t.status === 'in_progress'">
-          <el-button size="small" @click="copyAddr(t)">复制地址</el-button>
-          <el-button size="small" @click="copyFull(t)">复制取件信息</el-button>
-          <el-button size="small"><a :href="'tel:' + t.phone" style="color:inherit;text-decoration:none">拨打电话</a></el-button>
-          <el-button size="small" @click="navigate(t)">导航</el-button>
-        </template>
-        <el-button v-else size="small" @click="copyFull(t)">复制取件信息</el-button>
-        <el-button v-if="t.status === 'pending'" type="primary" size="large" class="main"
-                   @click="open(t)">开始取件</el-button>
-        <el-button v-else-if="t.status === 'in_progress'" type="primary" class="main"
-                   @click="open(t)">继续取件</el-button>
-        <el-button v-else class="main" @click="open(t)">查看详情</el-button>
-      </div>
-    </el-card>
-    <el-empty v-if="!shown.length" :description="emptyText" />
+                 :class="{ rush: t.taskType === 'rush' }">
+          <div class="task-head">
+            <div class="left">
+              <StatusBadge :status="t.status" />
+              <span v-if="t.taskType === 'rush'" class="qj-badge qj-badge--danger">赶 {{ fmt(t.rushShipTime) }} 出货</span>
+              <span v-else-if="t.taskType === 'scheduled'" class="qj-badge qj-badge--pending">指定时间 {{ fmt(t.scheduledTime) }}</span>
+            </div>
+            <div class="time qj-num">{{ timeTitle(t) }} {{ fmt(timeOf(t)) }}</div>
+          </div>
+          <div class="cust-line">
+            <span class="customer">{{ t.customerName }}</span>
+            <span class="task-no qj-num">{{ t.taskNo }}</span>
+          </div>
+          <div class="addr">
+            <div><b v-if="t.areaName">{{ t.areaName }}</b> {{ t.address }}</div>
+            <div>联系人：{{ t.contact }}　电话：{{ t.phone }}</div>
+            <div v-if="t.pickupNote" class="note">备注：{{ t.pickupNote }}</div>
+          </div>
+          <div class="actions">
+            <template v-if="t.status === 'pending' || t.status === 'in_progress'">
+              <el-button size="small" @click="copyAddr(t)">复制地址</el-button>
+              <el-button size="small" @click="copyFull(t)">复制取件信息</el-button>
+              <el-button size="small">
+                <a :href="'tel:' + t.phone" class="tel-link">拨打电话</a>
+              </el-button>
+              <el-button size="small" @click="navigate(t)">导航</el-button>
+            </template>
+            <el-button v-else size="small" @click="copyFull(t)">复制取件信息</el-button>
+            <el-button v-if="t.status === 'pending'" type="primary" class="main" @click="open(t)">开始取件</el-button>
+            <el-button v-else-if="t.status === 'in_progress'" type="primary" class="main" @click="open(t)">继续取件</el-button>
+            <el-button v-else class="main" @click="open(t)">查看详情</el-button>
+          </div>
+        </el-card>
+        <EmptyState v-if="!shown.length" :title="emptyText" description="切换到其他状态，或新建一条取件订单">
+          <el-button type="primary" @click="router.push('/worker/dispatch')">新增订单</el-button>
+        </EmptyState>
       </div>
     </Transition>
   </div>
@@ -62,6 +63,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { createRealtimeRefreshSubscription, isTaskRealtimeEvent } from '../services/realtime-events'
 
 const router = useRouter()
@@ -126,12 +130,6 @@ function timeOf(t: any) {
   if (t.status === 'cancelled') return t.updatedAt
   return t.dispatchAt
 }
-function statusLabel(s: string) {
-  return { pending: '待取', in_progress: '取件中', completed: '已完成', cancelled: '已取消' }[s] || s
-}
-function statusType(s: string) {
-  return { pending: 'warning', in_progress: 'primary', completed: 'success', cancelled: 'info' }[s] || 'info'
-}
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -178,17 +176,9 @@ onUnmounted(() => liveRefresh.dispose())
 </script>
 
 <style scoped>
-.header-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--qj-bg);
-  padding-top: 4px;
-  padding-bottom: 4px;
-}
 .slide-enter-active,
 .slide-leave-active {
-  transition: opacity 0.22s ease, transform 0.22s ease;
+  transition: opacity var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
 }
 .slide-enter-from {
   opacity: 0;
@@ -198,37 +188,32 @@ onUnmounted(() => liveRefresh.dispose())
   opacity: 0;
   transform: translateX(-28px);
 }
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
 .count {
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: 600;
   color: var(--qj-text-2);
+  margin-right: var(--sp-1);
 }
 .status-tabs {
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .status-tabs :deep(.el-tabs__header) {
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .status-tabs :deep(.el-tabs__active-bar) {
-  transition: transform 0.22s ease, width 0.22s ease;
+  transition: transform var(--dur-base) var(--ease), width var(--dur-base) var(--ease);
 }
 .task-card {
-  margin-bottom: 12px;
+  margin-bottom: var(--sp-3);
 }
 .task-card.rush {
-  border: 1px solid #f56c6c !important;
+  border-color: var(--qj-danger-text) !important;
 }
 .task-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 .left {
   display: flex;
@@ -240,8 +225,8 @@ onUnmounted(() => liveRefresh.dispose())
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 8px;
-  margin-top: 10px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
 }
 .customer {
   font-size: 17px;
@@ -251,30 +236,34 @@ onUnmounted(() => liveRefresh.dispose())
 }
 .task-no {
   color: var(--qj-muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
 }
 .time {
-  color: #999;
-  font-size: 13px;
+  color: var(--qj-muted);
+  font-size: var(--fs-sub);
   white-space: nowrap;
 }
 .addr {
-  margin: 8px 0 10px;
-  color: #555;
+  margin: var(--sp-2) 0 var(--sp-3);
+  color: var(--qj-text-2);
   line-height: 1.8;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .note {
-  color: #e6a23c;
+  color: var(--qj-warning-text);
+}
+.tel-link {
+  color: inherit;
+  text-decoration: none;
 }
 .actions {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   flex-wrap: wrap;
   align-items: center;
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
   border-top: 1px solid var(--qj-border);
 }
 .actions .el-button {
@@ -287,18 +276,14 @@ onUnmounted(() => liveRefresh.dispose())
   .task-head {
     align-items: flex-start;
   }
-  .time {
-    font-size: 12px;
-  }
   .actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: var(--sp-2);
   }
   .actions .el-button {
     width: 100%;
     min-height: 44px;
-    font-size: 14px;
   }
   .actions .main {
     grid-column: 1 / -1;

@@ -68,11 +68,11 @@ async function submit() {
 }
 .login-card {
   width: 480px;
-  background: #fff;
+  background: var(--qj-surface);
   border: 1px solid var(--qj-border);
-  border-radius: 14px;
+  border-radius: var(--r-overlay);
   padding: 48px 44px 36px;
-  box-shadow: 0 4px 20px rgba(31, 35, 41, 0.06);
+  box-shadow: var(--shadow-2);
 }
 .brand {
   text-align: center;
@@ -83,7 +83,7 @@ async function submit() {
   height: 68px;
   margin: 0 auto 18px;
   border-radius: 16px;
-  background: var(--el-color-primary);
+  background: var(--qj-primary-btn);
   color: #fff;
   display: flex;
   align-items: center;
@@ -98,13 +98,13 @@ async function submit() {
 }
 .brand p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-body);
   color: var(--qj-muted);
   letter-spacing: 1px;
 }
 .big-input :deep(.el-input__wrapper) {
   height: 48px;
-  border-radius: 8px;
+  border-radius: var(--r-control);
 }
 .big-input :deep(.el-input__inner) {
   font-size: 15px;
@@ -114,21 +114,21 @@ async function submit() {
   height: 48px;
   font-size: 16px;
   letter-spacing: 6px;
-  border-radius: 8px;
+  border-radius: var(--r-control);
   margin-top: 8px;
 }
 .hint {
   margin-top: 28px;
   padding-top: 18px;
   border-top: 1px solid var(--qj-border);
-  font-size: 13px;
+  font-size: var(--fs-sub);
   color: var(--qj-muted);
 }
 .footer {
   position: absolute;
   bottom: 24px;
   color: var(--qj-muted);
-  font-size: 13px;
+  font-size: var(--fs-sub);
 }
 
 @media (max-width: 560px) {

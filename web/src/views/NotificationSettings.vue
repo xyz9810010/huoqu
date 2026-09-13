@@ -1,15 +1,13 @@
 <template>
   <div class="settings-page">
-    <div class="page-head">
-      <div>
-        <h2 class="page-title">消息设置</h2>
-        <p class="page-description">管理当前浏览器、接收方式和不同业务消息的提醒偏好。</p>
-      </div>
-      <el-button @click="router.push('/notifications')">
-        <el-icon><ArrowLeft /></el-icon>
-        返回通知中心
-      </el-button>
-    </div>
+    <PageHead title="消息设置" description="管理当前浏览器、接收方式和不同业务消息的提醒偏好">
+      <template #actions>
+        <el-button @click="router.push('/notifications')">
+          <el-icon><ArrowLeft /></el-icon>
+          返回通知中心
+        </el-button>
+      </template>
+    </PageHead>
 
     <div class="settings-grid">
       <el-card class="browser-card">
@@ -79,11 +77,16 @@
           <template #default="scope">{{ scope.row.channel === 'web_push' ? '浏览器通知' : scope.row.providerCode }}</template>
         </el-table-column>
         <el-table-column label="状态" width="120">
-          <template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'info'" effect="plain">
-            {{ scope.row.status === 'active' ? '正常' : '已失效' }}
-          </el-tag></template>
+          <template #default="scope">
+            <StatusBadge :tone="scope.row.status === 'active' ? 'done' : 'cancel'"
+                         :label="scope.row.status === 'active' ? '正常' : '已失效'" />
+          </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="登记时间" min-width="180" />
+        <el-table-column prop="createdAt" label="登记时间" min-width="180" class-name="cell-nowrap">
+          <template #default="{ row }">
+            <span class="qj-num qj-nowrap">{{ formatDeviceTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="120">
           <template #default="{ row }">
             <el-button size="small" type="primary" plain :disabled="row.status !== 'active'"
@@ -103,9 +106,8 @@
                 <span>{{ device.platform || device.providerCode }}</span>
               </div>
             </div>
-            <el-tag :type="device.status === 'active' ? 'success' : 'info'" effect="plain" size="small">
-              {{ device.status === 'active' ? '正常' : '已失效' }}
-            </el-tag>
+            <StatusBadge :tone="device.status === 'active' ? 'done' : 'cancel'"
+                         :label="device.status === 'active' ? '正常' : '已失效'" />
           </div>
           <div class="mobile-field"><span class="mobile-field__label">通道</span><span class="mobile-field__value">{{ device.channel === 'web_push' ? '浏览器通知' : device.providerCode }}</span></div>
           <div class="mobile-field"><span class="mobile-field__label">登记时间</span><span class="mobile-field__value">{{ formatDeviceTime(device.createdAt) }}</span></div>
@@ -114,7 +116,8 @@
           </div>
         </article>
       </div>
-      <el-empty v-if="!devices.length" description="暂无已登记的推送设备" :image-size="72" />
+      <EmptyState v-if="!devices.length" title="暂无已登记的推送设备"
+                  description="开启浏览器系统通知后，当前设备会自动登记在这里" />
     </el-card>
   </div>
 </template>
@@ -123,7 +126,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ArrowLeft, Monitor, Setting } from '@element-plus/icons-vue'
 import http from '../api'
+import PageHead from '../components/PageHead.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { currentBrowserSubscriptionId, disableBrowserPush, enableBrowserPush,
   getBrowserPushState } from '../services/browser-push'
 import { notificationSound } from '../services/notification-sound'
@@ -277,37 +284,41 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-description { margin: 6px 0 0; color: var(--qj-muted); font-size: 13px; }
-.settings-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; margin-bottom: 16px; }
-.card-heading { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; }
-.card-heading.compact { margin-bottom: 10px; }
-.card-heading h3 { margin: 0 0 5px; font-size: 16px; }
-.card-heading p { margin: 0; color: var(--qj-muted); font-size: 13px; }
-.heading-icon { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; color: var(--el-color-primary); background: var(--tint-blue); font-size: 20px; flex: none; }
-.heading-icon.green { color: var(--el-color-success); background: var(--tint-green); }
-.status-row { display: flex; align-items: flex-start; gap: 10px; padding: 14px; background: #fafbfc; border: 1px solid var(--qj-border); border-radius: 8px; }
-.status-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; background: var(--qj-muted); }
-.status-dot.granted { background: var(--el-color-success); box-shadow: 0 0 0 4px #e8f8e8; }
-.status-dot.denied, .status-dot.insecure { background: var(--el-color-warning); }
-.status-help { color: var(--qj-muted); font-size: 12px; margin-top: 4px; line-height: 1.5; }
-.actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-.volume-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--qj-border); }
-.volume-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.volume-head span { font-size: 13px; color: var(--qj-text-2); }
-.volume-head b { font-size: 13px; color: var(--el-color-primary); }
-.volume-control { display: flex; align-items: center; gap: 12px; }
+.settings-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--sp-4); margin-bottom: var(--sp-4); align-items: start; }
+.card-heading { display: flex; gap: var(--sp-3); align-items: center; margin-bottom: var(--sp-5); }
+.card-heading.compact { margin-bottom: var(--sp-2); }
+.card-heading h3 { margin: 0 0 5px; font-size: var(--fs-card); font-weight: 600; color: var(--qj-text); }
+.card-heading p { margin: 0; color: var(--qj-muted); font-size: var(--fs-sub); }
+.heading-icon { width: 42px; height: 42px; border-radius: var(--r-card); display: grid; place-items: center; color: var(--qj-primary-text); background: var(--tint-blue); font-size: 20px; flex: none; }
+.heading-icon.green { color: var(--qj-success-text); background: var(--tint-green); }
+.status-row { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3); background: var(--qj-surface-subtle); border: 1px solid var(--qj-border); border-radius: var(--r-control); }
+.status-row strong { color: var(--qj-text); }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; background: var(--qj-muted); flex: none; }
+.status-dot.granted { background: var(--qj-success-text); box-shadow: 0 0 0 4px var(--qj-success-bg); }
+.status-dot.denied, .status-dot.insecure { background: var(--qj-warning-text); }
+.status-help { color: var(--qj-muted); font-size: var(--fs-meta); margin-top: var(--sp-1); line-height: 1.5; }
+.actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); flex-wrap: wrap; }
+.volume-row { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--qj-border); }
+.volume-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-1); }
+.volume-head span { font-size: var(--fs-sub); color: var(--qj-text-2); }
+.volume-head b { font-size: var(--fs-sub); color: var(--qj-primary-text); }
+.volume-control { display: flex; align-items: center; gap: var(--sp-3); }
 .volume-control .el-slider { flex: 1; }
-.stale-help { width: 100%; margin: 0 0 2px; color: var(--qj-muted); font-size: 12px; line-height: 1.5; }
+.stale-help { width: 100%; margin: 0 0 2px; color: var(--qj-muted); font-size: var(--fs-meta); line-height: 1.5; }
 .preference-list { display: grid; }
-.preference-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid var(--qj-border); }
+.preference-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); padding: 13px 0; border-bottom: 1px solid var(--qj-border); }
 .preference-row:last-child { border-bottom: 0; }
 .preference-row strong, .preference-row span { display: block; }
-.preference-row strong { font-size: 14px; margin-bottom: 4px; }
-.preference-row span { color: var(--qj-muted); font-size: 12px; }
+.preference-row strong { font-size: var(--fs-body); margin-bottom: var(--sp-1); color: var(--qj-text); }
+.preference-row span { color: var(--qj-muted); font-size: var(--fs-meta); }
 .devices-head { display: flex; align-items: center; justify-content: space-between; }
-.device-name { display: flex; align-items: center; gap: 10px; }
-.device-name .el-icon { color: var(--el-color-primary); font-size: 18px; }
+.device-name { display: flex; align-items: center; gap: var(--sp-2); }
+.device-name .el-icon { color: var(--qj-primary-text); font-size: 18px; }
 .device-name strong, .device-name span { display: block; }
-.device-name span { color: var(--qj-muted); font-size: 12px; margin-top: 2px; }
+.device-name strong { color: var(--qj-text); }
+.device-name span { color: var(--qj-muted); font-size: var(--fs-meta); margin-top: 2px; }
 @media (max-width: 900px) { .settings-grid { grid-template-columns: 1fr; } }
+@media (max-width: 768px) {
+  .actions .el-button { flex: 1 1 100%; margin-left: 0; min-height: 44px; }
+}
 </style>

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Huoqu · 设计稿预览 v1</title>
+<style>
+  :root {
+    --qj-text: #1f2329;
+    --qj-text-2: #4e5969;
+    --qj-muted: #6b7280;
+    --qj-bg: #f0f2f5;
+    --qj-side: #f7f8fa;
+    --qj-surface: #ffffff;
+    --qj-border: #e5e8ee;
+    --qj-border-strong: #c9ced6;
+    --qj-primary: #3370ff;
+    --qj-primary-text: #1d4ed8;
+    --qj-primary-bg: #eef3ff;
+    --qj-primary-hover: #2860e8;
+    --qj-success-text: #15803d;
+    --qj-success-bg: #ecfaf0;
+    --qj-warning-text: #b45309;
+    --qj-warning-bg: #fff7ec;
+    --qj-danger-text: #b91c1c;
+    --qj-danger-bg: #feefef;
+    --qj-focus: 0 0 0 3px rgba(51, 112, 255, .35);
+    --shadow-1: 0 1px 2px rgba(31, 35, 41, .04);
+    --shadow-2: 0 2px 8px rgba(31, 35, 41, .06);
+    --shadow-3: 0 8px 24px rgba(31, 35, 41, .10);
+    --fs-title: 18px; --fs-card: 15px; --fs-body: 14px; --fs-sub: 13px; --fs-meta: 12px; --fs-metric: 28px;
+    --dur-fast: 150ms;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--qj-bg); color: var(--qj-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    font-size: var(--fs-body); -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 24px 64px; }
+  .banner {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+    padding: 12px 16px; border-radius: 10px; background: var(--qj-primary-bg);
+    border: 1px solid #d6e2ff; color: var(--qj-primary-text); font-size: var(--fs-sub);
+  }
+  h2.section { font-size: var(--fs-title); margin: 32px 0 12px; font-weight: 600; }
+  h2.section:first-of-type { margin-top: 0; }
+  .note { color: var(--qj-muted); font-size: var(--fs-meta); margin: -6px 0 12px; }
+
+  /* ---- 页头 ---- */
+  .page-head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--qj-border);
+  }
+  .page-head__title { font-size: var(--fs-title); font-weight: 600; margin: 0; }
+  .page-head__sub { font-size: var(--fs-meta); color: var(--qj-muted); margin: 4px 0 0; }
+  .page-head__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* ---- 按钮 ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--qj-border-strong);
+    background: var(--qj-surface); color: var(--qj-text); font-size: var(--fs-body); font-weight: 500;
+    cursor: pointer; transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+    font-family: inherit; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--qj-primary); color: var(--qj-primary-text); }
+  .btn:focus-visible { outline: none; box-shadow: var(--qj-focus); }
+  .btn--primary { background: var(--qj-primary); border-color: var(--qj-primary); color: #fff; }
+  .btn--primary:hover { background: var(--qj-primary-hover); border-color: var(--qj-primary-hover); color: #fff; }
+  .btn--plain-danger { background: var(--qj-surface); border-color: #f3c9c9; color: var(--qj-danger-text); }
+  .btn--plain-danger:hover { background: var(--qj-danger-bg); border-color: var(--qj-danger-text); color: var(--qj-danger-text); }
+  .btn--sm { height: 30px; padding: 0 10px; font-size: var(--fs-sub); }
+
+  /* ---- 胶囊筛选 ---- */
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px;
+    border-radius: 999px; border: 1px solid var(--qj-border-strong); background: var(--qj-surface);
+    color: var(--qj-text-2); font-size: var(--fs-sub); cursor: pointer; font-family: inherit;
+    transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+  }
+  .pill:hover { border-color: var(--qj-primary); color: var(--qj-primary-text); }
+  .pill:focus-visible { outline: none; box-shadow: var(--qj-focus); }
+  .pill.is-active { background: var(--qj-primary-bg); border-color: var(--qj-primary); color: var(--qj-primary-text); font-weight: 600; }
+  .pill b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pill__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--qj-primary); }
+  .pill__dot--warn { background: #d97706; }
+  .pill__dot--ok { background: #16a34a; }
+  .pill__dot--mute { background: #94a3b8; }
+
+  /* ---- 指标卡 ---- */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 16px; }
+  .stat {
+    display: flex; align-items: center; gap: 14px; background: var(--qj-surface);
+    border: 1px solid var(--qj-border); border-radius: 10px; padding: 18px 20px;
+    box-shadow: var(--shadow-1); transition: box-shadow var(--dur-fast), border-color var(--dur-fast);
+    min-width: 0;
+  }
+  .stat:hover { box-shadow: var(--shadow-2); border-color: var(--qj-border-strong); }
+  .stat__icon { width: 40px; height: 40px; border-radius: 10px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .stat__body { min-width: 0; }
+  .stat__label { font-size: var(--fs-sub); color: var(--qj-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat__value { font-size: var(--fs-metric); font-weight: 700; line-height: 1.2; color: var(--qj-text); font-variant-numeric: tabular-nums; }
+  .stat__value--zero { color: var(--qj-muted); font-weight: 600; }
+  .stat__unit { font-size: var(--fs-sub); font-weight: 500; color: var(--qj-text-2); margin-left: 2px; }
+  .stat__sub { font-size: var(--fs-meta); color: var(--qj-muted); }
+
+  /* ---- 卡片 ---- */
+  .card { background: var(--qj-surface); border: 1px solid var(--qj-border); border-radius: 10px; box-shadow: var(--shadow-1); overflow: hidden; }
+  .card + .card { margin-top: 16px; }
+  .card__head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--qj-border);
+  }
+  .card__title { display: flex; align-items: center; gap: 8px; font-size: var(--fs-card); font-weight: 600; }
+  .card__title svg { color: var(--qj-primary-text); }
+  .card__body { padding: 18px 20px; }
+
+  /* ---- 表格 ---- */
+  table.data { width: 100%; border-collapse: collapse; }
+  table.data th {
+    text-align: left; font-size: var(--fs-sub); font-weight: 600; color: var(--qj-text-2);
+    background: #fafbfc; padding: 10px 16px; border-bottom: 1px solid var(--qj-border); white-space: nowrap;
+  }
+  table.data td {
+    padding: 0 16px; height: 44px; font-size: var(--fs-body); color: var(--qj-text);
+    border-bottom: 1px solid #f0f1f3; vertical-align: middle;
+  }
+  table.data tr:last-child td { border-bottom: 0; }
+  table.data tbody tr { transition: background var(--dur-fast); cursor: pointer; }
+  table.data tbody tr:hover td { background: #f7f8fa; }
+  table.data tbody tr.row--open td { background: #fffdf3; }
+  table.data tbody tr.row--open:hover td { background: #fff8e6; }
+  table.data tbody tr.row--done td { background: #f8fdf5; }
+  table.data tbody tr.row--cancelled td { background: #fafafa; color: var(--qj-muted); }
+  .nowrap { white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-variant-numeric: tabular-nums; letter-spacing: .2px; }
+  .cell-strong { font-weight: 600; }
+  .cell-sub { font-size: var(--fs-meta); color: var(--qj-muted); }
+
+  /* ---- 徽标 ---- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px;
+    border-radius: 6px; font-size: var(--fs-badge); font-weight: 500; white-space: nowrap;
+  }
+  .badge__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .badge--pending { background: var(--qj-warning-bg); color: var(--qj-warning-text); }
+  .badge--progress { background: var(--qj-primary-bg); color: var(--qj-primary-text); }
+  .badge--done { background: var(--qj-success-bg); color: var(--qj-success-text); }
+  .badge--cancel { background: #f2f3f5; color: var(--qj-text-2); }
+  .badge--rush { background: var(--qj-danger-bg); color: var(--qj-danger-text); }
+  .badge--plain { background: #f2f3f5; color: var(--qj-text-2); }
+
+  /* ---- 信息网格 ---- */
+  .kv { display: grid; grid-template-columns: 88px 1fr 88px 1fr; gap: 12px 16px; }
+  .kv--2 { grid-template-columns: 88px 1fr; }
+  .kv__k { color: var(--qj-muted); font-size: var(--fs-sub); }
+  .kv__v { color: var(--qj-text); font-size: var(--fs-body); overflow-wrap: anywhere; }
+
+  /* ---- 空状态 / 骨架 ---- */
+  .empty { text-align: center; padding: 32px 16px; }
+  .empty__title { font-size: var(--fs-body); color: var(--qj-text-2); margin: 12px 0 4px; font-weight: 500; }
+  .empty__desc { font-size: var(--fs-meta); color: var(--qj-muted); margin: 0 0 16px; }
+  .skel { height: 14px; border-radius: 6px; background: linear-gradient(90deg, #eef0f3 25%, #f6f7f9 37%, #eef0f3 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+  @keyframes shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
+  @media (prefers-reduced-motion: reduce) { .skel { animation: none } * { transition: none !important } }
+
+  /* ---- 详情页 ---- */
+  .detail-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .detail-head__no { font-size: var(--fs-title); font-weight: 600; }
+  .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .swatch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .swatch { border: 1px solid var(--qj-border); border-radius: 8px; padding: 10px 12px; background: var(--qj-surface); }
+  .swatch__chip { height: 28px; border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,.05); }
+  .swatch__name { font-size: var(--fs-sub); font-weight: 600; }
+  .swatch__val { font-size: var(--fs-meta); color: var(--qj-muted); font-variant-numeric: tabular-nums; }
+  .mobile-frame { width: 390px; max-width: 100%; border: 1px solid var(--qj-border-strong); border-radius: 14px; overflow: hidden; background: var(--qj-bg); box-shadow: var(--shadow-3); }
+  .mobile-frame .inner { padding: 12px; }
+  .m-card { background: var(--qj-surface); border: 1px solid var(--qj-border); border-left: 3px solid #d97706; border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .m-card--done { border-left-color: #16a34a; }
+  .m-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .m-card__title { font-size: var(--fs-card); font-weight: 600; }
+  .m-field { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: var(--fs-sub); }
+  .m-field__k { color: var(--qj-muted); flex: none; }
+  .m-field__v { text-align: right; overflow-wrap: anywhere; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .row2 { grid-template-columns: 1fr; } .kv { grid-template-columns: 80px 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">
+    <strong>设计稿预览 v1</strong>
+    <span>这是「全面视觉+体验升级」的静态样张，用真实令牌渲染。确认后我按它改 `web/` 下的实际页面。</span>
+  </div>
+
+  <h2 class="section">1 · 页头（统一结构，替代各页各写的 toolbar）</h2>
+  <p class="note">标题/副标题/主操作位置固定；标题文案与侧栏菜单一致；桌面端吸顶。</p>
+  <div class="card"><div class="card__body">
+    <div class="page-head">
+      <div>
+        <h3 class="page-head__title">取件任务</h3>
+        <p class="page-head__sub">按时间与状态筛选，点击任意行进入任务详情</p>
+      </div>
+      <div class="page-head__actions">
+        <button class="btn">全部时间</button>
+        <button class="btn">类型</button>
+        <button class="btn btn--primary">＋ 新建取件</button>
+      </div>
+    </div>
+
+    <h2 class="section">2 · 状态胶囊与筛选（移动端 40px 高、可换行）</h2>
+    <div class="pills" style="margin-bottom:10px">
+      <button class="pill is-active">今天</button>
+      <button class="pill">本周</button>
+      <button class="pill">本月</button>
+      <button class="pill">全部</button>
+    </div>
+    <div class="pills">
+      <button class="pill is-active"><span class="pill__dot"></span>全部 <b>5</b></button>
+      <button class="pill"><span class="pill__dot pill__dot--warn"></span>待办 <b>5</b></button>
+      <button class="pill"><span class="pill__dot pill__dot--ok"></span>已完成 <b>0</b></button>
+      <button class="pill"><span class="pill__dot pill__dot--mute"></span>已取消 <b>0</b></button>
+    </div>
+  </div></div>
+
+  <h2 class="section">3 · 指标卡（标签不折行、卡片等高、数值 28px）</h2>
+  <p class="note">改前：「最终出货重量 (kg)」被压成两行、卡片高度不一。改后：标签单行省略，单位与数值同行，0 值弱化。</p>
+  <div class="stat-grid">
+    <div class="stat">
+      <div class="stat__icon" style="background:#eef3ff;color:#1d4ed8">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4"/></svg>
+      </div>
+      <div class="stat__body">
+        <div class="stat__label">发货客户数</div>
+        <div class="stat__value">128</div>
+        <div class="stat__sub">原系统出货口径</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon" style="background:#ecfaf0;color:#15803d">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M5 8h9a3 3 0 0 1 0 6H5"/></svg>
+      </div>
+      <div class="stat__body">
+        <div class="stat__label">最终出货重量</div>
+        <div class="stat__value">30 860<span class="stat__unit">kg</span></div>
+        <div class="stat__sub">唯一重量口径</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon" style="background:#eef9fd;color:#0369a1">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+      </div>
+      <div class="stat__body">
+        <div class="stat__label">取件客户数</div>
+        <div class="stat__value">96</div>
+        <div class="stat__sub">实际完成去重</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon" style="background:#fff7ec;color:#b45309">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h10v9H3zM13 10h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="16.5" cy="18" r="1.6"/></svg>
+      </div>
+      <div class="stat__body">
+        <div class="stat__label">取件次数</div>
+        <div class="stat__value">167</div>
+        <div class="stat__sub">已完成任务</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon" style="background:#f3f0ff;color:#6d28d9">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8l9-5 9 5-9 5-9-5zM3 8v8l9 5 9-5V8"/></svg>
+      </div>
+      <div class="stat__body">
+        <div class="stat__label">取件件数</div>
+        <div class="stat__value">2 431</div>
+        <div class="stat__sub">现场实录入</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon" style="background:#feefef;color:#b91c1c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      </div>
+      <div class="stat__body">
+        <div class="stat__label">待取任务</div>
+        <div class="stat__value stat__value--zero">0</div>
+        <div class="stat__sub">待取 / 取件中</div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section">4 · 表格卡（表头对比度修正、关键列不折行、行状态着色）</h2>
+  <p class="note">改前：表头 3.08:1 不达标；「任务号」折成两行；表格裸在灰底上无容器。改后：白卡容器 + 表头 6.85:1 + 任务号/时间戳 nowrap。</p>
+  <div class="card">
+    <div class="card__head">
+      <div class="card__title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        今天的取件任务
+      </div>
+      <span class="cell-sub">共 5 条</span>
+    </div>
+    <table class="data">
+      <thead>
+        <tr>
+          <th style="width:170px">任务号</th>
+          <th style="width:110px">状态</th>
+          <th style="width:190px">类型</th>
+          <th>客户</th>
+          <th style="width:100px">取件员</th>
+          <th style="width:150px">派单时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row--open">
+          <td class="nowrap mono cell-strong">QJ20260913-6DADE8</td>
+          <td><span class="badge badge--pending"><span class="badge__dot"></span>待取</span></td>
+          <td><span class="badge badge--rush">赶 20:37 出货</span></td>
+          <td>义乌小商品城·晨光文具</td>
+          <td>张伟</td>
+          <td class="nowrap num">2026-09-13 22:37</td>
+        </tr>
+        <tr class="row--open">
+          <td class="nowrap mono cell-strong">QJ20260913-F4F702</td>
+          <td><span class="badge badge--progress"><span class="badge__dot"></span>取件中</span></td>
+          <td><span class="badge badge--plain">普通</span></td>
+          <td>宁波远洋货代有限公司</td>
+          <td>刘洋</td>
+          <td class="nowrap num">2026-09-13 22:37</td>
+        </tr>
+        <tr class="row--done">
+          <td class="nowrap mono cell-strong">QJ20260913-02366D</td>
+          <td><span class="badge badge--done"><span class="badge__dot"></span>已完成</span></td>
+          <td><span class="badge badge--plain">指定时间</span></td>
+          <td>深圳市宏达电子科技</td>
+          <td>王芳</td>
+          <td class="nowrap num">2026-09-12 15:04</td>
+        </tr>
+        <tr class="row--cancelled">
+          <td class="nowrap mono cell-strong">QJ20260913-AA9DED</td>
+          <td><span class="badge badge--cancel"><span class="badge__dot"></span>已取消</span></td>
+          <td><span class="badge badge--plain">普通</span></td>
+          <td>广州轻纺城布艺商行</td>
+          <td>李强</td>
+          <td class="nowrap num">2026-09-12 09:21</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section">5 · 详情页（状态徽标回到标题行、危险操作不再拉满整行）</h2>
+  <p class="note">改前：状态徽标被顶到卡片外贴边裁切；「取消任务」「再次取件」占满整行。</p>
+  <div class="card">
+    <div class="card__body">
+      <div class="detail-head">
+        <button class="btn btn--sm">← 返回</button>
+        <span class="detail-head__no mono">QJ20260913-6DADE8</span>
+        <span class="badge badge--pending"><span class="badge__dot"></span>待取</span>
+        <span class="badge badge--rush">赶 20:37 出货</span>
+      </div>
+      <div class="kv" style="margin-bottom:18px">
+        <div class="kv__k">客户</div><div class="kv__v cell-strong">义乌小商品城·晨光文具</div>
+        <div class="kv__k">联系人</div><div class="kv__v">陈美玲 · 13905791234</div>
+        <div class="kv__k">取件地址</div><div class="kv__v">义乌市国际商贸城一区 12 街 3 号</div>
+        <div class="kv__k">取件员</div><div class="kv__v">张伟</div>
+        <div class="kv__k">派单时间</div><div class="kv__v num">2026-09-13 22:37</div>
+        <div class="kv__k">件数 / 重量</div><div class="kv__v num">42 件 · 168.5 kg</div>
+      </div>
+      <div class="detail-actions">
+        <button class="btn">改派取件员</button>
+        <button class="btn">修改时间 / 类型</button>
+        <button class="btn btn--primary">再次取件</button>
+        <button class="btn btn--plain-danger">取消任务</button>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section">6 · 空状态与加载态</h2>
+  <div class="row2">
+    <div class="card"><div class="card__body">
+      <div class="empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c9ced6" stroke-width="1.5"><path d="M3 8l9-5 9 5v9l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v9"/></svg>
+        <div class="empty__title">还没有取件任务</div>
+        <p class="empty__desc">创建第一条任务后，这里会显示派单与取件进度</p>
+        <button class="btn btn--primary">＋ 新建取件</button>
+      </div>
+    </div></div>
+    <div class="card"><div class="card__body">
+      <div class="skel" style="width:38%;margin-bottom:14px"></div>
+      <div class="skel" style="width:100%;margin-bottom:10px"></div>
+      <div class="skel" style="width:92%;margin-bottom:10px"></div>
+      <div class="skel" style="width:96%;margin-bottom:10px"></div>
+      <div class="skel" style="width:60%"></div>
+      <p class="note" style="margin:14px 0 0">骨架屏 + <code>aria-busy</code>；≥300ms 才出现，刷新时保留旧数据不清空。</p>
+    </div></div>
+  </div>
+
+  <h2 class="section">7 · 移动端（390px）</h2>
+  <p class="note">胶囊 40px 高且可换行；卡片左侧 3px 状态条；字段两端对齐；主操作通栏 44px。</p>
+  <div class="mobile-frame"><div class="inner">
+    <div class="pills" style="margin-bottom:12px">
+      <button class="pill is-active">今天</button>
+      <button class="pill">本周</button>
+      <button class="pill">本月</button>
+    </div>
+    <div class="m-card">
+      <div class="m-card__head">
+        <div>
+          <div class="m-card__title">义乌小商品城·晨光文具</div>
+          <div class="cell-sub mono">QJ20260913-6DADE8 · 22:37</div>
+        </div>
+        <span class="badge badge--pending"><span class="badge__dot"></span>待取</span>
+      </div>
+      <div style="margin-bottom:8px"><span class="badge badge--rush">赶 20:37 出货</span></div>
+      <div class="m-field"><span class="m-field__k">取件地址</span><span class="m-field__v">义乌市国际商贸城一区 12 街 3 号</span></div>
+      <div class="m-field"><span class="m-field__k">取件员</span><span class="m-field__v">张伟</span></div>
+    </div>
+    <div class="m-card m-card--done">
+      <div class="m-card__head">
+        <div>
+          <div class="m-card__title">宁波远洋货代有限公司</div>
+          <div class="cell-sub mono">QJ20260913-F4F702 · 22:37</div>
+        </div>
+        <span class="badge badge--done"><span class="badge__dot"></span>已完成</span>
+      </div>
+      <div class="m-field"><span class="m-field__k">取件员</span><span class="m-field__v">刘洋</span></div>
+    </div>
+    <button class="btn btn--primary" style="width:100%;height:44px">＋ 新建取件</button>
+  </div></div>
+
+  <h2 class="section">8 · 令牌速查</h2>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="swatch__chip" style="background:#1f2329"></div><div class="swatch__name">--qj-text</div><div class="swatch__val">#1f2329 · 15.78:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#4e5969"></div><div class="swatch__name">--qj-text-2</div><div class="swatch__val">#4e5969 · 7.10:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#6b7280"></div><div class="swatch__name">--qj-muted</div><div class="swatch__val">#6b7280 · 4.83:1（原 2.91 ✗）</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#3370ff"></div><div class="swatch__name">--qj-primary</div><div class="swatch__val">#3370ff · 按钮底色</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#1d4ed8"></div><div class="swatch__name">--qj-primary-text</div><div class="swatch__val">#1d4ed8 · 蓝色文字</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#b45309"></div><div class="swatch__name">--qj-warning-text</div><div class="swatch__val">#b45309 · 4.73:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#15803d"></div><div class="swatch__name">--qj-success-text</div><div class="swatch__val">#15803d · 4.66:1</div></div>
+    <div class="swatch"><div class="swatch__chip" style="background:#b91c1c"></div><div class="swatch__name">--qj-danger-text</div><div class="swatch__val">#b91c1c · 4.6:1</div></div>
+  </div>
+</div>
+</body>
+</html>

@@ -887,6 +887,11 @@ body {
     min-height: 36px;
     padding: 0 12px;
   }
+  /* 非主按钮也统一到 36px：否则同一行里主按钮 36、次按钮 32，
+     页头高度会随"该页是否用主按钮"在 49 / 45 之间跳动。 */
+  .page-head--nowrap .page-head__actions > .el-button {
+    min-height: 36px;
+  }
   /* 手机端触控目标下限：分段按钮与数字步进器默认 30px，低于本项目 34px 的移动端标准 */
   .el-radio-group .el-radio-button__inner {
     min-height: 34px;

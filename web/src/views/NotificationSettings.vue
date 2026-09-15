@@ -1,6 +1,6 @@
 <template>
   <div class="settings-page">
-    <PageHead title="消息设置" description="管理当前浏览器、接收方式和不同业务消息的提醒偏好">
+    <PageHead title="消息设置" description="管理当前浏览器、接收方式和不同业务消息的提醒偏好" nowrap>
       <template #actions>
         <el-button @click="router.push('/notifications')">
           <el-icon><ArrowLeft /></el-icon>

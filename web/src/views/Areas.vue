@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHead title="区域管理" description="维护区域、默认取件员与备用取件员">
+    <PageHead title="区域管理" description="维护区域、默认取件员与备用取件员" nowrap>
       <template #actions>
         <el-button type="primary" @click="openCreate">
           <el-icon><Plus /></el-icon>新增区域

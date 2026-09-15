@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHead title="员工管理" description="开通账号、分配角色，并设置客服 / 取件员的可登录时段">
+    <PageHead title="员工管理" description="开通账号、分配角色，并设置客服 / 取件员的可登录时段" nowrap>
       <template #actions>
         <el-button type="primary" @click="openCreate">
           <el-icon><Plus /></el-icon>新增员工

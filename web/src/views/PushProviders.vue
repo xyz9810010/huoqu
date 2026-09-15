@@ -1,6 +1,6 @@
 <template>
   <div class="providers-page">
-    <PageHead title="消息推送" description="集中配置浏览器与系统级推送通道，配置通过测试后才能启用">
+    <PageHead title="消息推送" description="集中配置浏览器与系统级推送通道，配置通过测试后才能启用" nowrap>
       <template #actions>
         <el-button :loading="loading" @click="load"><el-icon><Refresh /></el-icon>刷新状态</el-button>
       </template>

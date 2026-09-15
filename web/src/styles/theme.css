@@ -296,12 +296,18 @@ body {
   --el-font-size-medium: 1rem !important;          /* 16px */
   --el-font-size-large: 1.125rem !important;       /* 18px */
 }
-/* 少数组件自带字号变量（不继承上面这些），单独对齐为 rem，保持原设计值 */
+/* 少数组件把字号变量定义在"组件自身"的类上（不是 :root），
+ * 而 EP 的按需样式在运行时注入、文档顺序晚于本文件，
+ * 同特异度下会覆盖我这里的声明 —— 因此这几个必须用 !important 才生效。
+ * 取值均为 EP 原本的 px 值换算成 rem，默认字号下渲染不变。 */
 .el-tag {
-  --el-tag-font-size: 0.75rem;   /* 12px */
+  --el-tag-font-size: 0.75rem !important; /* 12px */
 }
-.el-badge__content {
-  --el-badge-font-size: 0.75rem; /* 12px：角标数字（如通知未读数） */
+.el-badge {
+  --el-badge-font-size: 0.75rem !important; /* 12px：角标数字（通知未读数） */
+}
+.el-pagination {
+  --el-pagination-font-size: 0.875rem !important; /* 14px：分页页码 */
 }
 /* 下拉占位符在 EP 里未走 --el-font-size-* 变量，是独立写死的 14px，需单独对齐 */
 .el-select__placeholder,

@@ -120,7 +120,7 @@ async function submit() {
   box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 10px 30px rgba(8, 145, 178, 0.3);
 }
 .brand h1 {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 600;
   margin: 0 0 8px;
   color: var(--qj-text);
@@ -139,13 +139,15 @@ async function submit() {
   transition: box-shadow var(--dur-fast) var(--ease);
 }
 .big-input :deep(.el-input__inner) {
-  font-size: 15px;
+  /* 登录框故意比常规输入框大一号；主题里对 .el-input__inner 有 !important 的
+     rem 覆盖，这里必须同样 !important 才能保住 15px 的设计意图。 */
+  font-size: 0.9375rem !important;
 }
 .login-btn {
   width: 100%;
   height: 48px;
   min-height: 44px;
-  font-size: 16px;
+  font-size: 1rem;
   letter-spacing: 6px;
   border-radius: var(--r-control);
   margin-top: 8px;

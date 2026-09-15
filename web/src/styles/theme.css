@@ -98,13 +98,16 @@
   --qj-row-hover: #f5f8fc;
 
   /* ---------- 字号 ---------- */
-  --fs-title: 18px;
-  --fs-card: 15px;
-  --fs-body: 14px;
-  --fs-sub: 13px;
-  --fs-meta: 12px;
-  --fs-badge: 12px;
-  --fs-metric: 28px;
+  /* 字号一律用 rem：px 会忽略用户在浏览器/系统里设置的基准字号，
+     对低视力用户等于"放大无效"。rem 以根字号为基准，用户改设置即可整体缩放。
+     换算基准 1rem = 16px。 */
+  --fs-title: 1.125rem;   /* 18px */
+  --fs-card: 0.9375rem;   /* 15px */
+  --fs-body: 0.875rem;    /* 14px */
+  --fs-sub: 0.8125rem;    /* 13px */
+  --fs-meta: 0.75rem;     /* 12px */
+  --fs-badge: 0.75rem;    /* 12px */
+  --fs-metric: 1.75rem;   /* 28px */
 
   /* ---------- 间距（4px 基准） ---------- */
   --sp-1: 4px;
@@ -273,6 +276,37 @@ body {
 .el-button--small {
   min-height: 32px;
   padding: 0 12px;
+}
+
+/* ===== Element Plus 字号跟随用户设置 =====
+ * EP 的字号通过 --el-font-size-* 变量下发（base 14 / small 13 / extra-small 12 /
+ * medium 16 / large 18）。把这些变量换成 rem，所有引用它们的组件都会跟随用户
+ * 字号设置缩放，且各自的设计比例保持不变。
+ *
+ * 为什么不是"逐个组件强制 14px"：那样会把组件间的差异一并抹平 ——
+ * el-tag 本应 12px、el-dialog__title 本应 18px，强推 14px 就是视觉回归
+ * （这两种回归在本轮改造中确实出现过，已由 A/B 对比发现并修正）。
+ *
+ * 需 !important：EP 按需样式在运行时注入，文档顺序晚于本文件。
+ */
+:root {
+  --el-font-size-base: 0.875rem !important;        /* 14px */
+  --el-font-size-small: 0.8125rem !important;      /* 13px */
+  --el-font-size-extra-small: 0.75rem !important;  /* 12px */
+  --el-font-size-medium: 1rem !important;          /* 16px */
+  --el-font-size-large: 1.125rem !important;       /* 18px */
+}
+/* 少数组件自带字号变量（不继承上面这些），单独对齐为 rem，保持原设计值 */
+.el-tag {
+  --el-tag-font-size: 0.75rem;   /* 12px */
+}
+.el-badge__content {
+  --el-badge-font-size: 0.75rem; /* 12px：角标数字（如通知未读数） */
+}
+/* 下拉占位符在 EP 里未走 --el-font-size-* 变量，是独立写死的 14px，需单独对齐 */
+.el-select__placeholder,
+.el-select__selected-item {
+  font-size: 0.875rem !important; /* 14px，与 --el-font-size-base 同值 */
 }
 
 /* 主按钮 */
@@ -675,7 +709,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 1.25rem;      /* 20px */
   flex-shrink: 0;
 }
 .stat-body {
@@ -796,7 +830,7 @@ body {
 
 @media (max-width: 768px) {
   :root {
-    --fs-title: 17px;
+    --fs-title: 1.0625rem;  /* 17px */
   }
 
   /* 防止 iOS Safari 聚焦输入框时自动放大页面（字号 ≥16px 不会触发） */
@@ -805,7 +839,9 @@ body {
   input,
   textarea,
   select {
-    font-size: 16px !important;
+    /* 移动端输入框至少 16px，否则 iOS Safari 聚焦时会自动放大页面。
+     用 max() 兼顾两点：不低于 16px，同时能跟随用户放大字号继续变大。 */
+  font-size: max(16px, 1rem) !important;
   }
 
   .page-head {
@@ -986,11 +1022,11 @@ body {
   .stat-icon {
     width: 36px;
     height: 36px;
-    font-size: 18px;
+    font-size: 1.125rem;   /* 18px */
     border-radius: 9px;
   }
   .stat-value {
-    font-size: 22px;
+    font-size: 1.375rem;   /* 22px */
   }
 }
 

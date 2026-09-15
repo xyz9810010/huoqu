@@ -778,7 +778,7 @@ onUnmounted(() => {
   gap: var(--sp-2);
 }
 .who {
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 700;
   color: var(--qj-text);
 }
@@ -797,14 +797,14 @@ onUnmounted(() => {
   color: var(--el-color-primary);
 }
 .addr-main {
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.5;
   color: var(--qj-text);
   overflow-wrap: anywhere;
 }
 .addr-sub {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--qj-muted);
 }
 .contact-box {
@@ -816,7 +816,7 @@ onUnmounted(() => {
   margin-top: 12px;
 }
 .contact-name {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--qj-text);
 }
@@ -824,7 +824,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--el-color-primary);
   text-decoration: none;
@@ -847,12 +847,12 @@ onUnmounted(() => {
   padding-bottom: 6px;
 }
 .meta span {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--qj-muted);
   flex: none;
 }
 .meta b {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--qj-text);
   text-align: right;
   min-width: 0;
@@ -863,7 +863,7 @@ onUnmounted(() => {
   padding: 8px 12px;
   background: #fff7ec;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: #b26a00;
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -891,12 +891,12 @@ onUnmounted(() => {
 .action-main {
   width: 100%;
   height: 48px;
-  font-size: 17px;
+  font-size: 1.0625rem;
   margin-left: 0;
 }
 .hint {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--qj-muted);
   text-align: center;
 }
@@ -926,7 +926,7 @@ onUnmounted(() => {
 }
 .muted {
   color: var(--qj-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .exc-row {
   display: flex;
@@ -938,7 +938,7 @@ onUnmounted(() => {
 .exc-desc {
   flex: 1;
   min-width: 140px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--qj-text-2);
   overflow-wrap: anywhere;
 }
@@ -971,7 +971,7 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -981,7 +981,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
 .m-top {
@@ -993,7 +993,7 @@ onUnmounted(() => {
 }
 .m-meta {
   flex: none;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--qj-muted);
   white-space: nowrap;
 }
@@ -1072,7 +1072,7 @@ onUnmounted(() => {
     margin-left: 0;
   }
   .who {
-    font-size: 17px;
+    font-size: 1.0625rem;
   }
 }
 </style>

@@ -166,14 +166,14 @@ onMounted(load)
 .provider-identity strong, .provider-identity span { display: block; }
 .provider-identity strong { font-size: var(--fs-card); color: var(--qj-text); }
 .provider-identity span { margin-top: 3px; color: var(--qj-muted); font-size: var(--fs-meta); text-transform: uppercase; }
-.provider-icon { width: 36px; height: 36px; border-radius: var(--r-control); display: grid; place-items: center; color: var(--qj-primary-text); background: var(--tint-blue); font-size: 18px; flex: none; }
+.provider-icon { width: 36px; height: 36px; border-radius: var(--r-control); display: grid; place-items: center; color: var(--qj-primary-text); background: var(--tint-blue); font-size: 1.125rem; flex: none; }
 .provider-card :deep(.el-form) { flex: 1; }
 .provider-card :deep(.el-form-item) { margin-bottom: 17px; }
-.provider-card :deep(.el-form-item__label) { color: var(--qj-text-2); font-size: var(--fs-sub); }
-.provider-card :deep(.el-form-item__label i) { margin-left: 7px; color: var(--qj-danger-text); font-size: 11px; font-style: normal; font-weight: 400; }
-.field-state { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--qj-success-text); font-size: 11px; }
+.provider-card :deep(.el-form-item__label) { color: var(--qj-text-2); font-size: var(--fs-sub) !important; }
+.provider-card :deep(.el-form-item__label i) { margin-left: 7px; color: var(--qj-danger-text); font-size: 0.6875rem; font-style: normal; font-weight: 400; }
+.field-state { display: flex; align-items: center; gap: 4px; margin-top: 5px; color: var(--qj-success-text); font-size: 0.6875rem; }
 .field-hint { margin-top: var(--sp-1); color: var(--qj-muted); font-size: var(--fs-meta); line-height: 1.5; }
-.health-row { min-height: 30px; flex-wrap: wrap; gap: 6px 14px; padding: 9px 11px; margin: var(--sp-1) 0 var(--sp-4); border: 1px solid var(--qj-border); border-radius: var(--r-badge); background: var(--qj-surface-subtle); color: var(--qj-muted); font-size: 11px; }
+.health-row { min-height: 30px; flex-wrap: wrap; gap: 6px 14px; padding: 9px 11px; margin: var(--sp-1) 0 var(--sp-4); border: 1px solid var(--qj-border); border-radius: var(--r-badge); background: var(--qj-surface-subtle); color: var(--qj-muted); font-size: 0.6875rem; }
 .health-error { color: var(--qj-danger-text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .provider-actions { gap: var(--sp-2); flex-wrap: wrap; padding-top: var(--sp-3); border-top: 1px solid var(--qj-border); }
 @media (max-width: 640px) {

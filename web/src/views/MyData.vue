@@ -81,7 +81,7 @@ onUnmounted(() => liveRefresh.dispose())
   font-size: var(--fs-body);
 }
 .kv__v {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--qj-text);
 }

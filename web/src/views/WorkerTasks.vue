@@ -230,7 +230,7 @@ onUnmounted(() => liveRefresh.dispose())
   margin-top: var(--sp-3);
 }
 .customer {
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 600;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -313,7 +313,7 @@ onUnmounted(() => liveRefresh.dispose())
   .actions .main {
     grid-column: 1 / -1;
     height: 48px;
-    font-size: 16px;
+    font-size: 1rem;
     margin-left: 0;
     order: -1;
   }

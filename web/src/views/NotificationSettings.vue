@@ -289,7 +289,7 @@ onMounted(load)
 .card-heading.compact { margin-bottom: var(--sp-2); }
 .card-heading h3 { margin: 0 0 5px; font-size: var(--fs-card); font-weight: 600; color: var(--qj-text); }
 .card-heading p { margin: 0; color: var(--qj-muted); font-size: var(--fs-sub); }
-.heading-icon { width: 42px; height: 42px; border-radius: var(--r-card); display: grid; place-items: center; color: var(--qj-primary-text); background: var(--tint-blue); font-size: 20px; flex: none; }
+.heading-icon { width: 42px; height: 42px; border-radius: var(--r-card); display: grid; place-items: center; color: var(--qj-primary-text); background: var(--tint-blue); font-size: 1.25rem; flex: none; }
 .heading-icon.green { color: var(--qj-success-text); background: var(--tint-green); }
 .status-row { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3); background: var(--qj-surface-subtle); border: 1px solid var(--qj-border); border-radius: var(--r-control); }
 .status-row strong { color: var(--qj-text); }
@@ -313,7 +313,7 @@ onMounted(load)
 .preference-row span { color: var(--qj-muted); font-size: var(--fs-meta); }
 .devices-head { display: flex; align-items: center; justify-content: space-between; }
 .device-name { display: flex; align-items: center; gap: var(--sp-2); }
-.device-name .el-icon { color: var(--qj-primary-text); font-size: 18px; }
+.device-name .el-icon { color: var(--qj-primary-text); font-size: 1.125rem; }
 .device-name strong, .device-name span { display: block; }
 .device-name strong { color: var(--qj-text); }
 .device-name span { color: var(--qj-muted); font-size: var(--fs-meta); margin-top: 2px; }

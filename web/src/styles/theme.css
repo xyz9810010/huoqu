@@ -826,6 +826,14 @@ body {
     min-height: 36px;
     padding: 0 12px;
   }
+  /* 手机端触控目标下限：分段按钮与数字步进器默认 30px，低于本项目 34px 的移动端标准 */
+  .el-radio-group .el-radio-button__inner {
+    min-height: 34px;
+  }
+  .el-input-number .el-input-number__decrease,
+  .el-input-number .el-input-number__increase {
+    min-height: 34px;
+  }
   .page-description {
     display: none;
   }

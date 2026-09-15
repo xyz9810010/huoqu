@@ -19,6 +19,8 @@
     </div>
 
     <el-card shadow="never" class="list-card">
+      <SkeletonBlock v-if="loading && !list.length" :rows="4" />
+      <LoadFailed v-else-if="loadError && !list.length" :message="loadError" @retry="load" />
       <el-table v-if="list.length" class="desktop-table" :data="list"
                 @row-click="(r: any) => router.push('/customers/' + r.id)" style="cursor:pointer">
         <el-table-column prop="customerNo" label="编号" width="100" class-name="cell-nowrap" />
@@ -80,7 +82,7 @@
         </article>
       </div>
 
-      <EmptyState v-if="!list.length" title="暂无客户" description="新增客户后即可为其派单">
+      <EmptyState v-if="!list.length && !loading && !loadError" title="暂无客户" description="新增客户后即可为其派单">
         <el-button type="primary" @click="openCreate">新增客户</el-button>
       </EmptyState>
     </el-card>
@@ -116,6 +118,8 @@ import http from '../api'
 import PageHead from '../components/PageHead.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
+import LoadFailed from '../components/LoadFailed.vue'
 
 const router = useRouter()
 const list = ref<any[]>([])
@@ -126,14 +130,26 @@ const size = 20
 const total = ref(0)
 const createVisible = ref(false)
 const saving = ref(false)
+const loading = ref(false)
+const loadError = ref('')
 const form = reactive<any>({ name: '', contactName: '', contactPhone: '', legacyCustomerId: '', importantNote: '', remark: '' })
 
 async function load() {
-  const data: any = await http.get('/customers', {
-    params: { search: search.value, status: status.value, page: page.value, size },
-  })
-  list.value = Array.isArray(data) ? data : data.list
-  total.value = Array.isArray(data) ? data.length : data.total
+  loading.value = true
+  loadError.value = ''
+  try {
+    const data: any = await http.get('/customers', {
+      params: { search: search.value, status: status.value, page: page.value, size },
+    })
+    list.value = Array.isArray(data) ? data : data.list
+    total.value = Array.isArray(data) ? data.length : data.total
+  } catch (e: any) {
+    // 记下失败原因，让页面画出"加载失败 + 重试"，而不是静默落到"暂无客户"
+    loadError.value = e?.response?.data?.error || e?.message || '加载失败'
+    if (!list.value.length) total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 
 function openCreate() {

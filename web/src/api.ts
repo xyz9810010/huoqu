@@ -23,7 +23,12 @@ http.interceptors.response.use(
   },
   (err: any) => {
     const status = err.response?.status
-    const msg = err.response?.data?.error || err.response?.data?.message || err.message || '网络错误'
+    // 无 response = 断网 / 超时 / DNS 失败。axios 原生文案是英文 "Network Error"，
+    // 对仓库里弱网作业的取件员没有指导意义，这里换成能照做的中文提示。
+    const offline = !err.response
+    const msg = err.response?.data?.error || err.response?.data?.message
+      || (offline ? '网络连接失败，请检查网络或稍后重试' : err.message)
+      || '请求失败'
     if (status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')

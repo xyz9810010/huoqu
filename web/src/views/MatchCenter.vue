@@ -5,6 +5,8 @@
     <el-card shadow="never" class="list-card">
       <el-alert type="info" :closable="false" show-icon class="tip"
                 title="无票号记录补票号后自动获取最终重量；有票号但暂无重量会自动匹配原系统同步结果。" />
+      <SkeletonBlock v-if="loading && !list.length" :rows="4" />
+      <LoadFailed v-else-if="loadError && !list.length" :message="loadError" @retry="load" />
       <el-table v-if="list.length" class="desktop-table" :data="list">
         <el-table-column prop="taskNo" label="任务号" width="164" class-name="cell-nowrap" />
         <el-table-column prop="customerName" label="客户" min-width="150" show-overflow-tooltip />
@@ -46,7 +48,7 @@
           </div>
         </article>
       </div>
-      <EmptyState v-if="!list.length" title="暂无待匹配记录"
+      <EmptyState v-if="!list.length && !loading && !loadError" title="暂无待匹配记录"
                   description="所有票号都已匹配到最终重量，或还没有需要补票号的货物" />
     </el-card>
 
@@ -68,9 +70,13 @@ import http from '../api'
 import PageHead from '../components/PageHead.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
+import LoadFailed from '../components/LoadFailed.vue'
 
 const router = useRouter()
 const list = ref<any[]>([])
+const loading = ref(false)
+const loadError = ref('')
 const matchVisible = ref(false)
 const waybillNo = ref('')
 const currentItem = ref<any>(null)
@@ -81,7 +87,16 @@ function entryMethodLabel(method: string) {
 }
 
 async function load() {
-  list.value = await http.get('/sync/match-center')
+  loading.value = true
+  loadError.value = ''
+  try {
+    list.value = await http.get('/sync/match-center')
+  } catch (e: any) {
+    loadError.value = e?.response?.data?.error || e?.message || '加载失败'
+    list.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 function openMatch(row: any) {

@@ -9,6 +9,8 @@
     </PageHead>
 
     <el-card shadow="never" class="list-card">
+      <SkeletonBlock v-if="loading && !list.length" :rows="4" />
+      <LoadFailed v-else-if="loadError && !list.length" :message="loadError" @retry="load" />
       <el-table v-if="list.length" class="desktop-table" :data="list">
         <el-table-column prop="name" label="区域名称" width="140" />
         <el-table-column prop="code" label="编码" width="110" class-name="cell-nowrap" />
@@ -44,7 +46,7 @@
         </article>
       </div>
 
-      <EmptyState v-if="!list.length" title="暂无区域" description="新增区域后，派单时会自动推荐区域内的取件员">
+      <EmptyState v-if="!list.length && !loading && !loadError" title="暂无区域" description="新增区域后，派单时会自动推荐区域内的取件员">
         <el-button type="primary" @click="openCreate">新增区域</el-button>
       </EmptyState>
     </el-card>
@@ -89,16 +91,29 @@ import { Plus } from '@element-plus/icons-vue'
 import http from '../api'
 import PageHead from '../components/PageHead.vue'
 import EmptyState from '../components/EmptyState.vue'
+import SkeletonBlock from '../components/SkeletonBlock.vue'
+import LoadFailed from '../components/LoadFailed.vue'
 
 const list = ref<any[]>([])
 const workers = ref<any[]>([])
+const loading = ref(false)
+const loadError = ref('')
 const visible = ref(false)
 const assignVisible = ref(false)
 const form = reactive<any>({ id: null, name: '', code: '', defaultWorkerId: null })
 const assignForm = reactive<any>({ areaId: null, defaultWorkerIds: [], backupWorkerIds: [] })
 
 async function load() {
-  list.value = await http.get('/areas')
+  loading.value = true
+  loadError.value = ''
+  try {
+    list.value = await http.get('/areas')
+  } catch (e: any) {
+    loadError.value = e?.response?.data?.error || e?.message || '加载失败'
+    list.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 function workerNames(items: any[] | undefined) {

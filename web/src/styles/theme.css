@@ -744,6 +744,25 @@ body {
   font-size: var(--fs-meta);
   color: var(--qj-muted);
 }
+/* 加载失败态：与空状态同一套排版，但用告警色区分，避免"失败"被看成"没数据" */
+.qj-failed {
+  text-align: center;
+  padding: var(--sp-8) var(--sp-4);
+}
+.qj-failed__icon {
+  color: var(--qj-warning-text);
+}
+.qj-failed__title {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--qj-text);
+}
+.qj-failed__desc {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-meta);
+  color: var(--qj-muted);
+}
 
 /* ===== 骨架屏 ===== */
 .qj-skeleton {

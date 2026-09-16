@@ -240,7 +240,9 @@
       <el-upload :http-request="uploadPhoto" :show-file-list="false" accept="image/*">
         <el-button type="primary">选择图片上传</el-button>
       </el-upload>
-      <div class="upload-hint">完成取件前至少上传 1 张现场照片</div>
+      <div class="upload-hint">
+        {{ completeAfterUpload ? '上传后会自动继续「完成取件」，无需再点一次' : '完成取件前至少上传 1 张现场照片' }}
+      </div>
     </el-dialog>
 
     <!-- 改派 -->
@@ -341,6 +343,8 @@ const workers = ref<any[]>([])
 const starting = ref(false)
 const itemVisible = ref(false)
 const uploadVisible = ref(false)
+/** 由「完成取件」触发拍照时置真：上传完成后自动继续完成取件 */
+const completeAfterUpload = ref(false)
 const reassignVisible = ref(false)
 const transferVisible = ref(false)
 const assistVisible = ref(false)
@@ -575,7 +579,14 @@ async function uploadPhoto(opt: any) {
   fd.append('file', opt.file)
   await http.post(`/tasks/${taskId.value}/photos`, fd)
   ElMessage.success('照片已上传')
-  load()
+  await load()
+  // 若本次是从「完成取件」进来的（当时没有照片），上传完直接继续完成，
+  // 省掉"先点拍照留底、再点完成取件"的往返。
+  if (completeAfterUpload.value) {
+    completeAfterUpload.value = false
+    uploadVisible.value = false
+    await doComplete()
+  }
 }
 
 async function start() {
@@ -587,10 +598,24 @@ async function start() {
     starting.value = false
   }
   ElMessage.success('已开始取件')
-  load()
+  await load()
+  // 取件员开始取件后的下一步几乎总是扫码录单，直接打开扫码弹窗（会自动开始扫码），
+  // 省掉"进任务详情 → 再点扫码/录单"这一步。
+  itemVisible.value = true
 }
 
 async function complete() {
+  // 还没有现场照片时：直接引导拍照，拍完自动继续完成取件。
+  // 这样"拍照 → 完成"是一次操作，而不是"先点拍照留底、再点完成取件"两次。
+  if (!task.photos?.length) {
+    completeAfterUpload.value = true
+    uploadVisible.value = true
+    return
+  }
+  await doComplete()
+}
+
+async function doComplete() {
   await ElMessageBox.confirm(`本次共 ${task.items?.length || 0} 票 / ${totalPieces.value} 件，照片 ${task.photos?.length || 0} 张，确认完成取件？`, '完成取件')
   await http.post(`/tasks/${taskId.value}/complete`)
   ElMessage.success('取件完成')

@@ -33,19 +33,80 @@ const LIB_URL = '/html5-qrcode.min.js'
 // 实测（同一张真实图片）：只启用 Code128 那组时，EAN-13 报
 // "No MultiFormat Readers were able to detect the code."；把 EAN/UPC 加进来后立刻可解。
 // 因此第一组就必须覆盖「面单码 + 商品码」，不能让用户等切换。
+// 制式分组：先试"日常真正会遇到"的少数几种，失败再退到全量。
+//
+// 为什么要分组而不是一上来就全开：每多一种制式，解码器每一帧都要多试一遍。
+// 12 种一起开会让识别明显变慢（用户反馈"扫码好慢"），而且制式越多越容易
+// 出现误判/互相干扰。实际业务里 99% 就是：面单 Code128 与商品 EAN-13/UPC。
+const CORE_FORMATS = [
+  'CODE_128', 'CODE_39', 'ITF',
+  'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E',
+  'QR_CODE',
+]
+const EXTRA_FORMATS = ['CODE_93', 'CODABAR', 'DATA_MATRIX', 'PDF_417']
+
 const FORMAT_SETS: { label: string; names: string[] }[] = [
   {
-    label: '面单码 + 商品码（Code128 / Code39 / ITF / EAN-13 / UPC / 二维码）',
-    names: [
-      'CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR',
-      'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E',
-      'QR_CODE', 'DATA_MATRIX', 'PDF_417',
-    ],
+    label: '面单码 + 商品码（Code128 / Code39 / ITF / EAN / UPC / 二维码）',
+    names: CORE_FORMATS,
   },
-  // 理论上用不到；万一某个制式在特定机型上初始化异常，退到最常用的一维/二维码
-  { label: '常用码（Code128 / Code39 / ITF / 二维码）', names: ['CODE_128', 'CODE_39', 'ITF', 'QR_CODE'] },
+  // 少数场景才会用到（如个别面单用 Code93/库德巴、个别标签用 DataMatrix/PDF417）
+  {
+    label: '扩充码（含 Code93 / 库德巴 / DataMatrix / PDF417）',
+    names: [...CORE_FORMATS, ...EXTRA_FORMATS],
+  },
 ]
-const FORMAT_SWITCH_MS = 9000
+const FORMAT_SWITCH_MS = 6000
+
+/**
+ * 是否使用浏览器原生 BarcodeDetector。
+ *
+ * 原生识别由系统提供、通常硬件加速，对一维码的速度与命中率都明显优于
+ * 库内置的 JS 解码器 —— 这正是"扫码慢、很多识别不了"的主要改善点。
+ *
+ * 但不能无条件开启：各平台支持的原生制式不同，若它不支持我们要的制式，
+ * 开了反而什么都识别不出。因此先问一句 getSupportedFormats()，
+ * 至少覆盖「面单 Code128 + 商品 EAN-13」这两个主力制式才启用。
+ */
+function nativeDetectorUsable(): boolean {
+  try {
+    const BD: any = (window as any).BarcodeDetector
+    if (typeof BD !== 'function') return false
+    if (typeof BD.getSupportedFormats !== 'function') return false
+    // 注意：这个 API 是异步的，这里只能同步判断"有没有"，具体制式在 loadLib 后异步确认
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 异步确认原生识别是否覆盖主力制式（结果缓存，只问一次） */
+let nativeFormatsPromise: Promise<string[]> | null = null
+function getNativeFormats(): Promise<string[]> {
+  if (!nativeFormatsPromise) {
+    nativeFormatsPromise = (async () => {
+      try {
+        const BD: any = (window as any).BarcodeDetector
+        if (typeof BD?.getSupportedFormats !== 'function') return []
+        return (await BD.getSupportedFormats()) || []
+      } catch {
+        return []
+      }
+    })()
+  }
+  return nativeFormatsPromise
+}
+
+/** 原生制式名（snake_case）与我们用的一致，见库内映射表 */
+const NATIVE_REQUIRED = ['code_128', 'ean_13']
+let useNativeDetector = false
+async function resolveNativeDetector(): Promise<boolean> {
+  if (!nativeDetectorUsable()) return false
+  const supported = await getNativeFormats()
+  const has = (f: string) => supported.some((s) => String(s).toLowerCase() === f)
+  const ok = NATIVE_REQUIRED.every(has)
+  return ok
+}
 
 /** 摄像头只在「安全上下文」可用：HTTPS 或 localhost/127.0.0.1；局域网 http://IP 不行。 */
 export function cameraSupport(): { ok: boolean; reason: string } {
@@ -108,10 +169,17 @@ function loadLib(): Promise<any> {
       }
       script.onerror = () => reject(new Error('扫码组件加载失败'))
       document.head.appendChild(script)
-    }).catch((err) => {
-      libPromise = null // 允许下次重试
-      throw err
     })
+      // 顺带确定是否可用原生识别：必须在创建 scanner 之前完成，
+      // 否则 makeScanner 读到的 useNativeDetector 还是默认值。
+      .then(async (Ctor) => {
+        useNativeDetector = await resolveNativeDetector()
+        return Ctor
+      })
+      .catch((err) => {
+        libPromise = null // 允许下次重试
+        throw err
+      })
   }
   return libPromise
 }
@@ -177,8 +245,9 @@ function makeScanner(Ctor: any, elementId: string, formatNames: string[]): any {
   const formats = formatNames.map((n) => F[n]).filter((v: any) => v !== undefined)
   return new Ctor(elementId, {
     formatsToSupport: formats,
-    // 关掉原生 BarcodeDetector：其可用制式由平台决定、不可控，且不少机型不含 1D 码
-    useBarCodeDetectorIfSupported: false,
+    // 优先用浏览器原生识别（更快、一维码命中率更高）；已确认该平台支持主力制式才开启，
+    // 否则退回库内置的 JS 解码器，避免"开了反而识别不到"。
+    useBarCodeDetectorIfSupported: useNativeDetector,
   })
 }
 
@@ -240,7 +309,7 @@ export async function decodeImageFile(file: File | Blob): Promise<string> {
     const formats = set.names.map((n) => F[n]).filter((v: any) => v !== undefined)
     const scanner = new Ctor(holderId, {
       formatsToSupport: formats,
-      useBarCodeDetectorIfSupported: false,
+      useBarCodeDetectorIfSupported: useNativeDetector,
     })
     try {
       const text = await scanner.scanFile(file, false)

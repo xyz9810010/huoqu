@@ -58,6 +58,21 @@ export function cameraSupport(): { ok: boolean; reason: string } {
 
 let libPromise: Promise<any> | null = null
 
+/**
+ * 预加载扫码库。
+ *
+ * 为什么必须预加载：startScanner 里原本是"点按钮 → 动态插入 <script> 等网络 →
+ * 再调 getUserMedia"。而 iOS Safari 等浏览器要求 getUserMedia
+ * **必须在用户手势的调用栈内发起**；中间 await 一次网络请求后手势即失效，
+ * 表现为"点了实时扫码没反应 / 直接报权限错误"。
+ * 在扫码弹窗打开时就先把库拉好，点击时便无需再等网络。
+ */
+export function preloadScannerLib(): void {
+  void loadLib().catch(() => {
+    /* 预加载失败不提示，真正点击时还会再试并给出错误 */
+  })
+}
+
 function loadLib(): Promise<any> {
   if (!libPromise) {
     libPromise = new Promise((resolve, reject) => {

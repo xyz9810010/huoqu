@@ -187,7 +187,9 @@
         <div class="scan-actions">
           <template v-if="!scanning">
             <!-- 安全上下文（HTTPS / localhost）：实时扫码为主，对准就自动识别 -->
-            <el-button v-if="liveSupported" type="primary" :icon="Camera" @click="startScan()">实时扫码</el-button>
+            <el-button v-if="liveSupported" type="primary" :icon="Camera" :loading="scanStarting" @click="startScan()">
+              {{ scanStarting ? '正在启动…' : '实时扫码' }}
+            </el-button>
             <!-- 非安全上下文（内网 HTTP）：浏览器不提供摄像头 API，只能调起系统相机拍照 -->
             <template v-else>
               <el-button type="primary" :icon="Camera" :loading="decoding" @click="takePhoto">
@@ -300,7 +302,7 @@ import http from '../api'
 import { useAuthStore } from '../stores/auth'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { cameraSupport, decodeImageFile, startScanner } from '../services/scanner'
+import { cameraSupport, decodeImageFile, preloadScannerLib, startScanner } from '../services/scanner'
 import type { ScannerHandle } from '../services/scanner'
 import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../services/realtime-events'
 
@@ -337,6 +339,7 @@ const exceptionTypes = ['客户取消', '到场无货', '联系不上', '地址�
 // 主路径：调起系统相机拍照 → 解码照片（非 HTTPS 也能用，由系统自动选镜头）
 // 次路径：页内实时扫码（仅安全上下文可用，即 HTTPS / localhost）
 const scanning = ref(false)
+const scanStarting = ref(false)
 const decoding = ref(false)
 const scanError = ref('')
 const scanFormatHint = ref('')
@@ -389,12 +392,21 @@ async function onPhotoPicked(e: Event) {
 
 function onEntryMethodChange() {
   if (itemForm.entryMethod !== 'scan') void stopScan()
+  else if (liveSupported) preloadScannerLib()
 }
 
+// 打开「扫码/录单」弹窗时就把扫码库拉好：
+// 否则点击「实时扫码」后还要等一次脚本加载，用户手势随之失效，
+// iOS Safari 等浏览器会拒绝 getUserMedia（表现为"点了没反应"）。
+watch(itemVisible, (open) => {
+  if (open && liveSupported) preloadScannerLib()
+})
+
 async function startScan() {
-  if (scanning.value) return
+  if (scanning.value || scanStarting.value) return
   scanError.value = ''
   scanFormatHint.value = ''
+  scanStarting.value = true
   scanning.value = true
   try {
     scanHandle = await startScanner('qr-reader', {
@@ -410,6 +422,8 @@ async function startScan() {
     // 失败原因通常已通过 scanHint 呈现；未提供文案时兜底显示，避免"点了没反应"
     if (!scanError.value) scanError.value = String(e?.message || e || '无法启动扫码')
     scanning.value = false
+  } finally {
+    scanStarting.value = false
   }
 }
 

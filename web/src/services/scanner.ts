@@ -164,6 +164,62 @@ const SCAN_CONFIG = {
   // 明确不传 qrbox：整帧识别
 }
 
+/**
+ * 解码"用系统相机拍下的照片"里的条码。
+ *
+ * 为什么需要这条路（关键）：
+ * 系统部署在 http://192.168.x.x:3000，属于**非安全上下文**。浏览器在这种地址下
+ * 根本不暴露 navigator.mediaDevices —— 实测 isSecureContext=false、
+ * hasMediaDevices=false。也就是说 getUserMedia 的"页内实时扫码"在该地址上
+ * **无论怎么写都不可能工作**，不是代码缺陷。
+ *
+ * 而 <input type="file" capture="environment"> 不受安全上下文限制：
+ * 它直接调起系统相机 App，由系统自动挑选镜头、并自带变焦/对焦/闪光灯。
+ * 这同时解决了三件事：
+ *   1) 非 HTTPS 也能用；
+ *   2) 不必枚举与切换摄像头（用户此前反馈"好几个摄像头只能用一颗"）；
+ *   3) 前置摄像头不会被动用（capture="environment" 只请求后置）。
+ *
+ * 代价：不是连续扫描，一次拍一张。因此界面文案要引导用户对准后拍摄。
+ */
+export async function decodeImageFile(file: File | Blob): Promise<string> {
+  if (!file) throw new Error('未选择图片')
+  const Ctor = await loadLib()
+  const F = (window as any).Html5QrcodeSupportedFormats
+
+  // scanFile 需要一个容器；用屏幕外但**参与布局**的节点，
+  // 完全不渲染（display:none）时库可能拿不到尺寸。
+  const holderId = 'qr-file-decode'
+  let holder = document.getElementById(holderId)
+  if (!holder) {
+    holder = document.createElement('div')
+    holder.id = holderId
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:360px;height:280px;overflow:hidden'
+    document.body.appendChild(holder)
+  }
+
+  // 与实时扫码同样的策略：先试"面单码 + 商品码"这一组，失败再用更全的一组。
+  const errors: string[] = []
+  for (const set of FORMAT_SETS) {
+    const formats = set.names.map((n) => F[n]).filter((v: any) => v !== undefined)
+    const scanner = new Ctor(holderId, {
+      formatsToSupport: formats,
+      useBarCodeDetectorIfSupported: false,
+    })
+    try {
+      const text = await scanner.scanFile(file, false)
+      const raw = String(text || '').trim()
+      if (raw) return raw
+      errors.push(`${set.label}: 未识别到条码`)
+    } catch (err: any) {
+      errors.push(`${set.label}: ${err?.message || err}`)
+    } finally {
+      try { scanner.clear() } catch { /* 忽略 */ }
+    }
+  }
+  throw new Error('未能从照片中识别出条码，请靠近条码、保证清晰后重拍')
+}
+
 export async function startScanner(elementId: string, opts: ScannerOptions): Promise<ScannerHandle> {
   const support = cameraSupport()
   if (!support.ok) {

@@ -158,7 +158,7 @@
         <el-radio-button value="no_waybill">无票号</el-radio-button>
       </el-radio-group>
 
-      <!-- 摄像头扫码（安全上下文可用时提供） -->
+      <!-- 扫码：主路径是"调起系统相机拍照识别"（非 HTTPS 也能用，且由系统自动选镜头） -->
       <div v-if="itemForm.entryMethod === 'scan'" class="scan-block">
         <div v-show="scanning" class="qr-wrap">
           <div id="qr-reader" class="qr-reader" />
@@ -167,32 +167,31 @@
             <span class="qr-guide__box" />
           </div>
         </div>
+
+        <!--
+          隐藏的文件输入：capture="environment" 让浏览器**直接调起系统相机**，
+          由系统自动挑选后置镜头（不会动用前置），也无需枚举/切换摄像头。
+          关键：<input type="file"> 不受"安全上下文"限制 —— 而本系统跑在
+          http://192.168.x.x:3000，该地址下浏览器根本不提供 navigator.mediaDevices，
+          所以 getUserMedia 的实时扫码在那里不可能成功。
+        -->
+        <input
+          ref="cameraInput"
+          class="scan-file-input"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          @change="onPhotoPicked"
+        />
+
         <div class="scan-actions">
-          <el-button v-if="!scanning" type="primary" :icon="Camera" @click="startScan()">打开摄像头扫码</el-button>
-          <template v-else>
-            <el-button @click="stopScan">停止扫码</el-button>
-            <el-button
-              v-if="cameras.length > 1"
-              :icon="Switch"
-              @click="useNextCamera"
-            >切换摄像头（{{ cameraIndex + 1 }}/{{ cameras.length }}）</el-button>
-          </template>
+          <el-button v-if="!scanning" type="primary" :icon="Camera" :loading="decoding" @click="takePhoto">
+            {{ decoding ? '识别中…' : '拍照扫码' }}
+          </el-button>
+          <!-- 次路径：只有浏览器允许页内摄像头（HTTPS / localhost）时才提供 -->
+          <el-button v-if="liveSupported && !scanning" @click="startScan()">实时扫码</el-button>
+          <el-button v-if="scanning" @click="stopScan">停止扫码</el-button>
         </div>
-        <!-- 多摄机型：任意时刻都能挑用哪颗；扫到码会自动停止，所以选择入口不能只在扫码中可见 -->
-        <div v-if="cameras.length > 1" class="camera-pick">
-          <span class="camera-pick__label">摄像头</span>
-          <el-select :model-value="activeCameraId" size="small" class="camera-pick__select" @change="useCamera">
-            <el-option
-              v-for="(cam, i) in cameras"
-              :key="cam.deviceId"
-              :label="`${i + 1}. ${cameraLabel(cam)}`"
-              :value="cam.deviceId"
-            />
-          </el-select>
-        </div>
-        <p v-else-if="cameras.length === 1" class="scan-hint scan-hint--dim">
-          当前只有 1 个摄像头可选：{{ cameraLabel(cameras[0]) }}
-        </p>
         <p class="scan-hint">{{ scanHint }}</p>
       </div>
 
@@ -283,7 +282,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { ArrowLeft, Camera, Location, Phone, Switch } from '@element-plus/icons-vue'
+import { ArrowLeft, Camera, Location, Phone } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
@@ -292,8 +291,8 @@ import http from '../api'
 import { useAuthStore } from '../stores/auth'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { cameraSupport, listCameras, startScanner } from '../services/scanner'
-import type { CameraOption, ScannerHandle } from '../services/scanner'
+import { cameraSupport, decodeImageFile, startScanner } from '../services/scanner'
+import type { ScannerHandle } from '../services/scanner'
 import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../services/realtime-events'
 
 const route = useRoute()
@@ -325,71 +324,68 @@ const exceptionForm = reactive<any>({ type: '', description: '' })
 const updateForm = reactive<any>({ taskType: 'normal', rushShipTime: '', rushReason: '', scheduledTime: '' })
 const exceptionTypes = ['客户取消', '到场无货', '联系不上', '地址错误', '客户要求改时间', '货物/包装异常', '其他']
 
-// ---- 摄像头扫码 ----
+// ---- 扫码 ----
+// 主路径：调起系统相机拍照 → 解码照片（非 HTTPS 也能用，由系统自动选镜头）
+// 次路径：页内实时扫码（仅安全上下文可用，即 HTTPS / localhost）
 const scanning = ref(false)
+const decoding = ref(false)
 const scanError = ref('')
 const scanFormatHint = ref('')
-const cameras = ref<CameraOption[]>([])
-const activeCameraId = ref('')
+const cameraInput = ref<HTMLInputElement | null>(null)
 let scanHandle: ScannerHandle | null = null
-let preferredCameraId = '' // 用户选定的摄像头，切换/重开后沿用
-let cameraListLoaded = false // 已授权时只需枚举一次
 const scanSupport = cameraSupport()
-const cameraIndex = computed(() => {
-  const i = cameras.value.findIndex((c) => c.deviceId === activeCameraId.value)
-  return i >= 0 ? i : 0
-})
+/** 实时扫码是否可用：非安全上下文下浏览器不提供 mediaDevices，此时只给"拍照扫码" */
+const liveSupported = scanSupport.ok
+
 const scanHint = computed(() => {
   if (scanError.value) return scanError.value
-  if (!scanSupport.ok) {
-    return `${scanSupport.reason}请改用「手输票号」，或让管理员用 HTTPS 访问本站后再扫码。`
-  }
+  if (decoding.value) return '正在识别照片中的条码…'
   if (scanning.value) {
     const base = '把条码完整放进取景框（一维码要横向放平），识别后会自动填入票号。'
     return scanFormatHint.value ? `${base}当前制式：${scanFormatHint.value}` : base
   }
-  return '一维码对不上焦时，可切换摄像头；或把手机往后退 10–15 厘米。'
+  return '点「拍照扫码」会打开手机相机（自动使用后置镜头）。请让条码占满画面、保持清晰，拍完会自动识别。'
 })
 
-/** 已授权时直接枚举摄像头，让"选哪颗"在扫码前就可见（不弹权限、不出流） */
-async function ensureCameraList() {
-  if (cameraListLoaded || !scanSupport.ok) return
-  try {
-    const status = await navigator.permissions?.query?.({ name: 'camera' as PermissionName })
-    if (status?.state !== 'granted') return
-    const list = await listCameras()
-    if (!list.length) return
-    cameraListLoaded = true
-    cameras.value = list
-    if (!activeCameraId.value) {
-      activeCameraId.value = preferredCameraId || list[0].deviceId
-    }
-  } catch {
-    /* 拿不到权限状态就不预取，等首次扫码后再枚举 */
-  }
+/** 打开系统相机：capture="environment" 由浏览器直接调起后置摄像头 */
+function takePhoto() {
+  scanError.value = ''
+  const el = cameraInput.value
+  if (!el) return
+  // 清空旧值，否则连续选同一张照片不会再触发 change
+  el.value = ''
+  el.click()
 }
 
-watch(itemVisible, (open) => {
-  if (open) void ensureCameraList()
-})
-
-function cameraLabel(cam: CameraOption) {
-  const facing = cam.facing === 'back' ? '后置' : cam.facing === 'front' ? '前置' : ''
-  return facing && !cam.label.includes(facing) ? `${facing} · ${cam.label}` : cam.label
+async function onPhotoPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files && input.files[0]
+  if (!file) return
+  decoding.value = true
+  scanError.value = ''
+  try {
+    const text = await decodeImageFile(file)
+    itemForm.waybillNo = text
+    ElMessage.success('已识别：' + text)
+  } catch (err: any) {
+    scanError.value = String(err?.message || err || '未能识别照片中的条码')
+  } finally {
+    decoding.value = false
+    input.value = '' // 允许再次选择
+  }
 }
 
 function onEntryMethodChange() {
   if (itemForm.entryMethod !== 'scan') void stopScan()
 }
 
-async function startScan(deviceId?: string) {
+async function startScan() {
   if (scanning.value) return
   scanError.value = ''
   scanFormatHint.value = ''
   scanning.value = true
   try {
     scanHandle = await startScanner('qr-reader', {
-      deviceId: deviceId || preferredCameraId || undefined,
       onDetected: (text) => {
         itemForm.waybillNo = text
         ElMessage.success('已识别：' + text)
@@ -397,38 +393,12 @@ async function startScan(deviceId?: string) {
       },
       onError: (msg) => { scanError.value = msg },
       onFormatChange: (label) => { scanFormatHint.value = label },
-      onCameras: (list, active) => {
-        cameras.value = list
-        cameraListLoaded = true
-        activeCameraId.value = active || preferredCameraId || (list[0]?.deviceId ?? '')
-      },
     })
   } catch (e: any) {
     // 失败原因通常已通过 scanHint 呈现；未提供文案时兜底显示，避免"点了没反应"
     if (!scanError.value) scanError.value = String(e?.message || e || '无法启动扫码')
     scanning.value = false
   }
-}
-
-/** 换一颗摄像头：先彻底停掉再按新 deviceId 重开（避免占用冲突） */
-async function restartWithCamera(deviceId: string) {
-  preferredCameraId = deviceId
-  await stopScan()
-  await startScan(deviceId)
-}
-
-/** 选择某颗摄像头：扫码中就立即切换，未扫码只记住，下次开始用 */
-function useCamera(deviceId: string) {
-  if (!deviceId) return
-  preferredCameraId = deviceId
-  activeCameraId.value = deviceId
-  if (scanning.value) void restartWithCamera(deviceId)
-}
-
-function useNextCamera() {
-  if (cameras.value.length < 2) return
-  const next = cameras.value[(cameraIndex.value + 1) % cameras.value.length]
-  void restartWithCamera(next.deviceId)
 }
 
 async function stopScan() {
@@ -735,24 +705,19 @@ onUnmounted(() => {
 .scan-actions .el-button {
   margin-left: 0;
 }
-.camera-pick {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-}
-.camera-pick__label {
-  flex: none;
-  font-size: var(--fs-sub);
-  color: var(--qj-muted);
-}
-.camera-pick__select {
-  flex: 1;
-  min-width: 0;
-}
-.scan-hint--dim {
-  color: var(--qj-muted);
-  font-size: var(--fs-meta);
+/* 隐藏的原生相机输入：不能用 display:none（部分浏览器不触发 click 调起相机），
+   用视觉隐藏但保持可交互的方式。 */
+.scan-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
 }
 .scan-hint {
   margin: var(--sp-2) 0 0;

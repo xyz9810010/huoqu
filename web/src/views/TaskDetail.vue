@@ -185,12 +185,21 @@
         />
 
         <div class="scan-actions">
-          <el-button v-if="!scanning" type="primary" :icon="Camera" :loading="decoding" @click="takePhoto">
-            {{ decoding ? '识别中…' : '拍照扫码' }}
-          </el-button>
-          <!-- 次路径：只有浏览器允许页内摄像头（HTTPS / localhost）时才提供 -->
-          <el-button v-if="liveSupported && !scanning" @click="startScan()">实时扫码</el-button>
-          <el-button v-if="scanning" @click="stopScan">停止扫码</el-button>
+          <template v-if="!scanning">
+            <!-- 安全上下文（HTTPS / localhost）：实时扫码为主，对准就自动识别 -->
+            <el-button v-if="liveSupported" type="primary" :icon="Camera" @click="startScan()">实时扫码</el-button>
+            <!-- 非安全上下文（内网 HTTP）：浏览器不提供摄像头 API，只能调起系统相机拍照 -->
+            <template v-else>
+              <el-button type="primary" :icon="Camera" :loading="decoding" @click="takePhoto">
+                {{ decoding ? '识别中…' : '拍照扫码' }}
+              </el-button>
+            </template>
+            <!-- 实时扫码可用时，拍照作为备用（例如条码反光、实时扫不到） -->
+            <el-button v-if="liveSupported" :loading="decoding" @click="takePhoto">
+              {{ decoding ? '识别中…' : '拍照扫码' }}
+            </el-button>
+          </template>
+          <el-button v-else @click="stopScan">停止扫码</el-button>
         </div>
         <p class="scan-hint">{{ scanHint }}</p>
       </div>
@@ -341,8 +350,11 @@ const scanHint = computed(() => {
   if (scanError.value) return scanError.value
   if (decoding.value) return '正在识别照片中的条码…'
   if (scanning.value) {
-    const base = '把条码完整放进取景框（一维码要横向放平），识别后会自动填入票号。'
+    const base = '对准条码即可自动识别（会自动对焦）。一维码请横向放平、占满取景框。'
     return scanFormatHint.value ? `${base}当前制式：${scanFormatHint.value}` : base
+  }
+  if (liveSupported) {
+    return '点「实时扫码」后对准条码，会自动对焦并识别，无需按快门。识别不清时可改用「拍照扫码」。'
   }
   return '点「拍照扫码」会打开手机相机（自动使用后置镜头）。请让条码占满画面、保持清晰，拍完会自动识别。'
 })

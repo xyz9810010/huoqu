@@ -1,3 +1,16 @@
+# HTTPS 叠加配置：在已有 docker-compose.yml 之上再起一个 Caddy 反向代理。
+#
+# 用法：
+#   CARGO_HTTPS_SITE='https://:3443' \
+#   CARGO_TLS='tls /tls/cert.pem /tls/key.pem' \
+#   CARGO_HTTPS_PORT=3443 \
+#   docker compose -f docker-compose.yml -f compose.https.yaml up -d huoqu-proxy
+#
+# 注意 CARGO_HTTPS_SITE 用 IP 访问时必须写成 https://:3443（不带主机名）：
+# 浏览器对 IP 字面量地址不发送 SNI，站点块若限定主机名会导致 TLS 握手失败。
+# 端口说明：默认只暴露 HTTPS 端口。因为使用本地证书时不需要 ACME 的 HTTP 质询，
+# 而内网常见的 80/443 往往已被其它服务占用（本项目所在服务器即是如此）。
+# 若将来改用真实域名 + ACME 自动签发，请把 80/443 的映射加回来（见文件末尾注释）。
 services:
   huoqu-proxy:
     image: caddy:2.10-alpine
@@ -6,15 +19,24 @@ services:
       huoqu:
         condition: service_healthy
     ports:
-      - "${CARGO_HTTPS_HTTP_PORT:-80}:80"
-      - "${CARGO_HTTPS_PORT:-443}:443"
+      - "${CARGO_HTTPS_PORT:-3443}:${CARGO_HTTPS_PORT:-3443}"
     environment:
-      CARGO_HTTPS_DOMAIN: ${CARGO_HTTPS_DOMAIN:?set CARGO_HTTPS_DOMAIN}
+      CARGO_HTTPS_SITE: ${CARGO_HTTPS_SITE:?set CARGO_HTTPS_SITE（例如 https://192.168.5.83:3443）}
+      # 留空 = 用 ACME 自动签发；使用自签/私有 CA 时填 "tls /tls/cert.pem /tls/key.pem"
+      CARGO_TLS: ${CARGO_TLS:-}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # 证书目录（secrets/ 已在 .gitignore 中，证书不会进仓库）
+      - ./secrets/tls:/tls:ro
       - huoqu_caddy_data:/data
       - huoqu_caddy_config:/config
 
 volumes:
   huoqu_caddy_data:
   huoqu_caddy_config:
+
+# 使用真实域名 + Let's Encrypt 时，除上面的 HTTPS 端口外还需要：
+#   ports:
+#     - "80:80"
+#     - "443:443"
+# 并让 CARGO_HTTPS_SITE 只填域名（不带端口、不带协议），CARGO_TLS 留空。

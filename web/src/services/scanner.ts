@@ -323,12 +323,38 @@ export async function startScanner(elementId: string, opts: ScannerOptions): Pro
       await stopCurrent()
     },
   }
+  // 尽量开启连续自动对焦：很多安卓机型默认单次对焦，扫近处的条码会一直模糊。
+  // 单独放、且自身吞掉异常 —— 不支持该能力的机型不能因此启动失败。
+  void tryContinuousFocus(elementId)
   try {
     await reportCameras(opts)
   } catch {
     /* 枚举失败不影响扫码本身 */
   }
   return handle
+}
+
+/**
+ * 请求连续自动对焦（"对准就自己变清楚"）。
+ *
+ * 不放在 videoConstraints 里传给 html5-qrcode：该库对约束校验严格，
+ * 复杂约束会直接抛错导致相机起不来（此前 facingMode 用 {ideal} 就踩过）。
+ * 这里在流已建立后，直接对 video 轨道 applyConstraints，失败也只当不支持。
+ */
+async function tryContinuousFocus(elementId: string): Promise<void> {
+  try {
+    const video = document.querySelector<HTMLVideoElement>(`#${elementId} video`)
+    const src = video && video.srcObject
+    if (!(src instanceof MediaStream)) return
+    const track = src.getVideoTracks()[0]
+    if (!track || typeof track.applyConstraints !== 'function') return
+    const caps: any = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {}
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' } as any] })
+    }
+  } catch {
+    /* 机型不支持则忽略，保持默认对焦 */
+  }
 }
 
 /** 上报可用摄像头列表与当前实际生效的 deviceId（授权后才有标签）。自身不抛错。 */

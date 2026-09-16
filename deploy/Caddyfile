@@ -1,7 +1,28 @@
-{$CARGO_HTTPS_DOMAIN} {
+# HTTPS 反向代理配置（由 compose.https.yaml 挂载到 /etc/caddy/Caddyfile）。
+#
+# 站点地址与证书方式均由环境变量决定：
+#   CARGO_HTTPS_SITE  站点地址，例如 https://:3443 或 pickup.example.com
+#   CARGO_TLS         证书方式：
+#                       · 留空           → Caddy 自动申请（ACME，需要能访问 Let's Encrypt 且 80/443 可用）
+#                       · tls /tls/cert.pem /tls/key.pem → 使用本地证书文件
+#
+# ⚠ 用 IP 访问时必须写成"无主机名"的地址（如 https://:3443），不要写成 https://192.168.5.83:3443。
+#   原因：按 RFC 6066，SNI 只能是主机名，**浏览器对 IP 字面量地址不发送 SNI**。
+#   若站点块限定了主机名，Caddy 在收到"无 SNI"的握手时选不出证书，直接回
+#   TLS internal error（实测 Chromium 报 ERR_SSL_PROTOCOL_ERROR）。
+#   用 :3443 这种通配监听即不依赖 SNI，任何来源都能拿到本地证书。
+#
+# 为什么常用本地证书：本系统部署在内网（例如 192.168.5.83），
+# 实测服务器**无法访问** acme-v02.api.letsencrypt.org / acme.zerossl.com，
+# 且 80/443 已被其它服务占用，因此 ACME 自动签发在这些环境里走不通。
+# 而摄像头（getUserMedia）要求安全上下文 —— HTTP 下浏览器根本不提供该 API，
+# 所以"对准就自动识别"的实时扫码必须走 HTTPS，哪怕是自签证书。
+{$CARGO_HTTPS_SITE} {
+	{$CARGO_TLS}
 	encode zstd gzip
 
 	reverse_proxy huoqu:3000 {
+		# 关闭响应缓冲，保证 SSE 实时通道能逐条下发
 		flush_interval -1
 	}
 

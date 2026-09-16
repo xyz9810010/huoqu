@@ -203,6 +203,22 @@
           </template>
           <el-button v-else @click="stopScan">停止扫码</el-button>
         </div>
+
+        <!--
+          权限已被拒绝时，浏览器**记住**该决定且不再弹窗，再点也是立刻失败。
+          这里直接给出"如何改回来"的步骤，并且不要求用户先白点一次。
+        -->
+        <div v-if="liveSupported && cameraPermission === 'denied'" class="scan-blocked" role="alert">
+          <p class="scan-blocked__title">摄像头权限已被拒绝，浏览器不会再弹窗询问</p>
+          <p class="scan-blocked__desc">请按下面步骤把权限改回「允许」，然后刷新本页：</p>
+          <ul class="scan-blocked__list">
+            <li><b>安卓 Chrome</b>：点地址栏左侧的「锁形」或「信息」图标 → 「权限」→「摄像头」→ 改为「允许」</li>
+            <li><b>iPhone Safari</b>：地址栏左侧「ᴀA」按钮 → 「网站设置」→「摄像头」→「允许」</li>
+            <li><b>找不到入口时</b>：用系统浏览器（Chrome / Safari）打开本页，不要在微信、钉钉等内置浏览器里扫码</li>
+          </ul>
+          <el-button size="small" @click="refreshCameraPermission">我已改好，重新检测</el-button>
+        </div>
+
         <p class="scan-hint">{{ scanHint }}</p>
       </div>
 
@@ -302,7 +318,7 @@ import http from '../api'
 import { useAuthStore } from '../stores/auth'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { cameraSupport, decodeImageFile, preloadScannerLib, startScanner } from '../services/scanner'
+import { cameraSupport, decodeImageFile, getCameraPermission, preloadScannerLib, startScanner } from '../services/scanner'
 import type { ScannerHandle } from '../services/scanner'
 import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../services/realtime-events'
 
@@ -348,6 +364,13 @@ let scanHandle: ScannerHandle | null = null
 const scanSupport = cameraSupport()
 /** 实时扫码是否可用：非安全上下文下浏览器不提供 mediaDevices，此时只给"拍照扫码" */
 const liveSupported = scanSupport.ok
+/** 摄像头授权状态；'denied' 时要给"如何改回来"的指引（浏览器此时不再弹窗） */
+const cameraPermission = ref<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown')
+
+async function refreshCameraPermission() {
+  if (!liveSupported) return
+  cameraPermission.value = await getCameraPermission()
+}
 
 const scanHint = computed(() => {
   if (scanError.value) return scanError.value
@@ -395,11 +418,13 @@ function onEntryMethodChange() {
   else if (liveSupported) preloadScannerLib()
 }
 
-// 打开「扫码/录单」弹窗时就把扫码库拉好：
+// 打开「扫码/录单」弹窗时就把扫码库拉好，并确认摄像头授权状态：
 // 否则点击「实时扫码」后还要等一次脚本加载，用户手势随之失效，
 // iOS Safari 等浏览器会拒绝 getUserMedia（表现为"点了没反应"）。
 watch(itemVisible, (open) => {
-  if (open && liveSupported) preloadScannerLib()
+  if (!open || !liveSupported) return
+  preloadScannerLib()
+  void refreshCameraPermission()
 })
 
 async function startScan() {
@@ -422,6 +447,8 @@ async function startScan() {
     // 失败原因通常已通过 scanHint 呈现；未提供文案时兜底显示，避免"点了没反应"
     if (!scanError.value) scanError.value = String(e?.message || e || '无法启动扫码')
     scanning.value = false
+    // 若刚才是被拒权限，刷新状态让"如何改回来"的指引立刻出现
+    if (/权限|NotAllowed|SecurityError/i.test(String(e?.message || ''))) void refreshCameraPermission()
   } finally {
     scanStarting.value = false
   }
@@ -750,6 +777,33 @@ onUnmounted(() => {
   font-size: var(--fs-meta);
   line-height: 1.6;
   color: var(--qj-muted);
+}
+/* 权限被拒时的指引块：用告警底色与普通提示区分开 */
+.scan-blocked {
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--qj-border-strong);
+  border-radius: var(--r-control);
+  background: var(--qj-warning-bg);
+}
+.scan-blocked__title {
+  margin: 0 0 var(--sp-1);
+  color: var(--qj-warning-text);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+.scan-blocked__desc {
+  margin: 0 0 var(--sp-2);
+  color: var(--qj-text-2);
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+}
+.scan-blocked__list {
+  margin: 0 0 var(--sp-3);
+  padding-left: 1.2em;
+  color: var(--qj-text-2);
+  font-size: var(--fs-meta);
+  line-height: 1.9;
 }
 .bar-text {
   flex: 1;

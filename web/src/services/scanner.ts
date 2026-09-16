@@ -56,6 +56,27 @@ export function cameraSupport(): { ok: boolean; reason: string } {
   return { ok: false, reason: `当前地址 ${host} 不是安全上下文，浏览器不允许网页调用摄像头。` }
 }
 
+/**
+ * 查询摄像头的授权状态。
+ *
+ * 用途：一旦用户在权限弹窗里点了"拒绝"，浏览器会**记住**该决定，
+ * 之后 getUserMedia 直接抛 NotAllowedError，且**不再弹窗** ——
+ * 用户会以为"点了没反应"。因此在打开扫码弹窗时先查一次，
+ * 若已拒绝就直接给"如何改回来"的指引，而不是让他白点一次。
+ */
+export async function getCameraPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
+  try {
+    if (!navigator.permissions?.query) return 'unknown'
+    const status: any = await navigator.permissions.query({ name: 'camera' as PermissionName })
+    const state = String(status?.state || '')
+    if (state === 'granted' || state === 'denied' || state === 'prompt') return state
+    return 'unknown'
+  } catch {
+    // 部分浏览器不支持查询 camera（会抛 TypeError），此时按未知处理
+    return 'unknown'
+  }
+}
+
 let libPromise: Promise<any> | null = null
 
 /**

@@ -58,7 +58,7 @@
         <p class="hint">完成前请上传至少 1 张现场照片</p>
         <div class="grid2">
           <el-button type="primary" @click="itemVisible = true">扫码 / 录单</el-button>
-          <el-button @click="uploadVisible = true">拍照留底</el-button>
+          <el-button :loading="uploading" @click="pickPhotos">拍照留底</el-button>
           <el-button v-if="isPrimaryWorker" @click="transferVisible = true">转派</el-button>
           <el-button v-if="isPrimaryWorker" @click="assistVisible = true">邀请协助</el-button>
           <el-button type="danger" plain @click="exceptionVisible = true">上报异常</el-button>
@@ -236,14 +236,21 @@
     </el-dialog>
 
     <!-- 上传照片 -->
-    <el-dialog v-model="uploadVisible" title="拍照留底" width="420px">
-      <el-upload :http-request="uploadPhoto" :show-file-list="false" accept="image/*">
-        <el-button type="primary">选择图片上传</el-button>
-      </el-upload>
-      <div class="upload-hint">
-        {{ completeAfterUpload ? '上传后会自动继续「完成取件」，无需再点一次' : '完成取件前至少上传 1 张现场照片' }}
-      </div>
-    </el-dialog>
+    <!--
+      拍照留底用的文件输入。
+      刻意**不加 capture**：加了会直接进相机；不加时系统才会弹出
+      「拍照 / 从相册选择 / 选择文件」这一组选项，正是取件员需要的。
+      （扫码那个输入则相反，用 capture="environment" 直接调起后置相机。）
+      也不再套一层弹窗：点按钮即弹系统选择器，少一次点击。
+    -->
+    <input
+      ref="photoInput"
+      class="photo-file-input"
+      type="file"
+      accept="image/*"
+      multiple
+      @change="onPhotosPicked"
+    />
 
     <!-- 改派 -->
     <el-dialog v-model="reassignVisible" title="改派取件员" width="380px">
@@ -342,7 +349,9 @@ const task = reactive<any>({})
 const workers = ref<any[]>([])
 const starting = ref(false)
 const itemVisible = ref(false)
-const uploadVisible = ref(false)
+const photoInput = ref<HTMLInputElement | null>(null)
+/** 照片上传中（用于按钮 loading，避免重复点） */
+const uploading = ref(false)
 /** 由「完成取件」触发拍照时置真：上传完成后自动继续完成取件 */
 const completeAfterUpload = ref(false)
 const reassignVisible = ref(false)
@@ -574,17 +583,41 @@ async function addItem() {
   }
 }
 
-async function uploadPhoto(opt: any) {
-  const fd = new FormData()
-  fd.append('file', opt.file)
-  await http.post(`/tasks/${taskId.value}/photos`, fd)
-  ElMessage.success('照片已上传')
-  await load()
+/**
+ * 打开系统的照片选择器（拍照 / 相册 / 文件）。
+ * 不再经过中间弹窗，点一下就出系统选项。
+ */
+function pickPhotos() {
+  const el = photoInput.value
+  if (!el) return
+  el.value = '' // 允许连续选同一张
+  el.click()
+}
+
+async function onPhotosPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (!files.length) return
+  uploading.value = true
+  try {
+    // 逐个上传：与原有接口行为一致，单张失败也不影响其它已成功的
+    for (const file of files) {
+      const fd = new FormData()
+      fd.append('file', file)
+      await http.post(`/tasks/${taskId.value}/photos`, fd)
+    }
+    ElMessage.success(files.length > 1 ? `已上传 ${files.length} 张照片` : '照片已上传')
+    await load()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.error || '照片上传失败，请重试')
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
   // 若本次是从「完成取件」进来的（当时没有照片），上传完直接继续完成，
   // 省掉"先点拍照留底、再点完成取件"的往返。
-  if (completeAfterUpload.value) {
+  if (completeAfterUpload.value && task.photos?.length) {
     completeAfterUpload.value = false
-    uploadVisible.value = false
     await doComplete()
   }
 }
@@ -605,11 +638,12 @@ async function start() {
 }
 
 async function complete() {
-  // 还没有现场照片时：直接引导拍照，拍完自动继续完成取件。
+  // 还没有现场照片时：直接弹出系统选择器（拍照/相册），上传后自动继续完成取件。
   // 这样"拍照 → 完成"是一次操作，而不是"先点拍照留底、再点完成取件"两次。
   if (!task.photos?.length) {
     completeAfterUpload.value = true
-    uploadVisible.value = true
+    ElMessage.info('请先拍一张现场照片，上传后会自动完成取件')
+    pickPhotos()
     return
   }
   await doComplete()
@@ -695,7 +729,6 @@ async function doUpdate() {
 
 watch(taskId, () => {
   itemVisible.value = false
-  uploadVisible.value = false
   reassignVisible.value = false
   transferVisible.value = false
   assistVisible.value = false
@@ -807,9 +840,12 @@ onUnmounted(() => {
 .scan-actions .el-button {
   margin-left: 0;
 }
-/* 隐藏的原生相机输入：不能用 display:none（部分浏览器不触发 click 调起相机），
-   用视觉隐藏但保持可交互的方式。 */
-.scan-file-input {
+/* 隐藏的文件输入：不能用 display:none（部分浏览器不触发 click 调起相机/选择器），
+   用视觉隐藏但保持可交互的方式。
+   扫码输入（capture=environment，直接进相机）与拍照输入（无 capture，给"拍照/相册/文件"）
+   用不同类名，便于按用途区分与定位。 */
+.scan-file-input,
+.photo-file-input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1101,11 +1137,6 @@ onUnmounted(() => {
   height: 96px;
   border-radius: var(--r-control);
   background: var(--qj-info-bg);
-}
-.upload-hint {
-  margin-top: var(--sp-2);
-  color: var(--qj-muted);
-  font-size: var(--fs-meta);
 }
 @media (max-width: 768px) {
   .detail-no {

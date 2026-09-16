@@ -53,7 +53,6 @@ declare module 'vue' {
     ElTabPane: typeof import('element-plus/es')['ElTabPane']
     ElTabs: typeof import('element-plus/es')['ElTabs']
     ElTag: typeof import('element-plus/es')['ElTag']
-    ElUpload: typeof import('element-plus/es')['ElUpload']
     EmptyState: typeof import('./components/EmptyState.vue')['default']
     LoadFailed: typeof import('./components/LoadFailed.vue')['default']
     PageHead: typeof import('./components/PageHead.vue')['default']

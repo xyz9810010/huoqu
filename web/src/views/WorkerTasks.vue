@@ -38,9 +38,7 @@
             <template v-if="t.status === 'pending' || t.status === 'in_progress'">
               <el-button size="small" @click="copyAddr(t)">复制地址</el-button>
               <el-button size="small" @click="copyFull(t)">复制取件信息</el-button>
-              <el-button size="small" class="tel-link-btn">
-                <a :href="'tel:' + t.phone" class="tel-link">拨打电话</a>
-              </el-button>
+              <el-button size="small" @click="callPhone(t)">拨打电话</el-button>
               <el-button size="small" @click="navigate(t)">导航</el-button>
             </template>
             <el-button v-else size="small" @click="copyFull(t)">复制取件信息</el-button>
@@ -169,6 +167,22 @@ function navigate(t: any) {
   window.open(`https://uri.amap.com/search?keyword=${q}`, '_blank')
 }
 
+/**
+ * 拨打电话。
+ *
+ * 这里刻意不用 <a href="tel:..."> 套在按钮里：实测那样只有文字那一小块能点中
+ * （48x12），按钮两侧是空白，用户必须"点正中间"才生效。
+ * 改成由按钮自身触发，整颗按钮都是点击区域。
+ */
+function callPhone(t: any) {
+  const phone = String(t?.phone || '').trim()
+  if (!phone) {
+    ElMessage.warning('该任务没有填写电话')
+    return
+  }
+  window.location.href = 'tel:' + phone
+}
+
 const liveRefresh = createRealtimeRefreshSubscription({ predicate: isTaskRealtimeEvent, refresh: load })
 
 onMounted(load)
@@ -253,34 +267,6 @@ onUnmounted(() => liveRefresh.dispose())
 }
 .note {
   color: var(--qj-warning-text);
-}
-.tel-link {
-  color: inherit;
-  text-decoration: none;
-  /* "拨打电话"是取件员的高频操作。链接被包在 el-button 里，
-     若不撑满，真正可点的只有文字那点区域（实测 48x12），手机上很难点中。 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  min-height: 32px;
-  position: relative;
-}
-/* 用伪元素把可点区域左右上下都扩出去，覆盖按钮的内边距，
-   使整颗按钮都可点（仅设 width:100% 只等于文字宽度，两侧会漏）。 */
-.tel-link::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: calc(100% + 26px);
-  height: 100%;
-  min-height: 44px;
-}
-.tel-link-btn {
-  padding: 0;
 }
 .actions {
   display: flex;

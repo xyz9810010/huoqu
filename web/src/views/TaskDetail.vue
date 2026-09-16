@@ -152,10 +152,12 @@
     </el-card>
     <!-- 录单 -->
     <el-dialog v-model="itemVisible" title="扫码/录单" width="420px" @closed="stopScan">
+      <!-- 直接点「扫码录单」即开始实时扫码（少一次点击）。
+           这里用 @click 而非 @change：若已经是扫码模式，再点一次也应重新开启摄像头。 -->
       <el-radio-group v-model="itemForm.entryMethod" @change="onEntryMethodChange">
-        <el-radio-button value="scan">扫码</el-radio-button>
-        <el-radio-button value="manual">手输票号</el-radio-button>
-        <el-radio-button value="no_waybill">无票号</el-radio-button>
+        <el-radio-button value="scan" @click="onScanTabClick">扫码录单</el-radio-button>
+        <el-radio-button value="manual">手动录单</el-radio-button>
+        <el-radio-button value="no_waybill">无票号录单</el-radio-button>
       </el-radio-group>
 
       <!-- 扫码：主路径是"调起系统相机拍照识别"（非 HTTPS 也能用，且由系统自动选镜头） -->
@@ -225,7 +227,7 @@
       <div style="margin-top:16px">
         <el-input v-if="itemForm.entryMethod !== 'no_waybill'" v-model="itemForm.waybillNo" placeholder="票号"
                   @keyup.enter="addItem" />
-        <el-input-number v-model="itemForm.pieces" :min="1" label="件数" style="margin-top:12px" />
+        <el-input-number ref="piecesInput" v-model="itemForm.pieces" :min="1" label="件数" style="margin-top:12px" />
       </div>
       <template #footer>
         <el-button @click="itemVisible = false">关闭</el-button>
@@ -308,7 +310,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ArrowLeft, Camera, Location, Phone } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -360,6 +362,7 @@ const decoding = ref(false)
 const scanError = ref('')
 const scanFormatHint = ref('')
 const cameraInput = ref<HTMLInputElement | null>(null)
+const piecesInput = ref<any>(null)
 let scanHandle: ScannerHandle | null = null
 const scanSupport = cameraSupport()
 /** 实时扫码是否可用：非安全上下文下浏览器不提供 mediaDevices，此时只给"拍照扫码" */
@@ -405,6 +408,7 @@ async function onPhotoPicked(e: Event) {
     const text = await decodeImageFile(file)
     itemForm.waybillNo = text
     ElMessage.success('已识别：' + text)
+    focusPieces()
   } catch (err: any) {
     scanError.value = String(err?.message || err || '未能识别照片中的条码')
   } finally {
@@ -418,13 +422,32 @@ function onEntryMethodChange() {
   else if (liveSupported) preloadScannerLib()
 }
 
-// 打开「扫码/录单」弹窗时就把扫码库拉好，并确认摄像头授权状态：
-// 否则点击「实时扫码」后还要等一次脚本加载，用户手势随之失效，
-// iOS Safari 等浏览器会拒绝 getUserMedia（表现为"点了没反应"）。
+/** 点「扫码录单」即开始实时扫码（若已经在扫码则忽略），识别后自动跳到件数 */
+function onScanTabClick() {
+  if (!liveSupported || scanning.value || scanStarting.value) return
+  void refreshCameraPermission().then(() => {
+    if (cameraPermission.value === 'denied') return // 权限被拒时显示指引，不去白启动
+    void startScan()
+  })
+}
+
+/** 识别成功后把光标移到「件数」，取件员可直接填数量，少一次点击 */
+function focusPieces() {
+  nextTick(() => {
+    try { piecesInput.value?.focus?.() } catch { /* 忽略 */ }
+  })
+}
+
+// 打开「扫码/录单」弹窗：预加载扫码库、查权限；若当前就是「扫码录单」模式且摄像头可用，
+// 直接开启实时扫码（少一次点击）。点击弹窗按钮本身是用户手势，符合 getUserMedia 的要求。
 watch(itemVisible, (open) => {
-  if (!open || !liveSupported) return
+  if (!open) return
+  if (!liveSupported) return
   preloadScannerLib()
-  void refreshCameraPermission()
+  void refreshCameraPermission().then(() => {
+    if (cameraPermission.value === 'denied') return
+    if (itemForm.entryMethod === 'scan' && !scanning.value) void startScan()
+  })
 })
 
 async function startScan() {
@@ -439,6 +462,7 @@ async function startScan() {
         itemForm.waybillNo = text
         ElMessage.success('已识别：' + text)
         void stopScan()
+        focusPieces()
       },
       onError: (msg) => { scanError.value = msg },
       onFormatChange: (label) => { scanFormatHint.value = label },

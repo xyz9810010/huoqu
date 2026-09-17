@@ -222,6 +222,11 @@
         </div>
 
         <p class="scan-hint">{{ scanHint }}</p>
+        <!-- 现场诊断：显示识别引擎与上次识别耗时，便于判断"慢"的原因 -->
+        <p v-if="engineLabel || lastScanMs" class="scan-diag">
+          <span v-if="engineLabel">{{ engineLabel }}</span>
+          <span v-if="lastScanMs">上次识别 {{ lastScanMs }} ms</span>
+        </p>
       </div>
 
       <div style="margin-top:16px">
@@ -329,7 +334,7 @@ import http from '../api'
 import { useAuthStore } from '../stores/auth'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { cameraSupport, decodeImageFile, getCameraPermission, preloadScannerLib, startScanner } from '../services/scanner'
+import { cameraSupport, decodeImageFile, ensureScannerReady, getCameraPermission, preloadScannerLib, startScanner } from '../services/scanner'
 import type { ScannerHandle } from '../services/scanner'
 import { createRealtimeRefreshSubscription, taskIdFromRealtimeEvent } from '../services/realtime-events'
 
@@ -382,11 +387,38 @@ const scanSupport = cameraSupport()
 const liveSupported = scanSupport.ok
 /** 摄像头授权状态；'denied' 时要给"如何改回来"的指引（浏览器此时不再弹窗） */
 const cameraPermission = ref<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown')
+/**
+ * 当前识别引擎与耗时。
+ * 原生识别是否可用取决于机型/浏览器，开发机无法确定，所以把它标在界面上：
+ * 现场即可判断"慢"是因为没走到原生路径，还是码太小/光线/对焦等别的原因。
+ */
+const engineNative = ref<boolean | null>(null)
+const lastScanMs = ref<number | null>(null)
+let scanStartedAt = 0
 
 async function refreshCameraPermission() {
   if (!liveSupported) return
   cameraPermission.value = await getCameraPermission()
 }
+
+/** 等扫码库与引擎判定就绪后记录引擎类型（用于界面显示） */
+async function refreshEngineInfo() {
+  if (!liveSupported) return
+  try {
+    const info = await ensureScannerReady()
+    engineNative.value = info.native
+  } catch {
+    /* 拿不到就不显示 */
+  }
+}
+
+/** 引擎说明文案：让取件员/维护者一眼看出当前用哪条路径 */
+const engineLabel = computed(() => {
+  if (engineNative.value === null) return ''
+  return engineNative.value
+    ? '识别引擎：手机原生（更快）'
+    : '识别引擎：兼容模式（较慢，建议用 Chrome / Safari 打开）'
+})
 
 const scanHint = computed(() => {
   if (scanError.value) return scanError.value
@@ -457,6 +489,7 @@ watch(itemVisible, (open) => {
   if (!open) return
   if (!liveSupported) return
   preloadScannerLib()
+  void refreshEngineInfo()
   void refreshCameraPermission().then(() => {
     if (cameraPermission.value === 'denied') return
     if (itemForm.entryMethod === 'scan' && !scanning.value) void startScan()
@@ -469,9 +502,12 @@ async function startScan() {
   scanFormatHint.value = ''
   scanStarting.value = true
   scanning.value = true
+  scanStartedAt = Date.now()
   try {
     scanHandle = await startScanner('qr-reader', {
       onDetected: (text) => {
+        // 记下"从开始扫到识别成功"的耗时，便于现场量化快慢
+        lastScanMs.value = Date.now() - scanStartedAt
         itemForm.waybillNo = text
         ElMessage.success('已识别：' + text)
         void stopScan()
@@ -862,6 +898,16 @@ onUnmounted(() => {
   font-size: var(--fs-meta);
   line-height: 1.6;
   color: var(--qj-muted);
+}
+/* 现场诊断行：引擎与耗时，弱化显示，不干扰主要操作 */
+.scan-diag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-1) 0 0;
+  color: var(--qj-muted);
+  font-size: var(--fs-meta);
+  opacity: 0.85;
 }
 /* 权限被拒时的指引块：用告警底色与普通提示区分开 */
 .scan-blocked {

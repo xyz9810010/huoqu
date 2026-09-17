@@ -88,7 +88,9 @@ function getNativeFormats(): Promise<string[]> {
       try {
         const BD: any = (window as any).BarcodeDetector
         if (typeof BD?.getSupportedFormats !== 'function') return []
-        return (await BD.getSupportedFormats()) || []
+        const list = (await BD.getSupportedFormats()) || []
+        nativeFormatsCache = list.map((s: any) => String(s))
+        return list
       } catch {
         return []
       }
@@ -106,6 +108,24 @@ async function resolveNativeDetector(): Promise<boolean> {
   const has = (f: string) => supported.some((s) => String(s).toLowerCase() === f)
   const ok = NATIVE_REQUIRED.every(has)
   return ok
+}
+
+/**
+ * 供界面显示"当前用的哪个识别引擎"。
+ *
+ * 为什么要显示：原生识别是否可用取决于机型与浏览器，无法在开发机上确定。
+ * 把引擎直接标在扫码界面上，现场就能判断"慢"是因为没走到原生路径，
+ * 还是别的原因（对焦、光线、码太小），不必来回猜。
+ */
+export function scannerEngineInfo(): { native: boolean; supportedCount: number } {
+  return { native: useNativeDetector, supportedCount: nativeFormatsCache.length }
+}
+let nativeFormatsCache: string[] = []
+
+/** 等待扫码库与引擎判定就绪，然后返回引擎信息（供界面显示） */
+export async function ensureScannerReady(): Promise<{ native: boolean; supportedCount: number }> {
+  await loadLib()
+  return scannerEngineInfo()
 }
 
 /** 摄像头只在「安全上下文」可用：HTTPS 或 localhost/127.0.0.1；局域网 http://IP 不行。 */
@@ -231,8 +251,10 @@ function describeFacing(label: string): CameraOption['facing'] {
  *
  * 重要：html5-qrcode 对 videoConstraints 有严格校验 ——
  *   · facingMode 只接受字符串或 { exact: ... }，写成 { ideal: ... } 直接抛错；
- *   · 过高的 width/height 在部分摄像头上会被拒（表现为"相机打不开"），
- *     所以只用 ideal，让浏览器在能力范围内取最接近的。
+ *   · **不要加 width/height**：实测（本文件作者在假摄像头上复现）加上
+ *     { ideal: 1280/720 } 后，摄像头起不来、什么都识别不到。
+ *     曾以为"降分辨率能加快解码"而加过，结果直接导致扫码不可用，已回退。
+ *     若将来要调分辨率，必须先在真机上验证，不能只凭推理。
  * deviceId 指定某颗摄像头时用 exact。
  */
 function videoConstraintsFor(deviceId?: string): any {

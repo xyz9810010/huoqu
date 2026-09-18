@@ -28,6 +28,8 @@
             <el-button type="primary" :loading="testing" @click="sendTest">发送测试通知</el-button>
             <el-button :loading="busy" @click="disable">关闭当前浏览器</el-button>
           </template>
+          <!-- 正在自动登记：不显示手动按钮，避免用户看到"还需要我点一下"的假象 -->
+          <p v-else-if="autoRegistering" class="stale-help">正在自动登记本浏览器…</p>
           <template v-else>
             <p class="stale-help">浏览器已开启，但服务端缺少该浏览器的有效登记（可能已失效）。</p>
             <el-button type="primary" :loading="busy" @click="repairBrowserPush">重新登记系统通知</el-button>
@@ -132,7 +134,7 @@ import PageHead from '../components/PageHead.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { currentBrowserSubscriptionId, disableBrowserPush, enableBrowserPush,
-  getBrowserPushState } from '../services/browser-push'
+  getBrowserPushState, autoRepairBrowserPush } from '../services/browser-push'
 import { notificationSound } from '../services/notification-sound'
 import type { BrowserPushState } from '../services/browser-push'
 import type { NotificationPreference, NotificationSubscription } from '../types/notifications'
@@ -146,6 +148,8 @@ const testing = ref(false)
 const testingId = ref('')
 const devices = ref<NotificationSubscription[]>([])
 const pushState = ref<BrowserPushState>(getBrowserPushState())
+/** 正在自动登记（打开页面时静默进行，避免闪出手动重登记按钮） */
+const autoRegistering = ref(false)
 const volume = ref(Math.round(notificationSound.getVolume() * 100))
 
 function onVolumeChange(value: number | number[]) {
@@ -280,7 +284,47 @@ async function savePreference(item: PreferenceRow, enabled: boolean) {
   finally { item.saving = false }
 }
 
-onMounted(load)
+/**
+ * 打开本页时自动登记。
+ *
+ * 场景：用户已经允许过系统通知（permission=granted），但服务端没有这台浏览器的
+ * 有效订阅（换设备、浏览器清过数据、订阅被标记失效等）。
+ * 以前这种情况要用户手动点「重新登记系统通知」；其实完全可以在打开页面时静默完成，
+ * 于是这里直接调 autoRepairBrowserPush()。
+ *
+ * 注意：**权限本身不能自动获取** —— 浏览器规定 Notification.requestPermission()
+ * 必须在用户手势内调用，无手势时 Chrome 直接忽略。所以只有"已授权"才能自动化；
+ * 从没授权过的浏览器仍必须由用户点一次「开启系统通知」。
+ */
+async function autoRegisterIfPossible() {
+  if (!pushState.value.available || pushState.value.status !== 'granted') return
+  if (activeWebPushId.value) return // 已有有效登记，无需处理
+  autoRegistering.value = true
+  try {
+    const repaired = await withTimeout(autoRepairBrowserPush(), 12000)
+    if (repaired) {
+      await load()
+      ElMessage.success('已自动登记本浏览器的系统通知')
+    }
+  } catch {
+    /* 超时或失败：保留手动按钮，用户仍可自行重试（绝不能停在"正在自动登记"） */
+  } finally {
+    autoRegistering.value = false
+  }
+}
+
+/** 兜底超时：任何原因导致自动登记迟迟不返回，也要把界面交还给用户 */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('自动登记超时')), ms)
+    p.then((v) => { clearTimeout(timer); resolve(v) }, (e) => { clearTimeout(timer); reject(e) })
+  })
+}
+
+onMounted(async () => {
+  await load()
+  await autoRegisterIfPossible()
+})
 </script>
 
 <style scoped>

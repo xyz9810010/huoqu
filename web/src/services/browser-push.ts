@@ -46,9 +46,28 @@ function deviceLabel(): string {
   return 'Web 浏览器'
 }
 
+/**
+ * 给 Promise 加超时。
+ *
+ * 为什么必需：navigator.serviceWorker.ready 在"没有 Service Worker 成功注册"时
+ * **永远不会 resolve**（它不是 reject，是彻底悬住）。若直接 await 它，
+ * 调用链会一直挂着 —— 实测表现为界面永远停在"正在自动登记本浏览器…"，
+ * 用户既等不到成功、也看不到手动按钮。
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(label + '超时')), ms)
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 async function registration(): Promise<ServiceWorkerRegistration> {
   await navigator.serviceWorker.register('/push-sw.js', { scope: '/' })
-  return navigator.serviceWorker.ready
+  // 注册成功也可能迟迟不进入 ready（例如被浏览器节流），加超时避免整体悬住
+  return withTimeout(navigator.serviceWorker.ready, 8000, '等待 Service Worker 就绪')
 }
 
 export async function enableBrowserPush(): Promise<NotificationSubscription> {
@@ -110,7 +129,11 @@ export async function autoRepairBrowserPush(): Promise<boolean> {
   if (getBrowserPushState().status !== 'granted') return false
   if (!('serviceWorker' in navigator)) return false
   try {
-    const sw = await navigator.serviceWorker.ready
+    // 必须先注册 Service Worker，再等 ready。
+    // navigator.serviceWorker.ready 只在"该作用域已有注册"时才 resolve；
+    // 全新浏览器上直接 await ready 会一直悬住 —— 实测 5 秒都等不到，
+    // 这会让"自动登记"在任何新设备上永远失败（只表现为超时）。
+    const sw = await registration()
     const localSubscription = await sw.pushManager.getSubscription()
     const list = await http.get<any, NotificationSubscription[]>('/v1/notification-subscriptions')
     const active = list.find((item) => item.channel === 'web_push' && item.status === 'active')

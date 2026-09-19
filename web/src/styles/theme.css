@@ -159,6 +159,10 @@
   --el-color-success: #15803d;
   --el-color-warning: #b45309;
   --el-color-danger: #b91c1c;
+  /* EP 把 error 与 danger 当两套令牌，项目按语义统一成 danger；
+     不补这两行，error 类提示条/轻提示会落到 EP 默认 #f56c6c
+     （在浅底上仅 2.61:1）与 #fef0f0 底色，和 danger 不一致。 */
+  --el-color-error: #b91c1c;
   --el-color-info: #4e5969;
 
   --el-color-white: #ffffff;
@@ -166,6 +170,7 @@
   --el-color-success-light-9: var(--qj-success-bg);
   --el-color-warning-light-9: var(--qj-warning-bg);
   --el-color-danger-light-9: var(--qj-danger-bg);
+  --el-color-error-light-9: var(--qj-danger-bg);
   --el-color-info-light-9: var(--qj-info-bg);
 
   --el-text-color-primary: var(--qj-text);
@@ -527,6 +532,115 @@ body {
   color: var(--qj-primary-text);
   background: var(--qj-primary-bg);
   border-color: #d6e2ff;
+}
+
+/* ===== 应用内提示条 / 轻提示（el-alert、el-message）=====
+   浅色底 + 左侧 4px 语义色条 + 深色字 + 同色图标。
+   延续上面的原则：正文走 --qj-*-text 深色档，避开 EP 默认
+   --el-color-* 中间调在浅底上的欠对比（error 实测只有 2.61:1）。
+   色条充当"这是提示、不是按钮"的静态视觉锚点，因此不加
+   hover 位移或放大：那会造成可点击的错觉并引起布局抖动。
+
+   为什么统一加 body 前缀：EP 的组件样式由 JS 在运行时注入，
+   排在 theme.css 之后，同特异性下 EP 一律胜出（实测 .el-message
+   的 border-left 被压回 1px，warning/error 正文被换成中间调）。
+   body .el-message--info = (0,1,1) 胜过 .el-message--info = (0,1,0)，
+   与加载顺序无关，也比 !important 可控。 */
+body .el-alert {
+  --el-alert-padding: 10px 14px;
+  --el-alert-border-radius-base: var(--r-control);
+  --el-alert-title-font-size: 0.875rem;
+  --el-alert-title-with-description-font-size: 0.875rem;
+  --el-alert-description-font-size: 0.8125rem;
+  --el-alert-icon-size: 18px;
+  --el-alert-icon-large-size: 22px;
+  border-left: 4px solid var(--qj-border);
+}
+body .el-alert .el-alert__title {
+  color: inherit;
+}
+/* 描述色只能由下面的分类型规则给出：EP 的
+   .el-alert--x.is-light .el-alert__description 是 (0,3,0)，
+   泛化的 .el-alert .el-alert__description 压不住它 */
+body .el-alert .el-alert__description {
+  opacity: 0.94;
+  line-height: 1.5;
+}
+
+body .el-alert--info.is-light,
+body .el-alert--info.is-light .el-alert__description {
+  color: var(--qj-info-text);
+}
+body .el-alert--success.is-light,
+body .el-alert--success.is-light .el-alert__description {
+  color: var(--qj-success-text);
+}
+body .el-alert--warning.is-light,
+body .el-alert--warning.is-light .el-alert__description {
+  color: var(--qj-warning-text);
+}
+/* el-alert 的 type="error" 走 --el-color-error，与项目 danger 是两套色，
+   一并收进 danger 令牌（项目只重映射了 --el-color-danger-*） */
+body .el-alert--danger.is-light,
+body .el-alert--error.is-light,
+body .el-alert--danger.is-light .el-alert__description,
+body .el-alert--error.is-light .el-alert__description {
+  color: var(--qj-danger-text);
+}
+
+body .el-alert--info.is-light {
+  border-left-color: var(--qj-info-text);
+}
+body .el-alert--success.is-light {
+  border-left-color: var(--qj-success-text);
+}
+body .el-alert--warning.is-light {
+  border-left-color: var(--qj-warning-text);
+}
+body .el-alert--danger.is-light,
+body .el-alert--error.is-light {
+  border-left-color: var(--qj-danger-text);
+}
+
+/* el-message（轻提示）：EP 把底色/边框/正文都做成了变量，换令牌即可。
+   图标色 EP 已写成 .el-message-icon--x{color:var(--el-message-text-color)}，
+   所以正文令牌一改，图标自动同色，无需额外规则。
+   1px 边框取与底同色，只留左侧色条，避免双框显脏。 */
+body .el-message {
+  --el-message-padding: 11px 16px;
+  border-radius: var(--r-control);
+  border-left: 4px solid var(--qj-border);
+  box-shadow: var(--shadow-2);
+}
+body .el-message--info {
+  --el-message-bg-color: var(--qj-info-bg);
+  --el-message-border-color: var(--qj-info-bg);
+  --el-message-text-color: var(--qj-info-text);
+  border-left-color: var(--qj-info-text);
+}
+body .el-message--success {
+  --el-message-bg-color: var(--qj-success-bg);
+  --el-message-border-color: var(--qj-success-bg);
+  --el-message-text-color: var(--qj-success-text);
+  border-left-color: var(--qj-success-text);
+}
+body .el-message--warning {
+  --el-message-bg-color: var(--qj-warning-bg);
+  --el-message-border-color: var(--qj-warning-bg);
+  --el-message-text-color: var(--qj-warning-text);
+  border-left-color: var(--qj-warning-text);
+}
+body .el-message--error {
+  --el-message-bg-color: var(--qj-danger-bg);
+  --el-message-border-color: var(--qj-danger-bg);
+  --el-message-text-color: var(--qj-danger-text);
+  border-left-color: var(--qj-danger-text);
+}
+body .el-message--primary {
+  --el-message-bg-color: var(--qj-primary-bg);
+  --el-message-border-color: var(--qj-primary-bg);
+  --el-message-text-color: var(--qj-primary-text);
+  border-left-color: var(--qj-primary-text);
 }
 
 /* ===== 分页 ===== */

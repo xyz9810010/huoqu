@@ -134,7 +134,7 @@ import PageHead from '../components/PageHead.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { currentBrowserSubscriptionId, disableBrowserPush, enableBrowserPush,
-  getBrowserPushState, autoRepairBrowserPush } from '../services/browser-push'
+  getBrowserPushState, autoRepairBrowserPush, withTimeout } from '../services/browser-push'
 import { notificationSound } from '../services/notification-sound'
 import type { BrowserPushState } from '../services/browser-push'
 import type { NotificationPreference, NotificationSubscription } from '../types/notifications'
@@ -301,7 +301,7 @@ async function autoRegisterIfPossible() {
   if (activeWebPushId.value) return // 已有有效登记，无需处理
   autoRegistering.value = true
   try {
-    const repaired = await withTimeout(autoRepairBrowserPush(), 12000)
+    const repaired = await withTimeout(autoRepairBrowserPush(), 12000, '自动登记')
     if (repaired) {
       await load()
       ElMessage.success('已自动登记本浏览器的系统通知')
@@ -311,14 +311,6 @@ async function autoRegisterIfPossible() {
   } finally {
     autoRegistering.value = false
   }
-}
-
-/** 兜底超时：任何原因导致自动登记迟迟不返回，也要把界面交还给用户 */
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('自动登记超时')), ms)
-    p.then((v) => { clearTimeout(timer); resolve(v) }, (e) => { clearTimeout(timer); reject(e) })
-  })
 }
 
 onMounted(async () => {

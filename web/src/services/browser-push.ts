@@ -54,7 +54,7 @@ function deviceLabel(): string {
  * 调用链会一直挂着 —— 实测表现为界面永远停在"正在自动登记本浏览器…"，
  * 用户既等不到成功、也看不到手动按钮。
  */
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(label + '超时')), ms)
     p.then(
@@ -112,12 +112,6 @@ export async function disableBrowserPush(): Promise<void> {
     }
   }
   localStorage.removeItem(STORAGE_KEY)
-}
-
-export async function sendBrowserPushTest(subscriptionId?: string): Promise<void> {
-  const id = subscriptionId || localStorage.getItem(STORAGE_KEY)
-  if (!id) throw new Error('当前浏览器尚未登记系统通知')
-  await http.post(`/v1/notification-subscriptions/${encodeURIComponent(id)}/test`)
 }
 
 export function currentBrowserSubscriptionId(): string {

@@ -225,7 +225,7 @@ onUnmounted(() => liveRefresh.dispose())
     padding-bottom: var(--sp-2);
   }
   .filter-bar .qj-pill {
-    height: 34px;
+    /* 同 Tasks.vue：不再压到 34px，保持规范要求的 40px 触控高度 */
     padding: 0 12px;
   }
   .summary {

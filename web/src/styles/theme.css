@@ -7,11 +7,15 @@
   /* ---------- 主色：墨色（承担文字与结构层级，不再用于大面积填充） ---------- */
   --qj-primary: #0f172a;        /* 品牌主色：深墨（文字/强调） */
   /* v6：实色填充一律取消，实色令牌退为「浅底按钮的描边色」。
-   * 浅底 + 描边 + 深色字：文字对比 8.64:1，且界面上不再出现深色块。 */
-  --qj-primary-btn: #5f8d89;    /* 主按钮描边（对浅底 3.29:1，满足非文本 UI） */
-  --qj-primary-btn-hover: #4f7d79;
-  --qj-btn-bg: #eaf3f2;         /* 主按钮浅底 */
-  --qj-btn-bg-hover: #dcebe9;
+   * 浅底 + 描边 + 深色字：文字对比 16.2:1，且界面上不再出现深色块。
+   * 主按钮取青色而非橙色：橙色在本系统已是「警告」语义
+   * （--qj-warning-text #a14a08 / --qj-warning-bg #fff7ec，用于待取、超时徽标），
+   * 主操作用橙会与警告同色族、被读成警告；青色本就是这个系统的强调色
+   * （侧栏激活指示条同色），改用后四类语义各自独立：主=青 / 成功=绿 / 警告=橙 / 危险=红。 */
+  --qj-primary-btn: #0e7490;    /* 主按钮描边：青（对自身浅底 4.9:1，非文本 UI 需 ≥3:1） */
+  --qj-primary-btn-hover: #0b5f75;
+  --qj-btn-bg: #e8f7fa;         /* 主按钮浅青底 */
+  --qj-btn-bg-hover: #d5eff5;
   --qj-primary-hover: #1e293b;
   --qj-primary-text: #0f172a;   /* 深墨文字令牌 */
   --qj-primary-bg: #eef2f7;     /* 浅墨底（用于浅底按钮/选中底） */
@@ -97,17 +101,18 @@
   --qj-row-cancelled: #f8fafc;
   --qj-row-hover: #f5f8fc;
 
-  /* ---------- 字号 ---------- */
-  /* 字号一律用 rem：px 会忽略用户在浏览器/系统里设置的基准字号，
-     对低视力用户等于"放大无效"。rem 以根字号为基准，用户改设置即可整体缩放。
-     换算基准 1rem = 16px。 */
+  /* ---------- 字号 ----------
+   * 收敛为 12 / 14 / 16 / 18 / 24 五档，每档至少差 2px。
+   * 原档位是 12/13/14/15/17/18/28：13 与 14、14 与 15、17 与 18 各差 1px，
+   * 视觉上分不出来，等于层级没被表达出来，只是白白多出三档取值。
+   * 现在：12 说明/徽标 · 14 正文与次要字段 · 16 卡片标题 · 18 页面标题 · 24 指标数值。 */
   --fs-title: 1.125rem;   /* 18px */
-  --fs-card: 0.9375rem;   /* 15px */
+  --fs-card: 1rem;        /* 16px（原 15px，与正文 14px 拉开一档） */
   --fs-body: 0.875rem;    /* 14px */
-  --fs-sub: 0.8125rem;    /* 13px */
+  --fs-sub: 0.875rem;     /* 14px（原 13px，并入正文档） */
   --fs-meta: 0.75rem;     /* 12px */
   --fs-badge: 0.75rem;    /* 12px */
-  --fs-metric: 1.75rem;   /* 28px */
+  --fs-metric: 1.5rem;    /* 24px（原 28px，指标数值不再压过页面标题太多） */
 
   /* ---------- 间距（4px 基准） ---------- */
   --sp-1: 4px;
@@ -296,7 +301,7 @@ body {
  */
 :root {
   --el-font-size-base: 0.875rem !important;        /* 14px */
-  --el-font-size-small: 0.8125rem !important;      /* 13px */
+  --el-font-size-small: 0.875rem !important;       /* 14px（原 13px，并入正文档） */
   --el-font-size-extra-small: 0.75rem !important;  /* 12px */
   --el-font-size-medium: 1rem !important;          /* 16px */
   --el-font-size-large: 1.125rem !important;       /* 18px */
@@ -949,8 +954,36 @@ body .el-message--primary {
 }
 
 @media (max-width: 768px) {
-  :root {
-    --fs-title: 1.0625rem;  /* 17px */
+  /* 页面标题不再单独降档到 17px：与桌面端 18px 仅差 1px，看不出层级，
+     却让移动端标题弱一档，违反上面的字号收敛原则。 */
+
+  /* 移动端触控目标 44px（规范 §5.6）。现场单手操作，实测原 36px 偏小。
+     用 min-height 而非 height：EP 给 .el-button 写了固定 height，
+     min-height 会胜出。这里必须 !important：多个组件内规则用更高
+     特异性写了更矮的值（如 .page-head--nowrap .page-head__actions >
+     .el-button--primary 是 (0,3,0)=36px、.card-head .el-button=(0,2,0)=40px），
+     普通声明压不住，会各自漏成不同的触控尺寸。
+     桌面端不动，否则表格行内按钮会把行高撑开。 */
+  .el-button,
+  .el-button--small {
+    min-height: 44px !important;
+  }
+
+  /* 移动端其余常用触控目标，底线 40px（规范 §5.6：胶囊 40px、按钮 44px）。
+     顶栏用户胶囊、筛选表单、分页箭头本身就是 flex 居中容器，
+     直接给 min-height 即可；同样需要 !important 才能压过 EP 与组件内声明。 */
+  .user-box,
+  .el-select__wrapper,
+  .el-input__wrapper,
+  .el-pagination .btn-prev,
+  .el-pagination .btn-next {
+    min-height: 40px !important;
+  }
+  /* 分段控件（列表 / 图表 切换）：EP 用 padding:8px 15px + line-height:1 定高，
+     只给 min-height 会让文字顶到上边，所以改用 line-height 定高做垂直居中。 */
+  .el-radio-button__inner {
+    padding: 0 15px !important;
+    line-height: 40px !important;
   }
 
   /* 防止 iOS Safari 聚焦输入框时自动放大页面（字号 ≥16px 不会触发） */

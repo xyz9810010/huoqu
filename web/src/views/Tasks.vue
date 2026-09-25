@@ -330,7 +330,8 @@ onUnmounted(() => {
     display: none;
   }
   .filter-bar .qj-pill {
-    height: 34px;
+    /* 不压高度：规范 §5.6 要求移动端胶囊 40px，34px 对现场单手点选偏小。
+       只保留更紧的横向内边距，横向滚动依然由 .qj-pills 承担。 */
     padding: 0 12px;
     flex: none;
   }
